@@ -1,465 +1,377 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>  
-
+<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MotionDiff — Temporal Motion Extraction</title>
-<style>
-  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+<title>MotionDiff - Temporal Motion Extraction</title>
+<script>
+  (() => {
+    const COLOR_THEMES = {
+      green: {
+        accent: '#00ffaa',
+        accentDim: '#00b87a',
+        aurora1: 'rgba(0, 120, 80, 0.55)',
+        aurora2: 'rgba(0, 60, 120, 0.45)',
+        aurora3: 'rgba(0, 100, 60, 0.45)',
+        conic1: 'rgba(0, 255, 170, 0.06)',
+        conic2: 'rgba(0, 80, 200, 0.05)',
+        conic3: 'rgba(0, 200, 120, 0.05)',
+      },
+      violet: {
+        accent: '#c084fc',
+        accentDim: '#9333ea',
+        aurora1: 'rgba(100, 0, 180, 0.6)',
+        aurora2: 'rgba(60, 0, 120, 0.5)',
+        aurora3: 'rgba(30, 0, 80, 0.4)',
+        conic1: 'rgba(192, 132, 252, 0.07)',
+        conic2: 'rgba(80, 0, 200, 0.06)',
+        conic3: 'rgba(150, 50, 255, 0.05)',
+      },
+      amber: {
+        accent: '#fbbf24',
+        accentDim: '#d97706',
+        aurora1: 'rgba(120, 60, 0, 0.55)',
+        aurora2: 'rgba(100, 30, 0, 0.45)',
+        aurora3: 'rgba(80, 50, 0, 0.4)',
+        conic1: 'rgba(251, 191, 36, 0.07)',
+        conic2: 'rgba(200, 80, 0, 0.06)',
+        conic3: 'rgba(180, 120, 0, 0.05)',
+      },
+      cyan: {
+        accent: '#22d3ee',
+        accentDim: '#0891b2',
+        aurora1: 'rgba(0, 80, 120, 0.55)',
+        aurora2: 'rgba(0, 60, 100, 0.5)',
+        aurora3: 'rgba(0, 100, 80, 0.4)',
+        conic1: 'rgba(34, 211, 238, 0.07)',
+        conic2: 'rgba(0, 100, 180, 0.06)',
+        conic3: 'rgba(0, 180, 160, 0.05)',
+      },
+      rose: {
+        accent: '#fb7185',
+        accentDim: '#e11d48',
+        aurora1: 'rgba(120, 0, 40, 0.55)',
+        aurora2: 'rgba(100, 0, 60, 0.5)',
+        aurora3: 'rgba(80, 0, 30, 0.4)',
+        conic1: 'rgba(251, 113, 133, 0.07)',
+        conic2: 'rgba(200, 0, 80, 0.06)',
+        conic3: 'rgba(180, 50, 100, 0.05)',
+      },
+    };
 
-  :root {
-    --bg: #0f0f0f;
-    --surface: #181818;
-    --border: #272727;
-    --text: #e0e0e0;
-    --muted: #777;
-    --accent: #00ffaa;
-    --accent-dim: #00cc88;
-    --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
-    --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
-  }
-
-  html, body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font);
-    font-size: 14px;
-    line-height: 1.5;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  #app {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 20px 16px 32px;
-    gap: 16px;
-    max-width: 1400px;
-    margin: 0 auto;
-  }
-
-  /* ─── Header ─── */
-  .header { text-align: center; width: 100%; }
-  .header h1 {
-    font-family: var(--mono);
-    font-size: 26px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-    color: var(--accent);
-  }
-  .header p {
-    font-size: 13px;
-    color: var(--muted);
-    margin-top: 2px;
-    font-family: var(--mono);
-  }
-
-  /* ─── Input Section ─── */
-  .input-row {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
-    justify-content: center;
-    width: 100%;
-  }
-
-  .file-wrap {
-    position: relative;
-  }
-  .file-wrap input[type="file"] {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-  }
-  .file-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 7px 14px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 12px;
-    cursor: pointer;
-    transition: border-color 0.15s;
-  }
-  .file-wrap:hover .file-btn { border-color: var(--accent); }
-
-  .sep { color: var(--muted); font-size: 12px; font-family: var(--mono); }
-
-  .url-group { display: flex; gap: 6px; align-items: center; }
-  .url-group input[type="text"] {
-    width: 280px;
-    padding: 7px 10px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 12px;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  .url-group input[type="text"]:focus { border-color: var(--accent); }
-  .url-group input[type="text"]::placeholder { color: #444; }
-
-  .btn-primary {
-    padding: 7px 14px;
-    background: var(--accent);
-    color: #0f0f0f;
-    border: none;
-    border-radius: 6px;
-    font-family: var(--mono);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .btn-primary:hover { background: var(--accent-dim); }
-  .btn-primary:active { transform: scale(0.97); }
-
-  /* ─── Presets ─── */
-  .presets-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-  .presets-label {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  .preset-btn {
-    padding: 5px 12px;
-    background: transparent;
-    border: 1px solid var(--accent);
-    border-radius: 20px;
-    color: var(--accent);
-    font-family: var(--mono);
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.15s;
-    white-space: nowrap;
-  }
-  .preset-btn:hover { background: var(--accent); color: var(--bg); }
-
-  .status-msg {
-    font-size: 12px;
-    font-family: var(--mono);
-    color: var(--muted);
-    min-height: 16px;
-    text-align: center;
-  }
-  .status-msg.error { color: #ff5555; }
-  .status-msg.success { color: var(--accent); }
-
-  /* ─── Panels ─── */
-  .panels {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    width: 100%;
-  }
-
-  .panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
-  }
-
-  .panel-label {
-    padding: 8px 14px;
-    font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--muted);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 7px;
-  }
-  .panel-label .dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--accent);
-    opacity: 0;
-    transition: opacity 0.3s;
-  }
-  .panel-label .dot.active { opacity: 1; }
-
-  .panel-body {
-    position: relative;
-    aspect-ratio: 16 / 9;
-    background: #000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .panel-body video,
-  .panel-body canvas {
-    width: 100%;
-    height: 100%;
-    display: block;
-    object-fit: contain;
-  }
-
-  .placeholder {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    color: #3a3a3a;
-    font-family: var(--mono);
-    font-size: 13px;
-    gap: 6px;
-    pointer-events: none;
-  }
-  .placeholder svg { opacity: 0.25; }
-
-  /* ─── Controls ─── */
-  .controls {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    flex-wrap: wrap;
-    justify-content: center;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 20px;
-    width: 100%;
-  }
-
-  .ctrl {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    align-items: center;
-    min-width: 100px;
-  }
-  .ctrl-label {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--muted);
-    white-space: nowrap;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-  }
-  .ctrl-val {
-    font-family: var(--mono);
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--accent);
-    min-width: 20px;
-    text-align: center;
-  }
-
-  input[type="range"] {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 110px;
-    height: 4px;
-    background: var(--border);
-    border-radius: 2px;
-    outline: none;
-    cursor: pointer;
-  }
-  input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 13px; height: 13px;
-    border-radius: 50%;
-    background: var(--accent);
-    border: 2px solid var(--bg);
-    cursor: pointer;
-    transition: transform 0.1s;
-  }
-  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
-  input[type="range"]::-moz-range-thumb {
-    width: 13px; height: 13px;
-    border-radius: 50%;
-    background: var(--accent);
-    border: 2px solid var(--bg);
-    cursor: pointer;
-  }
-
-  .btn-ctrl {
-    padding: 7px 14px;
-    background: transparent;
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-family: var(--mono);
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.15s;
-    white-space: nowrap;
-  }
-  .btn-ctrl:hover { border-color: var(--accent); color: var(--accent); }
-  .btn-ctrl.active {
-    background: var(--accent);
-    color: var(--bg);
-    border-color: var(--accent);
-    font-weight: 600;
-  }
-
-  /* ─── Footer ─── */
-  .footer {
-    font-size: 11px;
-    color: #444;
-    font-family: var(--mono);
-    text-align: center;
-    margin-top: 4px;
-  }
-  .footer a {
-    color: #555;
-    text-decoration: none;
-    transition: color 0.15s;
-  }
-  .footer a:hover { color: var(--accent); }
-
-  /* ─── Responsive ─── */
-  @media (max-width: 700px) {
-    .panels { grid-template-columns: 1fr; }
-    .url-group input[type="text"] { width: 160px; }
-    .controls { gap: 10px; padding: 12px 14px; }
-    .ctrl { min-width: 80px; }
-    input[type="range"] { width: 80px; }
-    .header h1 { font-size: 20px; }
-  }
-</style>
-  <script type="module" crossorigin src="/MotionDiff/assets/index-BIc1H7hl.js"></script>
+    const root = document.documentElement;
+    try {
+      root.setAttribute('data-theme', localStorage.getItem('motiondiff-theme') || 'dark');
+      const colorTheme = localStorage.getItem('motiondiff-color-theme') || 'green';
+      if (colorTheme === 'gradient') {
+        root.setAttribute('data-theme-color', 'gradient');
+      } else {
+        const theme = COLOR_THEMES[colorTheme] || COLOR_THEMES.green;
+        root.removeAttribute('data-theme-color');
+        root.style.setProperty('--accent', theme.accent);
+        root.style.setProperty('--accent-dim', theme.accentDim);
+        root.style.setProperty('--aurora1', theme.aurora1);
+        root.style.setProperty('--aurora2', theme.aurora2);
+        root.style.setProperty('--aurora3', theme.aurora3);
+        root.style.setProperty('--conic1', theme.conic1);
+        root.style.setProperty('--conic2', theme.conic2);
+        root.style.setProperty('--conic3', theme.conic3);
+      }
+    } catch {
+      root.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
+  <script type="module" crossorigin src="/MotionDiff/assets/index-pmOl6xBJ.js"></script>
+  <link rel="stylesheet" crossorigin href="/MotionDiff/assets/index-Vyqyv3KO.css">
 </head>
 <body>
 <div id="app">
+  <header class="app-header">
+    <div class="header-main">
+      <div class="header-brand">
+        <h1>MotionDiff</h1>
+        <p>Temporal motion extraction inspired by Posy</p>
+      </div>
 
-  <header class="header">
-    <h1>MotionDiff</h1>
-    <p>Temporal motion extraction &mdash; inspired by Posy</p>
+      <div class="header-actions">
+        <div id="colorSwatches" class="color-swatches">
+          <button class="swatch" data-color="green" style="background:#00ffaa" title="Green" aria-label="Green color theme"></button>
+          <button class="swatch" data-color="violet" style="background:#c084fc" title="Violet" aria-label="Violet color theme"></button>
+          <button class="swatch" data-color="amber" style="background:#fbbf24" title="Amber" aria-label="Amber color theme"></button>
+          <button class="swatch" data-color="cyan" style="background:#22d3ee" title="Cyan" aria-label="Cyan color theme"></button>
+          <button class="swatch" data-color="rose" style="background:#fb7185" title="Rose" aria-label="Rose color theme"></button>
+          <button class="swatch" data-color="gradient" title="Gradient" aria-label="Gradient color theme" style="background: conic-gradient(#00ffaa 0deg, #c084fc 72deg, #fbbf24 144deg, #22d3ee 216deg, #fb7185 288deg, #00ffaa 360deg)"></button>
+        </div>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle theme">&#9790;</button>
+        <button class="icon-btn" id="btnHelp" aria-label="Open help">?</button>
+      </div>
+    </div> 
   </header>
 
-  <!-- Input row -->
-  <div class="input-row">
-    <div class="file-wrap">
-      <div class="file-btn">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M8 10V3m0 0L5 6m3-3l3 3"/>
-          <path d="M2 10v2a2 2 0 002 2h8a2 2 0 002-2v-2"/>
-        </svg>
-        Open File
-      </div>
-      <input type="file" id="fileInput" accept="video/*">
-    </div>
-    <span class="sep">or</span>
-    <div class="url-group">
-      <input type="text" id="urlInput" placeholder="Paste video URL...">
-      <button class="btn-primary" id="loadUrlBtn">Load</button>
-    </div>
-  </div>
-
-  <!-- Preset clips -->
-  <div class="presets-row">
-    <span class="presets-label">Presets:</span>
-    <div id="presetClips" style="display:flex;gap:6px;flex-wrap:wrap;">
-      <button class="preset-btn" data-url="https://videos.pexels.com/video-files/1254570/1254570-hd_1920_1080_30fps.mp4">Trees in Wind</button>
-      <button class="preset-btn" data-url="https://videos.pexels.com/video-files/6981415/6981415-hd_1920_1080_25fps.mp4">Flowing River</button>
-      <button class="preset-btn" data-url="https://videos.pexels.com/video-files/5646694/5646694-hd_1920_1080_30fps.mp4">Sunset Timelapse</button>
-    </div>
-  </div>
-
-  <div class="status-msg" id="statusMsg"></div>
-
-  <!-- Panels -->
-  <div class="panels">
-    <div class="panel">
-      <div class="panel-label">
-        <span class="dot" id="dotOriginal"></span>
-        Original
-      </div>
-      <div class="panel-body">
-        <video id="videoEl" playsinline muted loop></video>
-        <div class="placeholder" id="placeholderOriginal">
-          <svg width="40" height="40" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="6" y="10" width="36" height="28" rx="3"/>
-            <polygon points="20,18 32,24 20,30" fill="currentColor" stroke="none"/>
+  <section class="source-bar" id="sourceBar">
+    <div class="source-row">
+      <div class="file-wrap">
+        <div class="file-btn">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 10V3m0 0L5 6m3-3l3 3"/>
+            <path d="M2 10v2a2 2 0 002 2h8a2 2 0 002-2v-2"/>
           </svg>
-          Load a video to begin
+          Open File
         </div>
+        <input type="file" id="fileInput" accept="video/*">
       </div>
+
+      <div class="url-group">
+        <input type="text" id="urlInput" placeholder="Paste video URL...">
+        <button class="btn-primary" id="loadUrlBtn">Load</button>
+      </div>
+
+      <button class="source-btn" id="btnWebcam" hidden>Webcam</button>
+      <button class="source-btn" id="btnScreen" hidden>Screen</button>
     </div>
-    <div class="panel">
-      <div class="panel-label">
-        <span class="dot" id="dotDiff"></span>
-        Motion Diff
+
+    <div class="source-row">
+      <span class="presets-label">Preset Clips</span>
+      <div id="presetClips">
+        <button class="preset-btn" id="presetTrees" data-url="https://videos.pexels.com/video-files/1254570/1254570-hd_1920_1080_30fps.mp4">Trees in Wind</button>
+        <button class="preset-btn" id="presetRiver" data-url="https://videos.pexels.com/video-files/6981415/6981415-hd_1920_1080_25fps.mp4">Flowing River</button>
+        <button class="preset-btn" id="presetSunset" data-url="https://videos.pexels.com/video-files/5646694/5646694-hd_1920_1080_30fps.mp4">Sunset Timelapse</button>
       </div>
-      <div class="panel-body">
-        <canvas id="outputCanvas"></canvas>
-        <div class="placeholder" id="placeholderDiff">
-          <svg width="40" height="40" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="6" y="10" width="36" height="28" rx="3"/>
-            <path d="M16 30l6-8 4 5 6-9" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Diff output
+      <div class="status-msg" id="statusMsg" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <main class="viewport-shell">
+    <div class="panels">
+      <section class="panel">
+        <div class="panel-label">
+          <span class="dot" id="dotOriginal"></span>
+          Original
         </div>
+        <div class="panel-body">
+          <video id="videoEl" playsinline muted loop></video>
+          <div class="placeholder" id="placeholderOriginal">
+            <svg width="40" height="40" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <rect x="6" y="10" width="36" height="28" rx="3"/>
+              <polygon points="20,18 32,24 20,30" fill="currentColor" stroke="none"/>
+            </svg>
+            Load a video to begin
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-label">
+          <span class="dot" id="dotDiff"></span>
+          Motion Diff
+        </div>
+        <div class="panel-body">
+          <canvas id="outputCanvas"></canvas>
+          <div class="placeholder" id="placeholderDiff">
+            <svg width="40" height="40" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <rect x="6" y="10" width="36" height="28" rx="3"/>
+              <path d="M16 30l6-8 4 5 6-9" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Diff output
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <section class="timeline">
+    <div class="timeline-row">
+      <div class="timeline-actions">
+        <button class="btn-ctrl" id="btnStepBack" disabled aria-label="Step back one frame">&#9664;</button>
+        <button class="btn-ctrl btn-play" id="btnPlayPause" disabled aria-label="Play or pause">&#9654;</button>
+        <button class="btn-ctrl" id="btnStepForward" disabled aria-label="Step forward one frame">&#9654;</button>
+      </div>
+
+      <div class="timeline-meta">
+        <span class="timeline-meta__label">FRAMES</span>
+        <span class="frame-counter" id="frameCounter">
+          <span class="frame-counter__numbers">0 / 0</span>
+          <span class="frame-counter__token">&middot; 30fps</span>
+        </span>
       </div>
     </div>
-  </div>
 
-  <!-- Controls -->
-  <div class="controls">
-    <div class="ctrl">
-      <span class="ctrl-label">Offset</span>
-      <input type="range" id="sliderOffset" min="1" max="90" value="5">
-      <span class="ctrl-val" id="valOffset">5f</span>
+    <div class="timeline-scrub">
+      <input type="range" id="timelineScrubber" min="0" max="1000" value="0" disabled aria-label="Timeline scrubber">
     </div>
-    <div class="ctrl">
-      <span class="ctrl-label">Threshold</span>
-      <input type="range" id="sliderThreshold" min="0" max="60" value="10">
-      <span class="ctrl-val" id="valThreshold">10</span>
-    </div>
-    <div class="ctrl">
-      <span class="ctrl-label">Trail</span>
-      <input type="range" id="sliderTrail" min="1" max="20" value="5">
-      <span class="ctrl-val" id="valTrail">5f</span>
-    </div>
-    <div class="ctrl">
-      <span class="ctrl-label">RGB Spread</span>
-      <input type="range" id="sliderSpread" min="0" max="5" value="0">
-      <span class="ctrl-val" id="valSpread">0f</span>
+  </section>
+
+  <section class="controls control-panel">
+    <div class="looks-row">
+      <span class="section-title section-label">Looks</span>
+      <div class="looks-controls">
+        <select id="presetConfigSelect" class="control-select preset-select">
+          <option value="">Select parameter preset...</option>
+        </select>
+        <button class="btn-ctrl" id="autoConfigBtn">Auto</button>
+        <button class="btn-ctrl" id="savePresetBtn">Save current</button>
+        <button class="btn-ctrl" id="deletePresetBtn" disabled>Delete</button>
+      </div>
     </div>
 
-    <div class="ctrl">
-      <button class="btn-ctrl active" id="btnAlgo">Posy</button>
-    </div>
-    <div class="ctrl">
-      <button class="btn-ctrl" id="btnBlur">Blur: Off</button>
-    </div>
-    <div class="ctrl">
-      <button class="btn-ctrl" id="btnDisplay">Mode: Overlay</button>
-    </div>
-    <div class="ctrl">
-      <button class="btn-ctrl" id="btnPlayPause" disabled>&#9654;</button>
-    </div>
-  </div>
+    <div class="control-sections">
+      <section class="control-section">
+        <span class="section-title section-label">Algorithm</span>
 
-  <footer class="footer"> 
-  </footer>
+        <div class="segment-control" id="btnAlgo" role="group" aria-label="Algorithm mode">
+          <button class="segment-btn" type="button" data-algorithm="posy">Posy</button>
+          <button class="segment-btn" type="button" data-algorithm="raw">Raw Diff</button>
+        </div>
 
+        <div class="slider-grid">
+          <div class="slider-cell">
+            <span class="ctrl-label">Offset</span>
+            <input type="range" id="sliderOffset" min="1" max="90" value="5">
+            <span class="ctrl-val" id="valOffset">5f</span>
+          </div>
+
+          <div class="slider-cell">
+            <span class="ctrl-label">Threshold</span>
+            <input type="range" id="sliderThreshold" min="0" max="60" value="10">
+            <span class="ctrl-val" id="valThreshold">10</span>
+          </div>
+
+          <div class="slider-cell">
+            <span class="ctrl-label">Trail</span>
+            <input type="range" id="sliderTrail" min="1" max="20" value="5">
+            <span class="ctrl-val" id="valTrail">5f</span>
+          </div>
+
+          <div class="slider-cell">
+            <span class="ctrl-label">RGB Spread</span>
+            <input type="range" id="sliderSpread" min="0" max="5" value="0">
+            <span class="ctrl-val" id="valSpread">0f</span>
+          </div>
+        </div>
+
+        <div class="swatch-panel" id="rgbTintGroup" hidden>
+          <span class="subsection-label">RGB Tints</span>
+          <div class="color-row">
+            <div class="swatch-control">
+              <span class="swatch-label">R</span>
+              <div class="color-swatch" id="rgbTintR" aria-label="Red tint swatch"></div>
+            </div>
+            <div class="swatch-control">
+              <span class="swatch-label">G</span>
+              <div class="color-swatch" id="rgbTintG" aria-label="Green tint swatch"></div>
+            </div>
+            <div class="swatch-control">
+              <span class="swatch-label">B</span>
+              <div class="color-swatch" id="rgbTintB" aria-label="Blue tint swatch"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="performance-block">
+          <span class="performance-label">Performance</span>
+          <div class="performance-fields">
+            <select id="selectResolution" class="control-select" aria-label="Processing resolution">
+              <option value="320">320px</option>
+              <option value="480">480px</option>
+              <option value="640" selected>640px</option>
+              <option value="1280">1280px</option>
+              <option value="1920">1920px</option>
+            </select>
+
+            <select id="selectFpsCap" class="control-select" aria-label="Processing FPS cap">
+              <option value="max" selected>Src</option>
+              <option value="60">60</option>
+              <option value="30">30</option>
+              <option value="24">24</option>
+              <option value="15">15</option>
+            </select>
+          </div>
+          <div class="performance-status" id="performanceStatus">Processing at 640px &middot; uncapped</div>
+        </div>
+      </section>
+
+      <section class="control-section">
+        <span class="section-title section-label">Display</span>
+
+        <div class="mode-group">
+          <span class="ctrl-label">Mode</span>
+          <div class="segment-control" id="btnDisplay" role="group" aria-label="Display mode">
+            <button class="segment-btn" type="button" data-mode="diff">Diff</button>
+            <button class="segment-btn" type="button" data-mode="overlay">Overlay</button>
+            <button class="segment-btn" type="button" data-mode="glow">Glow</button>
+          </div>
+        </div>
+
+        <div class="toggle-group">
+          <label class="toggle-switch">
+            <input type="checkbox" id="btnBlur">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-label">Blur</span>
+          </label>
+
+          <label class="toggle-switch">
+            <input type="checkbox" id="btnAgeColor">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-label">Color Age</span>
+          </label>
+        </div>
+
+        <div class="age-gradient-panel" id="ageGradientGroup" hidden>
+          <span class="subsection-label">Age Gradient</span>
+          <div class="color-row">
+            <div class="swatch-control">
+              <span class="swatch-label">New</span>
+              <div class="color-swatch" id="ageColorNew" aria-label="New motion color"></div>
+            </div>
+            <div class="swatch-control">
+              <span class="swatch-label">Old</span>
+              <div class="color-swatch" id="ageColorOld" aria-label="Old motion color"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="control-section">
+        <span class="section-title section-label">Output</span>
+
+        <div class="speed-group">
+          <span class="ctrl-label">Speed</span>
+          <div class="segment-control" id="playbackRateControl" role="group" aria-label="Playback speed">
+            <button class="segment-btn" type="button" data-rate="0.25">0.25x</button>
+            <button class="segment-btn" type="button" data-rate="0.5">0.5x</button>
+            <button class="segment-btn" type="button" data-rate="1">1x</button>
+            <button class="segment-btn" type="button" data-rate="1.5">1.5x</button>
+            <button class="segment-btn" type="button" data-rate="2">2x</button>
+          </div>
+          <select id="playbackRateSelect" class="control-select" hidden disabled>
+            <option value="0.25">0.25x</option>
+            <option value="0.5">0.5x</option>
+            <option value="1" selected>1x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2x</option>
+          </select>
+        </div>
+
+        <button class="btn-ctrl btn-record" id="btnRecord">Record</button>
+      </section>
+    </div>
+  </section>
+</div>
+
+<div class="help-backdrop" id="helpBackdrop" hidden>
+  <aside class="help-drawer" id="helpDrawer" aria-hidden="true" aria-label="MotionDiff help">
+    <div class="help-drawer-header">
+      <div>
+        <p class="help-kicker">Help</p>
+        <h2 class="help-title">MotionDiff Guide</h2>
+      </div>
+      <button class="icon-btn help-close" id="helpClose" aria-label="Close help">x</button>
+    </div>
+    <div class="help-content" id="helpContent"></div>
+  </aside>
 </div>
 
 </body>
 </html>
+
