@@ -9,82 +9,54 @@
   (() => {
     const COLOR_THEMES = {
       green: {
-        accent: '#00ffaa',
-        accentDim: '#00b87a',
-        aurora1: 'rgba(0, 120, 80, 0.55)',
-        aurora2: 'rgba(0, 60, 120, 0.45)',
-        aurora3: 'rgba(0, 100, 60, 0.45)',
-        conic1: 'rgba(0, 255, 170, 0.06)',
-        conic2: 'rgba(0, 80, 200, 0.05)',
-        conic3: 'rgba(0, 200, 120, 0.05)',
+        h: 158,
+        s: '100%',
+        baseL: 60,
       },
       violet: {
-        accent: '#c084fc',
-        accentDim: '#9333ea',
-        aurora1: 'rgba(100, 0, 180, 0.6)',
-        aurora2: 'rgba(60, 0, 120, 0.5)',
-        aurora3: 'rgba(30, 0, 80, 0.4)',
-        conic1: 'rgba(192, 132, 252, 0.07)',
-        conic2: 'rgba(80, 0, 200, 0.06)',
-        conic3: 'rgba(150, 50, 255, 0.05)',
+        h: 271,
+        s: '91%',
+        baseL: 62,
       },
       amber: {
-        accent: '#fbbf24',
-        accentDim: '#d97706',
-        aurora1: 'rgba(120, 60, 0, 0.55)',
-        aurora2: 'rgba(100, 30, 0, 0.45)',
-        aurora3: 'rgba(80, 50, 0, 0.4)',
-        conic1: 'rgba(251, 191, 36, 0.07)',
-        conic2: 'rgba(200, 80, 0, 0.06)',
-        conic3: 'rgba(180, 120, 0, 0.05)',
+        h: 43,
+        s: '96%',
+        baseL: 58,
       },
       cyan: {
-        accent: '#22d3ee',
-        accentDim: '#0891b2',
-        aurora1: 'rgba(0, 80, 120, 0.55)',
-        aurora2: 'rgba(0, 60, 100, 0.5)',
-        aurora3: 'rgba(0, 100, 80, 0.4)',
-        conic1: 'rgba(34, 211, 238, 0.07)',
-        conic2: 'rgba(0, 100, 180, 0.06)',
-        conic3: 'rgba(0, 180, 160, 0.05)',
+        h: 189,
+        s: '85%',
+        baseL: 52,
       },
       rose: {
-        accent: '#fb7185',
-        accentDim: '#e11d48',
-        aurora1: 'rgba(120, 0, 40, 0.55)',
-        aurora2: 'rgba(100, 0, 60, 0.5)',
-        aurora3: 'rgba(80, 0, 30, 0.4)',
-        conic1: 'rgba(251, 113, 133, 0.07)',
-        conic2: 'rgba(200, 0, 80, 0.06)',
-        conic3: 'rgba(180, 50, 100, 0.05)',
+        h: 350,
+        s: '95%',
+        baseL: 65,
       },
     };
 
     const root = document.documentElement;
     try {
-      root.setAttribute('data-theme', localStorage.getItem('motiondiff-theme') || 'dark');
+      const themeMode = localStorage.getItem('motiondiff-theme') || 'dark';
+      root.setAttribute('data-theme', themeMode);
       const colorTheme = localStorage.getItem('motiondiff-color-theme') || 'green';
       if (colorTheme === 'gradient') {
         root.setAttribute('data-theme-color', 'gradient');
       } else {
         const theme = COLOR_THEMES[colorTheme] || COLOR_THEMES.green;
         root.removeAttribute('data-theme-color');
-        root.style.setProperty('--accent', theme.accent);
-        root.style.setProperty('--accent-dim', theme.accentDim);
-        root.style.setProperty('--aurora1', theme.aurora1);
-        root.style.setProperty('--aurora2', theme.aurora2);
-        root.style.setProperty('--aurora3', theme.aurora3);
-        root.style.setProperty('--conic1', theme.conic1);
-        root.style.setProperty('--conic2', theme.conic2);
-        root.style.setProperty('--conic3', theme.conic3);
+        const accentLightness = themeMode === 'light' ? theme.baseL - 20 : theme.baseL;
+        root.style.setProperty('--accent-h', String(theme.h));
+        root.style.setProperty('--accent-s', theme.s);
+        root.style.setProperty('--accent-l', `${accentLightness}%`);
       }
     } catch {
       root.setAttribute('data-theme', 'dark');
     }
   })();
 </script>
-  <script type="module" crossorigin src="/MotionDiff/assets/index-KjH8jSWM.js"></script>
-  <link rel="stylesheet" crossorigin href="/MotionDiff/assets/index-Vyqyv3KO.css">
+  <script type="module" crossorigin src="/MotionDiff/assets/index-Bu_WR_Qy.js"></script>
+  <link rel="stylesheet" crossorigin href="/MotionDiff/assets/index-CtIaoDbv.css">
 </head>
 <body>
 <div id="app">
@@ -97,12 +69,12 @@
 
       <div class="header-actions">
         <div id="colorSwatches" class="color-swatches">
-          <button class="swatch" data-color="green" style="background:#00ffaa" title="Green" aria-label="Green color theme"></button>
-          <button class="swatch" data-color="violet" style="background:#c084fc" title="Violet" aria-label="Violet color theme"></button>
-          <button class="swatch" data-color="amber" style="background:#fbbf24" title="Amber" aria-label="Amber color theme"></button>
-          <button class="swatch" data-color="cyan" style="background:#22d3ee" title="Cyan" aria-label="Cyan color theme"></button>
-          <button class="swatch" data-color="rose" style="background:#fb7185" title="Rose" aria-label="Rose color theme"></button>
-          <button class="swatch" data-color="gradient" title="Gradient" aria-label="Gradient color theme" style="background: conic-gradient(#00ffaa 0deg, #c084fc 72deg, #fbbf24 144deg, #22d3ee 216deg, #fb7185 288deg, #00ffaa 360deg)"></button>
+          <button class="swatch" data-color="green" style="background:hsl(158 100% 60%)" title="Green" aria-label="Green color theme"></button>
+          <button class="swatch" data-color="violet" style="background:hsl(271 91% 68%)" title="Violet" aria-label="Violet color theme"></button>
+          <button class="swatch" data-color="amber" style="background:hsl(43 96% 62%)" title="Amber" aria-label="Amber color theme"></button>
+          <button class="swatch" data-color="cyan" style="background:hsl(189 85% 56%)" title="Cyan" aria-label="Cyan color theme"></button>
+          <button class="swatch" data-color="rose" style="background:hsl(350 95% 65%)" title="Rose" aria-label="Rose color theme"></button>
+          <button class="swatch" data-color="gradient" title="Gradient" aria-label="Gradient color theme" style="background: conic-gradient(hsl(158 100% 60%) 0deg, hsl(271 91% 68%) 72deg, hsl(43 96% 62%) 144deg, hsl(189 85% 56%) 216deg, hsl(350 95% 65%) 288deg, hsl(158 100% 60%) 360deg)"></button>
         </div>
         <button class="icon-btn" id="themeToggle" aria-label="Toggle theme">&#9790;</button>
         <button class="icon-btn" id="btnHelp" aria-label="Open help">?</button>
@@ -128,7 +100,8 @@
         <button class="btn-primary" id="loadUrlBtn">Load</button>
       </div>
 
-      <button class="source-btn" id="btnWebcam" hidden>Webcam</button>
+      <button class="source-btn" id="btnCamera" hidden>Camera</button>
+      <button class="source-btn icon-btn source-icon-btn" id="cameraFlipBtn" hidden aria-label="Flip camera" title="Flip camera">&#8646;</button>
       <button class="source-btn" id="btnScreen" hidden>Screen</button>
     </div>
 
@@ -163,12 +136,18 @@
       </section>
 
       <section class="panel">
-        <div class="panel-label">
-          <span class="dot" id="dotDiff"></span>
-          Motion Diff
+        <div class="panel-label panel-label-output">
+          <span class="panel-label-main">
+            <span class="dot" id="dotDiff"></span>
+            Motion Diff
+          </span>
+          <button class="panel-expand-btn" id="theaterToggleBtn" hidden aria-label="Expand motion diff" title="Expand motion diff">&#9974;</button>
         </div>
         <div class="panel-body">
-          <canvas id="outputCanvas"></canvas>
+          <div class="output-canvas-shell" id="outputCanvasShell">
+            <canvas id="outputCanvas"></canvas>
+            <button class="icon-btn theater-close-btn" id="theaterCloseBtn" hidden aria-label="Exit theater view" title="Exit theater view">&times;</button>
+          </div>
           <div class="placeholder" id="placeholderDiff">
             <svg width="40" height="40" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
               <rect x="6" y="10" width="36" height="28" rx="3"/>
@@ -205,7 +184,7 @@
 
   <section class="controls control-panel">
     <div class="looks-row">
-      <span class="section-title section-label">Looks</span>
+      <span class="section-title section-label looks-label">Looks</span>
       <div class="looks-controls">
         <select id="presetConfigSelect" class="control-select preset-select">
           <option value="">Select parameter preset...</option>
@@ -217,8 +196,8 @@
     </div>
 
     <div class="control-sections">
-      <section class="control-section">
-        <span class="section-title section-label">Algorithm</span>
+      <section class="control-section algorithm-section">
+        <span class="section-title section-label section-label-algorithm">Algorithm</span>
 
         <div class="segment-control" id="btnAlgo" role="group" aria-label="Algorithm mode">
           <button class="segment-btn" type="button" data-algorithm="posy">Posy</button>
@@ -292,8 +271,8 @@
         </div>
       </section>
 
-      <section class="control-section">
-        <span class="section-title section-label">Display</span>
+      <section class="control-section display-section">
+        <span class="section-title section-label section-label-display">Display</span>
 
         <div class="mode-group">
           <span class="ctrl-label">Mode</span>
@@ -333,8 +312,8 @@
         </div>
       </section>
 
-      <section class="control-section">
-        <span class="section-title section-label">Output</span>
+      <section class="control-section output-section">
+        <span class="section-title section-label section-label-output">Output</span>
 
         <div class="speed-group">
           <span class="ctrl-label">Speed</span>
@@ -359,6 +338,8 @@
     </div>
   </section>
 </div>
+
+<div class="theater-backdrop" id="theaterBackdrop" hidden></div>
 
 <div class="help-backdrop" id="helpBackdrop" hidden>
   <aside class="help-drawer" id="helpDrawer" aria-hidden="true" aria-label="MotionDiff help">
