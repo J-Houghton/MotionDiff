@@ -251,6 +251,83 @@ describe('trailStep colour by age', () => {
     expect(Array.from(out)).toEqual([0, 0, 0, 255]);
   });
 
+  it('mixed style: a pixel that keeps moving shows new and old at once', () => {
+    // Full-strength motion on every frame for more than a whole window.
+    let prev = createTrailState(1);
+    let next = createTrailState(1);
+    const latest = new Uint8ClampedArray(4);
+    const mixed = new Uint8ClampedArray(4);
+    let prevL = createTrailState(1);
+    let nextL = createTrailState(1);
+    for (let n = 0; n < 6; n++) {
+      trailStep(prev, next, makePixels([255, 255, 255, 255]), mixed, { ...opts(0.25), ageColorMixed: true });
+      trailStep(prevL, nextL, makePixels([255, 255, 255, 255]), latest, { ...opts(0.25), ageColorMixed: false });
+      [prev, next] = [next, prev];
+      [prevL, nextL] = [nextL, prevL];
+    }
+    // Latest-only: still the "new" colour. Mixed: red from the newest motion
+    // and blue from the start of the burst, a full window ago.
+    expect(Array.from(latest)).toEqual([255, 0, 0, 255]);
+    expect(Array.from(mixed)).toEqual([255, 0, 255, 255]);
+  });
+
+  it('mixed style: a burst that has only just begun is the "new" colour', () => {
+    const out = new Uint8ClampedArray(4);
+    trailStep(createTrailState(1), createTrailState(1), makePixels([255, 255, 255, 255]), out, { ...opts(0.25), ageColorMixed: true });
+    expect(Array.from(out)).toEqual([255, 0, 0, 255]);
+  });
+
+  it('mixed style: the burst ends when the trail expires, so the next one starts new', () => {
+    let prev = createTrailState(1);
+    let next = createTrailState(1);
+    const out = new Uint8ClampedArray(4);
+    const step = (value, ageStep) => {
+      trailStep(prev, next, makePixels([value, value, value, 255]), out, { ...opts(ageStep), ageColorMixed: true });
+      [prev, next] = [next, prev];
+    };
+    for (let n = 0; n < 6; n++) step(255, 0.25); // a long burst
+    step(128, 1);                                // stillness for a whole window
+    expect(Array.from(out)).toEqual([0, 0, 0, 255]);
+    step(255, 0.25);                             // motion returns
+    expect(Array.from(out)).toEqual([255, 0, 0, 255]);
+  });
+
+  it('mixed style: the old colour carries the burst\'s typical strength, not its strongest frame', () => {
+    let prev = createTrailState(1);
+    let next = createTrailState(1);
+    const out = new Uint8ClampedArray(4);
+    const step = (value) => {
+      trailStep(prev, next, makePixels([value, value, value, 255]), out, { ...opts(0.05), ageColorMixed: true });
+      [prev, next] = [next, prev];
+    };
+    // Weak motion (deviation 20 of 127) for a whole window, with one strong frame in it.
+    for (let n = 0; n < 12; n++) step(148);
+    step(255);
+    for (let n = 0; n < 12; n++) step(148);
+    // The burst is a window old, so its colour is the "old" one (blue), but
+    // only as bright as the weak motion that has been going on (40 of 255),
+    // while red still shows the strong frame fading from "new".
+    expect(prev.peaks[3]).toBeGreaterThan(30);
+    expect(prev.peaks[3]).toBeLessThan(80);
+    expect(out[2]).toBeLessThan(160);
+    expect(out[0]).toBeGreaterThan(out[2] / 2);
+  });
+
+  it('mixed style: the burst strength follows the motion even in small steps', () => {
+    let prev = createTrailState(1);
+    let next = createTrailState(1);
+    const out = new Uint8ClampedArray(4);
+    const step = (value) => {
+      trailStep(prev, next, makePixels([value, value, value, 255]), out, { ...opts(0.01), ageColorMixed: true });
+      [prev, next] = [next, prev];
+    };
+    step(138); // deviation 10 → strength 20
+    expect(prev.peaks[3]).toBe(20);
+    for (let n = 0; n < 12; n++) step(142); // deviation 14 → strength 28
+    // 8 levels away at 1% a frame would never move in 8 bits; it must arrive.
+    expect(prev.peaks[3]).toBe(28);
+  });
+
   it('is ignored in Raw space', () => {
     const out = new Uint8ClampedArray(4);
     trailStep(createTrailState(1), createTrailState(1), makePixels([90, 90, 90, 255]), out, {

@@ -316,6 +316,7 @@ self.onmessage = function (e) {
   if (ageColorEnabled && isPosy) {
     trailOpts.ageColorNew = ageNewest;
     trailOpts.ageColorOld = ageOldest;
+    trailOpts.ageColorMixed = params.ageColorStyle !== 'latest';
   }
   trailStep(trailStates[trailPrev], trailStates[trailCur], diffData, accResult, trailOpts);
   trailHasFrame = true;

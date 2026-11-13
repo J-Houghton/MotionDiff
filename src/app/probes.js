@@ -156,12 +156,13 @@ export function debugTrailParity(pipeline) {
   const CASES = [
     { name: 'posy', algorithm: 'posy' },
     { name: 'raw', algorithm: 'raw' },
-    { name: 'posy colour by age', algorithm: 'posy', ageColor: true },
+    { name: 'posy colour by age (mixed)', algorithm: 'posy', ageColor: true, style: 'mixed' },
+    { name: 'posy colour by age (latest)', algorithm: 'posy', ageColor: true, style: 'latest' },
   ];
   const ageNew = '#ff4400';
   const ageOld = '#0044ff';
 
-  const cases = CASES.map(({ name, algorithm, ageColor = false }) => {
+  const cases = CASES.map(({ name, algorithm, ageColor = false, style = 'mixed' }) => {
     const isPosy = algorithm === 'posy';
     let prev = createTrailState(width * height);
     let next = createTrailState(width * height);
@@ -180,9 +181,9 @@ export function debugTrailParity(pipeline) {
       const drawDiff = () => gl.renderDiff({
         threshold: 10, algorithm, rgbTintR: '#ff0000', rgbTintG: '#00ff00', rgbTintB: '#0000ff', layers: [0, 0, 0],
       });
-      const trailOpts = { isPosy, ageStep, hold: TRAIL_HOLD, refresh: TRAIL_REFRESH, ageColorEnabled: ageColor, ageColorNew: ageNew, ageColorOld: ageOld };
+      const trailOpts = { isPosy, ageStep, hold: TRAIL_HOLD, refresh: TRAIL_REFRESH, ageColorEnabled: ageColor, ageColorStyle: style, ageColorNew: ageNew, ageColorOld: ageOld };
       const coreOpts = { isPosy, ageStep, hold: TRAIL_HOLD };
-      if (ageColor) Object.assign(coreOpts, { ageColorNew: hexToUnit(ageNew), ageColorOld: hexToUnit(ageOld) });
+      if (ageColor) Object.assign(coreOpts, { ageColorNew: hexToUnit(ageNew), ageColorOld: hexToUnit(ageOld), ageColorMixed: style === 'mixed' });
 
       drawDiff();
       gl.renderTrail({ ...trailOpts, repeat: false });

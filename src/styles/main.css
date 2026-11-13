@@ -136,27 +136,28 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .cap-mode h1 small { font: 400 11px/1 var(--mono); letter-spacing: 0; color: var(--soft); margin-left: 8px; vertical-align: 12px; }
 .cap-mode p { margin: 5px 0 0; font: italic 400 13px/1.25 var(--serif); color: var(--soft); max-width: 44ch; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
-.ruler { position: relative; height: 70px; font: 400 10px/1 var(--mono); color: var(--soft); }
+.ruler { position: relative; height: 80px; font: 400 10px/1 var(--mono); color: var(--soft); }
 .ruler-track { position: absolute; inset: 0; }
 .ruler-axis { position: absolute; left: 0; right: 0; bottom: 16px; height: 1px; background: var(--ink); }
 .ruler-ticks { position: absolute; left: 0; right: 0; bottom: 16px; height: 6px; background: repeating-linear-gradient(270deg, var(--ink) 0 1px, transparent 1px var(--ruler-step, 10%)); }
 .ruler-lab { position: absolute; bottom: 0; left: 0; }
 .ruler-lab:nth-of-type(2) { display: none; }
-.ruler-lab-now { left: auto; right: 0; }
+/* "now" sits in the top corner, clear of every marker label */
+.ruler-lab-now { left: auto; right: 0; bottom: auto; top: 0; }
 .ruler-trail { position: absolute; right: 0; bottom: 17px; height: 8px; background: repeating-linear-gradient(135deg, var(--soft) 0 2px, transparent 2px 5px); opacity: 0.55; }
 .ruler-mark, .ruler-now { position: absolute; bottom: 16px; width: 2px; transform: translateX(50%); }
 .ruler-mark { cursor: ew-resize; touch-action: none; }
 /* a wider grab area than the 2px line */
 .ruler-mark::before { content: ''; position: absolute; inset: -4px -9px; }
-.ruler-mark b, .ruler-now b { position: absolute; left: 50%; transform: translateX(-50%); font: 500 10px/1 var(--mono); padding: 3px 5px; white-space: nowrap; color: #fff; }
+/* labels hang to the left of their line, into the past, so a short gap never runs into "now" */
+.ruler-mark b { position: absolute; right: 0; font: 500 10px/1 var(--mono); padding: 3px 5px; white-space: nowrap; color: #fff; }
 .ruler-mark-r { height: 24px; background: var(--ch-r); } .ruler-mark-r b { bottom: 24px; background: var(--ch-r); }
-.ruler-mark-g { height: 37px; background: var(--ch-g); cursor: default; } .ruler-mark-g b { bottom: 37px; background: var(--ch-g); }
-.ruler-mark-b { height: 50px; background: var(--ch-b); } .ruler-mark-b b { bottom: 50px; background: var(--ch-b); }
+.ruler-mark-g { height: 42px; background: var(--ch-g); cursor: default; } .ruler-mark-g b { bottom: 42px; background: var(--ch-g); }
+.ruler-mark-b { height: 60px; background: var(--ch-b); } .ruler-mark-b b { bottom: 60px; background: var(--ch-b); }
 :root[data-theme='dark'] .ruler-mark b { color: #0d1a2c; }
 .ruler-mark-trail { height: 9px; bottom: 16px; width: 2px; background: var(--soft); }
 .ruler-mark-trail b { top: 11px; bottom: auto; background: var(--paper); color: var(--soft) !important; padding: 1px 4px; z-index: 1; }
-.ruler-now { right: 0; height: 24px; background: var(--ink); transform: none; }
-.ruler-now b { left: auto; right: 0; bottom: 24px; transform: none; background: var(--ink); color: var(--paper); }
+.ruler-now { right: 0; height: 30px; background: var(--ink); transform: none; }
 .ruler-readout { margin: 0; position: absolute; left: 0; bottom: 14px; font: 400 13px/1.4 var(--mono); color: var(--ink); }
 
 .play { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
@@ -281,6 +282,9 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
   /* rows tall enough to hit with a thumb */
   --tp-container-unit-size: 44px; --tp-container-unit-spacing: 6px; --tp-blade-value-width: 190px; font-size: 14px; }
 #app[data-phone='true'] .panel .tp-rotv { font-size: 14px; }
+/* On a phone the parameter sheet takes the transport's place while it is open. */
+#app[data-phone='true'][data-panel='open'] .cap { display: none; }
+#app[data-phone='true'] .panel-done { display: block; width: 100%; min-height: 48px; background: var(--accent); color: #000; border: 0; font: 600 15px/1 var(--cond); letter-spacing: 0.14em; text-transform: uppercase; }
 #app[data-phone='true'] .sources button, #app[data-phone='true'] .sources-url input, #app[data-phone='true'] .sheet-close { min-height: 48px; }
 #app[data-phone='true'] .sources-samples button { min-height: 44px; }
 #app[data-phone='true'] .empty { align-content: center; padding: 76px 18px 150px; }

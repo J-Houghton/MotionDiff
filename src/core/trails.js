@@ -36,6 +36,15 @@ export const TRAIL_HOLD = 0.5;
  */
 export const TRAIL_REFRESH = 0.75;
 
+/**
+ * Colour-by-age, "mixed" style: how bright the old colour is. A ring of past
+ * frames, each tinted by its age, takes the maximum per channel, which lands
+ * between the burst's typical strength and its strongest frame. This share
+ * of the strongest (the rest typical) gave the same mean colour as the ring
+ * on the trees and river reference clips, within 2% (docs/verdicts.md, V1).
+ */
+export const TRAIL_OLD_PEAK_SHARE = 0.25;
+
 const POSY_BASELINE = 128;
 /** Largest deviation Posy space normalizes against (matches core/magnitude.js). */
 const POSY_RANGE = 127;
@@ -98,12 +107,21 @@ export function clearTrailState(state) {
  * @param {number[]} [opts.ageColorNew] - With ageColorOld: show Posy motion
  *   as a colour by age instead of its own values. [r, g, b] in 0..1
  * @param {number[]} [opts.ageColorOld]
+ * @param {boolean} [opts.ageColorMixed] - Colour-by-age style. false
+ *   ("latest"): one colour per pixel, from the time since it last moved.
+ *   true ("mixed"): per channel, the stronger of that colour and a second
+ *   one for the older motion still on screen: the colour for how long the
+ *   pixel's current burst of motion has been going, at the burst's typical
+ *   strength. This is what a ring of past frames gives when every frame is
+ *   tinted by its age and each channel takes its own maximum, so a pixel
+ *   that keeps moving shows new and old at once.
  */
 export function trailStep(prev, next, diff, out, opts) {
   const { isPosy, ageStep } = opts;
   const hold = opts.hold ?? TRAIL_HOLD;
   const refresh = opts.refresh ?? TRAIL_REFRESH;
   const ageColor = isPosy && opts.ageColorNew && opts.ageColorOld;
+  const mixed = ageColor && Boolean(opts.ageColorMixed);
   const base = isPosy ? POSY_BASELINE : 0;
   const len = diff.length;
   // Per-channel scratch
@@ -112,14 +130,19 @@ export function trailStep(prev, next, diff, out, opts) {
   const aged = [0, 0, 0];
 
   for (let i = 0; i < len; i += 4) {
+    let live = false; // any channel's trail still showing before this frame
+    let took = false; // any channel refreshed by this frame
+    let freshSum = 0; // this frame's own motion, all channels
     for (let c = 0; c < 3; c++) {
       const k = i + c;
       let age = Math.min(prev.ages[k] + ageStep, 1);
+      if (age < 1) live = true;
       let peak = prev.peaks[k];
       let env = trailEnvelope(age, hold);
 
       const fresh = diff[k];
       const freshDev = Math.abs(fresh - base);
+      freshSum += freshDev;
       const held = (peak - base) * env; // what the trail shows now, signed
       if (freshDev > 0 && freshDev >= refresh * Math.abs(held)) {
         // Still moving here: restart the window, keeping the stronger of
@@ -127,6 +150,7 @@ export function trailStep(prev, next, diff, out, opts) {
         peak = freshDev >= Math.abs(held) ? fresh : Math.floor(base + held + 0.5);
         age = 0;
         env = 1;
+        took = true;
       }
 
       next.peaks[k] = peak;
@@ -135,6 +159,35 @@ export function trailStep(prev, next, diff, out, opts) {
       strength[c] = age < 1 ? Math.abs(peak - base) : 0; // unfaded, until it expires
       aged[c] = age;
     }
+
+    // Burst age (fourth slot): how long this pixel's current run of motion
+    // has been going. It starts when motion arrives on a pixel with nothing
+    // showing, and runs on until the trail has fully expired.
+    let burst = Math.min(prev.ages[i + 3] + ageStep, 1);
+    if (took && !live) burst = 0;
+    else if (!took && !live) burst = 1;
+    next.ages[i + 3] = burst;
+
+    // Burst strength (fourth slot of the peaks, 0..255): the typical size of
+    // the motion during the burst. It starts at the first frame's own
+    // strength and follows later frames at the pace of the trail window, at
+    // least one level a frame so 8 bits never stall it. Frames without
+    // motion leave it alone. The peaks hold the STRONGEST recent value;
+    // tinting the old colour with that would paint a single strong frame as
+    // if the motion had been that strong all along.
+    let burstStrength = prev.peaks[i + 3];
+    if (!live) burstStrength = 0;
+    if (isPosy && freshSum > 0) {
+      const now = Math.floor(Math.min(1, freshSum / (3 * POSY_RANGE)) * 255 + 0.5);
+      if (!live) {
+        burstStrength = now;
+      } else {
+        const gap = now - burstStrength;
+        const move = Math.min(Math.abs(gap), Math.max(1, Math.floor(Math.abs(gap) * ageStep + 0.5)));
+        burstStrength += Math.sign(gap) * move;
+      }
+    }
+    next.peaks[i + 3] = burstStrength;
 
     if (ageColor) {
       // The colour slides from "new" to "old" with the strength-weighted
@@ -149,8 +202,13 @@ export function trailStep(prev, next, diff, out, opts) {
         const mag = Math.min(1, sum / (3 * POSY_RANGE));
         const t = (dR * aged[0] + dG * aged[1] + dB * aged[2]) / sum;
         for (let c = 0; c < 3; c++) {
-          const tint = opts.ageColorNew[c] + (opts.ageColorOld[c] - opts.ageColorNew[c]) * t;
-          out[i + c] = Math.floor(tint * mag * 255 + 0.5);
+          const span = opts.ageColorOld[c] - opts.ageColorNew[c];
+          let value = (opts.ageColorNew[c] + span * t) * mag;
+          if (mixed) {
+            const oldStrength = TRAIL_OLD_PEAK_SHARE * mag + (1 - TRAIL_OLD_PEAK_SHARE) * (burstStrength / 255);
+            value = Math.max(value, (opts.ageColorNew[c] + span * burst) * oldStrength);
+          }
+          out[i + c] = Math.floor(value * 255 + 0.5);
         }
       } else {
         out[i] = out[i + 1] = out[i + 2] = 0;

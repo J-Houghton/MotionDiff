@@ -213,6 +213,7 @@ uniform float uAgeStep;     // media time since the previous frame, in windows
 uniform float uHold;        // share of the window held at full strength
 uniform float uRefresh;     // a new value this share of the shown one refreshes the trail
 uniform int uAgeColor;      // 1 = show Posy motion as a colour by age
+uniform int uAgeMixed;      // 1 = "mixed" style: also colour by the burst age
 uniform vec3 uAgeColorNew;
 uniform vec3 uAgeColorOld;
 
@@ -230,8 +231,12 @@ void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   float base = uIsPosy == 1 ? 128.0 : 0.0;
 
-  vec3 peak = floor(texelFetch(uPeaks, p, 0).rgb * 255.0 + 0.5);
-  vec3 age = uEmpty == 1 ? vec3(1.0) : min(texelFetch(uAges, p, 0).rgb + uAgeStep, 1.0);
+  vec4 prevPeaks = floor(texelFetch(uPeaks, p, 0) * 255.0 + 0.5);
+  vec3 peak = prevPeaks.rgb;
+  vec4 prevAges = texelFetch(uAges, p, 0);
+  vec3 age = uEmpty == 1 ? vec3(1.0) : min(prevAges.rgb + uAgeStep, 1.0);
+  // Whether any channel's trail was still showing before this frame.
+  float wasLive = min(age.r, min(age.g, age.b)) < 1.0 ? 1.0 : 0.0;
   vec3 env = envelope(age);
 
   vec3 fresh = floor(texelFetch(uDiff, p, 0).rgb * 255.0 + 0.5);
@@ -244,8 +249,30 @@ void main() {
   age = mix(age, vec3(0.0), take);
   env = mix(env, vec3(1.0), take);
 
-  outPeaks = vec4(peak / 255.0, 1.0);
-  outAges = vec4(age, 1.0);
+  // Burst age (alpha): how long this pixel's current run of motion has been
+  // going. Starts when motion arrives with nothing showing; ends when the
+  // trail has fully expired.
+  float took = max(take.r, max(take.g, take.b));
+  float burst = uEmpty == 1 ? 1.0 : min(prevAges.a + uAgeStep, 1.0);
+  if (wasLive < 0.5) burst = took > 0.5 ? 0.0 : 1.0;
+
+  // Burst strength (peaks alpha, 0..255): the typical size of the motion
+  // during the burst. See trailStep in core/trails.js.
+  float freshSum = freshDev.r + freshDev.g + freshDev.b;
+  float burstStrength = (uEmpty == 1 || wasLive < 0.5) ? 0.0 : prevPeaks.a;
+  if (uIsPosy == 1 && freshSum > 0.0) {
+    float now = floor(min(1.0, freshSum / (3.0 * 127.0)) * 255.0 + 0.5);
+    if (wasLive < 0.5) {
+      burstStrength = now;
+    } else {
+      float gap = now - burstStrength;
+      float move = min(abs(gap), max(1.0, floor(abs(gap) * uAgeStep + 0.5)));
+      burstStrength += sign(gap) * move;
+    }
+  }
+
+  outPeaks = vec4(peak, burstStrength) / 255.0;
+  outAges = vec4(age, burst);
 
   vec3 shown = (peak - base) * env; // signed deviation from the baseline
   if (uAgeColor == 1 && uIsPosy == 1) {
@@ -257,6 +284,8 @@ void main() {
       float mag = min(1.0, sum / (3.0 * 127.0));
       float t = dot(d, age) / sum;
       colour = mix(uAgeColorNew, uAgeColorOld, t) * mag;
+      // 0.25 is TRAIL_OLD_PEAK_SHARE in core/trails.js.
+      if (uAgeMixed == 1) colour = max(colour, mix(uAgeColorNew, uAgeColorOld, burst) * (0.25 * mag + 0.75 * burstStrength / 255.0));
     }
     outShown = vec4(floor(colour * 255.0 + 0.5) / 255.0, 1.0);
   } else {
@@ -1063,6 +1092,7 @@ export class WebGLRenderer {
    *   parameter change while paused): recompute from the state the first
    *   attempt started from instead of stacking onto its result
    * @param {boolean} [opts.ageColorEnabled]
+   * @param {string} [opts.ageColorStyle] - 'mixed' (default) or 'latest'
    * @param {string} [opts.ageColorNew] - Hex colour
    * @param {string} [opts.ageColorOld] - Hex colour
    */
@@ -1102,6 +1132,7 @@ export class WebGLRenderer {
     gl.uniform1f(u.uHold, opts.hold);
     gl.uniform1f(u.uRefresh, opts.refresh);
     gl.uniform1i(u.uAgeColor, opts.ageColorEnabled ? 1 : 0);
+    gl.uniform1i(u.uAgeMixed, opts.ageColorStyle === 'latest' ? 0 : 1);
     gl.uniform3fv(u.uAgeColorNew, hexToVec3(opts.ageColorNew, '#ff4400'));
     gl.uniform3fv(u.uAgeColorOld, hexToVec3(opts.ageColorOld, '#0044ff'));
 

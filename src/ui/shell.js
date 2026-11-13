@@ -19,7 +19,9 @@ import { initKeys, SHORTCUTS } from './keys.js';
 const RATES = [0.25, 0.5, 1, 1.5, 2];
 const DISPLAYS = ['diff', 'overlay', 'glow', 'data'];
 const IDLE_MS = 2500;
-const PHONE_QUERY = '(max-width: 720px), (pointer: coarse) and (max-height: 540px)';
+// Narrow screens and anything driven by touch get the viewfinder: its controls
+// are sized for fingers and the picture fills the screen.
+const PHONE_QUERY = '(max-width: 720px), (pointer: coarse)';
 
 const TEMPLATE = `
 <header class="mast chrome">
@@ -63,7 +65,10 @@ const TEMPLATE = `
       <p class="empty-hint">or drop a video file anywhere</p>
     </div>
   </div>
-  <aside class="panel chrome" id="panel" aria-label="Parameters"></aside>
+  <aside class="panel chrome" id="panel" aria-label="Parameters">
+    <button type="button" class="panel-done phone-only" id="panelDone">Done</button>
+    <div id="paneHost"></div>
+  </aside>
 </main>
 
 <footer class="cap chrome">
@@ -383,7 +388,7 @@ export function initShell({ root, session }) {
   }
 
   // ── Actions (buttons and keys share them) ───────────────────
-  const panel = initPanel({ container: $('panel'), session });
+  const panel = initPanel({ container: $('paneHost'), session });
   const ruler = initRuler({ container: $('ruler'), session });
 
   const actions = {
@@ -441,6 +446,7 @@ export function initShell({ root, session }) {
   click('btnSource2', actions.source);
   click('btnPanel', actions.panel);
   click('btnParams', actions.panel);
+  click('panelDone', actions.panel);
   click('btnFull', actions.fullscreen);
   click('vfExit', actions.fullscreen);
   click('btnTheme', actions.theme);

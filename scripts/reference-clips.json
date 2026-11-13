@@ -1,12 +1,16 @@
 {
   "note": "Reference clips for visual checks. Files land in ref-clips/ (git-ignored): 'npm run filmstrip clips' downloads the ones with a url and records the synthetic ones in the browser. 'at' is the default moment (seconds) a filmstrip starts from.",
   "clips": [
-    { "id": "truth", "role": "known truth: square that moves, stops 3.5-8.5 s, moves on; disc heading 30 degrees down-right; disc heading left", "file": "truth.webm", "synthetic": "truth", "fps": 30, "at": 2.0 },
-    { "id": "truth-noisy", "role": "the same scene under heavy sensor noise", "file": "truth-noisy.webm", "synthetic": "truth-noisy", "fps": 30, "at": 2.0 },
-    { "id": "sixty", "role": "60 fps source (synthetic)", "file": "sixty.webm", "synthetic": "sixty", "fps": 60, "at": 2.0 },
-    { "id": "pulse", "role": "still patch with a 1.2 Hz brightness swing of about one level, for magnify", "file": "pulse.webm", "synthetic": "pulse", "fps": 30, "at": 5.0 },
-    { "id": "trees", "role": "fast motion: branches in strong wind, static camera", "file": "trees.mp4", "url": "https://videos.pexels.com/video-files/1254570/1254570-hd_1920_1080_30fps.mp4", "fps": 30, "at": 4.0, "licence": "Pexels licence" },
-    { "id": "river", "role": "fast motion everywhere: flowing water", "file": "river.mp4", "url": "https://videos.pexels.com/video-files/6981415/6981415-hd_1920_1080_25fps.mp4", "fps": 25, "at": 3.0, "licence": "Pexels licence" },
-    { "id": "sunset", "role": "slow drift: clouds in a timelapse", "file": "sunset.mp4", "url": "https://videos.pexels.com/video-files/5646694/5646694-hd_1920_1080_30fps.mp4", "fps": 30, "at": 3.0, "licence": "Pexels licence" }
+    {"id":"truth", "role":"known truth: square that moves, stops 3.5-8.5 s, moves on; disc heading 30 degrees down-right; disc heading left", "file":"truth.webm", "synthetic":"truth", "fps":30, "at":2},
+    {"id":"truth-noisy", "role":"the same scene under heavy sensor noise", "file":"truth-noisy.webm", "synthetic":"truth-noisy", "fps":30, "at":2},
+    {"id":"sixty", "role":"60 fps source (synthetic)", "file":"sixty.webm", "synthetic":"sixty", "fps":60, "at":2},
+    {"id":"pulse", "role":"still patch with a 1.2 Hz brightness swing of about one level, for magnify", "file":"pulse.webm", "synthetic":"pulse", "fps":30, "at":5},
+    {"id":"trees", "role":"fast motion: branches in strong wind, static camera", "file":"trees.mp4", "url":"https://videos.pexels.com/video-files/1254570/1254570-hd_1920_1080_30fps.mp4", "fps":30, "at":4,"licence":"Pexels licence"},
+    {"id":"river", "role":"fast motion everywhere: flowing water", "file":"river.mp4", "url":"https://videos.pexels.com/video-files/6981415/6981415-hd_1920_1080_25fps.mp4", "fps":25, "at":3,"licence":"Pexels licence"},
+    {"id":"sunset", "role":"slow drift: clouds in a timelapse", "file":"sunset.mp4", "url":"https://videos.pexels.com/video-files/5646694/5646694-hd_1920_1080_30fps.mp4", "fps":30, "at":3,"licence":"Pexels licence"},
+    {"id":"night", "role":"low light: people walking by the water at night", "file":"night.mp4", "url":"https://videos.pexels.com/video-files/4520575/4520575-hd_1920_1080_25fps.mp4", "fps":25, "at":3,"licence":"Pexels licence"},
+    {"id":"handheld", "role":"handheld camera: a crowd walking, the whole frame wobbles", "file":"handheld.mp4", "url":"https://videos.pexels.com/video-files/6258021/6258021-hd_1280_720_24fps.mp4", "fps":23.976, "at":3,"licence":"Pexels licence"},
+    {"id":"face", "role":"a face held nearly still, locked camera: for magnify (pulse)", "file":"face.mp4", "url":"https://videos.pexels.com/video-files/8724224/8724224-hd_1366_720_25fps.mp4", "fps":25, "at":5,"licence":"Pexels licence"},
+    {"id":"highway", "role":"a real 60 fps source: fast vehicles, near-static camera", "file":"highway.mp4", "url":"https://videos.pexels.com/video-files/40912887/17491308_1920_1080_60fps.mp4", "fps":59.94, "at":3,"licence":"Pexels licence"}
   ]
 }

@@ -602,7 +602,7 @@ export class Session {
   }
 
   _startLoop() {
-    if (this._loopRunning) return;
+    if (this._loopRunning || this.manual) return;
     this._loopRunning = true;
     this._lastTickMs = 0;
     this._lastCallbackMs = 0;
@@ -688,13 +688,41 @@ export class Session {
   async stepTo(time) {
     if (!this.loaded || this.isLive) return;
     if (!this.video.paused) this.pause();
+    const { video } = this;
     this._toolStepping = true;
     try {
-      await this._seekAndWait(Math.min(Math.max(time, 0), this.video.duration));
+      await this._seekAndWait(Math.min(Math.max(time, 0), video.duration));
+      // 'seeked' can fire before the frame at the new position is decoded.
+      for (let waited = 0; video.readyState < 2 && waited < 2000; waited += 20) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
     } finally {
       this._toolStepping = false;
     }
     this._process();
+  }
+
+  // ── For tools ───────────────────────────────────────────────
+
+  /** Use any MediaStream as the source (a canvas capture, for instance). */
+  loadStream(stream, label = 'stream') {
+    return this._loadStream(stream, label);
+  }
+
+  /**
+   * Manual mode: stop taking frames from the video automatically; the caller
+   * feeds them one at a time with processFrame(). scripts/filmstrip.mjs uses
+   * this to push synthetic frames through with exact timestamps.
+   */
+  setManual(manual) {
+    this.manual = Boolean(manual);
+    if (this.manual) this._stopLoop();
+    else if (this.playing) this._startLoop();
+  }
+
+  /** Process the frame the video element is showing now. Manual mode only. */
+  processFrame(frameMeta) {
+    this._process(frameMeta);
   }
 
   // ── Export ──────────────────────────────────────────────────

@@ -68,6 +68,13 @@ function clipped(img) {
   return +((n / (img.data.length / 4)) * 100).toFixed(2);
 }
 
+// 4. Mean colour, for telling a hue or brightness shift from a change of shape.
+function meanColour(img) {
+  const sum = [0, 0, 0];
+  for (let i = 0; i < img.data.length; i += 4) { sum[0] += img.data[i]; sum[1] += img.data[i + 1]; sum[2] += img.data[i + 2]; }
+  return sum.map((v) => +(v / (img.data.length / 4)).toFixed(2));
+}
+
 return {
   changedPct: B ? +((changed / (A.data.length / 4)) * 100).toFixed(3) : null,
   maxDiff: B ? maxDiff : null,
@@ -75,4 +82,6 @@ return {
   flickerB: B ? flicker(B) : null,
   clippedPctA: clipped(A),
   clippedPctB: B ? clipped(B) : null,
+  meanA: meanColour(A),
+  meanB: B ? meanColour(B) : null,
 };

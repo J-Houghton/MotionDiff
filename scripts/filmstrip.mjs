@@ -6,7 +6,7 @@
 //   node scripts/filmstrip.mjs clips
 //   node scripts/filmstrip.mjs render  --scenes <file.json> --out <dir> [--tag name] [--url ...] [--only a,b]
 //   node scripts/filmstrip.mjs compare --a <png> --b <png> [--original <jpg>] --meta <json> --scene <name>
-//   node scripts/filmstrip.mjs shot    --out <png> [--url ...] [--w 1440 --h 900] [--mobile] [--dpr 3] [--run <body.js>] [--keys p,?] [--wait ms] [--move x,y]
+//   node scripts/filmstrip.mjs shot    --out <png> [--url ...] [--w 1440 --h 900] [--mobile] [--dpr 3] [--run <body.js>] [--then <body.js>] [--keys p,?] [--after <body.js>] [--wait ms] [--move x,y]
 //   node scripts/filmstrip.mjs eval    --run <body.js> [--url ...] [--args '{"k":1}']
 import fs from 'node:fs';
 import path from 'node:path';
@@ -63,7 +63,7 @@ async function cmdClips() {
       process.stdout.write(`make  ${clip.id} … `);
       browser ||= await launch();
       await browser.page.open('about:blank', 300);
-      const result = await browser.page.eval(pageScript('synth.js'), { kind: clip.synthetic });
+      const result = await browser.page.eval(pageScript('scene.js') + pageScript('synth.js'), { kind: clip.synthetic });
       saveDataUrl(file, result.dataUrl);
       console.log(`${(result.bytes / 1e6).toFixed(1)} MB, ${result.seconds}s at ${result.fps} fps`);
     }
@@ -92,8 +92,10 @@ async function cmdRender(args) {
       if (only && !only.has(scene.name)) continue;
       const clip = clips[scene.clip];
       if (!clip) throw new Error(`Unknown clip "${scene.clip}" in scene "${scene.name}"`);
-      if (!fs.existsSync(path.join(CLIP_DIR, clip.file))) throw new Error(`Missing ref-clips/${clip.file}: run "npm run filmstrip clips"`);
-      const result = await page.eval(pageScript('render.js'), {
+      if (!clip.synthetic && !fs.existsSync(path.join(CLIP_DIR, clip.file))) throw new Error(`Missing ref-clips/${clip.file}: run "npm run filmstrip clips"`);
+      const result = await page.eval(pageScript('scene.js') + pageScript('render.js'), {
+        synthetic: clip.synthetic,
+        readData: scene.readData,
         clipUrl: new URL(`ref-clips/${clip.file}`, base).href,
         clipName: clip.file,
         fps: clip.fps,
@@ -110,6 +112,7 @@ async function cmdRender(args) {
       saveDataUrl(path.join(outDir, `${tag}${scene.name}.png`), result.strip);
       saveDataUrl(path.join(outDir, `${tag}${scene.name}.original.jpg`), result.original);
       meta[scene.name] = result.meta;
+      if (result.data) fs.writeFileSync(path.join(outDir, `${tag}${scene.name}.data.json`), JSON.stringify(result.data));
       const note = result.meta.missed ? `  (${result.meta.missed} frames timed out)` : '';
       console.log(`${tag}${scene.name}: ${result.meta.count} frames, t=${result.meta.times[0]}..${result.meta.times.at(-1)} [${result.meta.renderer}]${note}`);
       for (const line of result.logs) console.log('   page:', line);
@@ -154,10 +157,15 @@ async function cmdShot(args, evalOnly = false) {
     if (args.w || args.h || args.mobile || args.dpr) await page.viewport({ width, height, dpr: Number(args.dpr || 1), mobile: Boolean(args.mobile) });
     await page.open(url, Number(args.settle || 1800));
     let value;
-    if (args.run) value = await page.eval(fs.readFileSync(args.run, 'utf8'), args.args ? JSON.parse(args.args) : {});
+    const scriptArgs = args.args ? JSON.parse(args.args) : {};
+    if (args.run) value = await page.eval(fs.readFileSync(args.run, 'utf8'), scriptArgs);
+    // --then runs a second script after the first (set up a state, then audit it).
+    if (args.then) value = await page.eval(fs.readFileSync(args.then, 'utf8'), scriptArgs);
     if (args.keys) for (const key of String(args.keys).split(',')) { await page.key(key === 'space' ? ' ' : key); await new Promise((r) => setTimeout(r, 250)); }
     if (args.move) { const [x, y] = String(args.move).split(',').map(Number); await page.mouseMove(x, y); }
     if (args.wait) await new Promise((r) => setTimeout(r, Number(args.wait)));
+    // --after runs once the keys have been pressed (inspect what they did).
+    if (args.after) value = await page.eval(fs.readFileSync(args.after, 'utf8'), scriptArgs);
     if (!evalOnly && args.out) { await page.screenshot(path.resolve(args.out), { full: Boolean(args.full) }); console.log('saved', args.out); }
     if (value !== undefined) console.log(JSON.stringify(value, null, 1));
   } finally {

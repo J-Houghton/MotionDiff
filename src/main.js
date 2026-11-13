@@ -2,9 +2,9 @@ import { PHONE_DEFAULTS, Session } from './app/session.js';
 import { buildShell, initShell } from './ui/shell.js';
 
 const query = new URLSearchParams(window.location.search);
-// Phones get the viewfinder layout (ui/shell.js uses the same query), a
-// smaller processing size and a smaller frame-ring budget.
-const phone = window.matchMedia('(max-width: 720px), (pointer: coarse) and (max-height: 540px)').matches;
+// Phones and tablets get the viewfinder layout (ui/shell.js uses the same
+// query), a smaller processing size and a smaller frame-ring budget.
+const phone = window.matchMedia('(max-width: 720px), (pointer: coarse)').matches;
 
 const root = document.getElementById('app');
 const { video, canvas } = buildShell(root);

@@ -34,7 +34,6 @@ export function initRuler({ container, session }) {
   const axis = el('div', 'ruler-axis');
   const labels = [el('span', 'ruler-lab'), el('span', 'ruler-lab'), el('span', 'ruler-lab ruler-lab-now', 'now')];
   const now = el('div', 'ruler-now');
-  now.append(el('b', '', 'NOW'));
   const readout = el('p', 'ruler-readout');
 
   /** One draggable marker bound to a param. */

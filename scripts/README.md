@@ -23,8 +23,19 @@ Fills `ref-clips/` (git-ignored) from `scripts/reference-clips.json`: clips with
 | `trees` | Fast motion: branches in strong wind, static camera. |
 | `river` | Motion everywhere: flowing water. |
 | `sunset` | Slow drift: clouds in a timelapse. |
+| `night` | Low light: people walking by the water at night, moderate grain. |
+| `handheld` | Handheld camera: a marching crowd, the whole frame wobbles (24 fps). |
+| `face` | A face held nearly still on a locked camera, for magnify (25 fps). |
+| `highway` | A real 60 fps source: fast vehicles, near-static camera. |
 
 Clips are test material only and are not redistributed with the repository.
+
+The synthetic scenes are defined in `scripts/page/scene.js`, which also gives the
+exact position of every object at every frame. Filmstrips of a synthetic clip do not
+use the recorded file: the tool draws each frame and pushes it through the pipeline
+with its exact timestamp (browser-recorded WebM cannot be seeked frame-accurately),
+and the truth for each captured frame is written to the meta file. The recorded
+files are for watching the scene in the app.
 
 ## Filmstrips
 ```bash
@@ -59,7 +70,8 @@ npm run filmstrip compare -- --a before-x.png --b after-x.png \
 ```
 Prints the share of pixels that differ by more than 4/255, each strip's flicker in
 static areas (mean change between consecutive frames where the source did not
-change), and the share of clipped pixels.
+change), the share of clipped pixels, and each strip's mean colour (to tell a hue
+or brightness shift from a change of shape).
 
 ## Interface screenshots and one-off checks
 ```bash

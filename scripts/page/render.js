@@ -1,14 +1,20 @@
-// Runs inside the page (injected by scripts/filmstrip.mjs). Renders one
-// filmstrip: steps the video frame by frame through the real pipeline and
-// captures the output at fixed media times. Stepping, not playing, so the
-// result does not depend on how fast this machine is.
+// Runs inside the app page (injected by scripts/filmstrip.mjs after scene.js).
+// Renders one filmstrip: frames at fixed moments, each pushed through the real
+// pipeline one at a time, so the result does not depend on how fast this
+// machine is.
 //
-// `args`: { clipUrl, clipName, fps, at, frames, every, warmup, params,
-//           display, width, cell, columns }
+// Two kinds of source:
+//   - a video file: stepped by seeking (Session.stepTo)
+//   - a synthetic scene (args.synthetic): each frame is drawn here, sent
+//     through a canvas capture stream, and processed with its exact
+//     timestamp. Browser-recorded clips cannot be seeked frame-accurately.
+//
+// `args`: { clipUrl, clipName, synthetic, fps, at, frames, every, warmup,
+//           params, display, width, cell, columns }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Builds before the dev API existed (old UI) are driven through their DOM,
-// so history can still be rendered as a "before".
+// so history can still be rendered as a "before". Files only.
 function legacyAdapter() {
   const pipeline = window.__motionDiffPipeline;
   if (!pipeline) throw new Error('No dev API on this page (window.__motionDiff). Is it a dev build?');
@@ -23,7 +29,13 @@ function legacyAdapter() {
       input.dispatchEvent(new Event('change', { bubbles: true }));
       for (let i = 0; i < 80 && !(video.videoWidth > 0 && video.readyState >= 2); i++) await wait(100);
     },
-    async pause() { if (!video.paused) { document.getElementById('btnPlayPause').click(); await wait(150); } },
+    async pause() {
+      if (!video.paused) { document.getElementById('btnPlayPause').click(); await wait(150); }
+      // Those builds trusted the frame callback after a paused seek, and it
+      // can deliver a stale frame's time. Without it they fall back to their
+      // 250 ms timer and currentTime, which is slow but exact.
+      video.requestVideoFrameCallback = () => 0;
+    },
     setWidth(w) { const s = document.getElementById('selectResolution'); s.value = String(w); s.dispatchEvent(new Event('change', { bubbles: true })); },
     setDisplay(mode) { document.querySelector(`#btnDisplay [data-mode="${mode}"]`)?.click(); },
     setParams(p) {
@@ -41,12 +53,36 @@ function legacyAdapter() {
 const md = window.__motionDiff || (window.__motionDiffLegacy ||= legacyAdapter());
 const { pipeline, video, canvas } = md;
 
-if (md.__clip !== args.clipName) {
-  const blob = await (await fetch(args.clipUrl)).blob();
-  await md.load(blob, args.clipName);
-  md.__clip = args.clipName;
+// ── Source ──────────────────────────────────────────────────────
+let scene = null;
+if (args.synthetic) {
+  if (!md.session?.loadStream) throw new Error('Synthetic scenes need a build with Session.loadStream');
+  if (md.__clip !== args.clipName) {
+    const made = makeScene(args.synthetic);
+    const source = Object.assign(document.createElement('canvas'), { width: made.width, height: made.height });
+    const ctx = source.getContext('2d', { willReadFrequently: true });
+    const stream = source.captureStream(0);
+    const track = stream.getVideoTracks()[0];
+    made.draw(ctx, 0);
+    // The stream has no frames until one is requested; keep offering one
+    // while the app attaches to it.
+    const nudge = setInterval(() => track.requestFrame(), 60);
+    await md.session.loadStream(stream, args.clipName);
+    clearInterval(nudge);
+    md.__scene = { made, source, ctx, track };
+    md.__clip = args.clipName;
+  }
+  scene = md.__scene;
+  md.session.setManual(true);
+} else {
+  if (md.__clip !== args.clipName) {
+    const blob = await (await fetch(args.clipUrl)).blob();
+    await md.load(blob, args.clipName);
+    md.__clip = args.clipName;
+  }
+  md.session?.setManual?.(false);
+  await md.pause();
 }
-await md.pause();
 if (args.width) { md.setWidth(args.width); await wait(200); }
 md.setDisplay(args.display || 'diff');
 md.setParams(args.params || {});
@@ -69,28 +105,47 @@ if (!pipeline.__stripHook) {
   }
 }
 
-function seekAndDraw(time, onDrawn) {
+const fps = scene ? scene.made.fps : args.fps;
+const dt = 1 / fps;
+
+/** Put frame `index` through the pipeline; `onDrawn` runs as it is drawn. */
+function stepFrame(index, onDrawn) {
   return new Promise((resolve) => {
     const timer = setTimeout(() => { window.__stripFrame = null; resolve(false); }, 3000);
-    window.__stripFrame = () => {
-      window.__stripFrame = null;
-      clearTimeout(timer);
-      onDrawn?.();
-      resolve(true);
+    const arm = () => {
+      window.__stripFrame = () => {
+        window.__stripFrame = null;
+        clearTimeout(timer);
+        onDrawn?.();
+        resolve(true);
+      };
     };
-    // Current builds step exactly (Session.stepTo); older ones are left to
-    // process the frame from their own seeked handler.
-    if (md.stepTo) md.stepTo(time);
-    else video.currentTime = time;
+    if (scene) {
+      scene.made.draw(scene.ctx, index);
+      scene.track.requestFrame();
+      // Wait for the video element to show that frame, then process it with
+      // its exact time.
+      let shown = false;
+      const go = () => { if (shown) return; shown = true; arm(); md.session.processFrame({ mediaTime: index * dt }); };
+      video.requestVideoFrameCallback(go);
+      setTimeout(go, 150);
+    } else {
+      arm();
+      // Aim at the middle of the frame so the seek cannot straddle two.
+      // Current builds step exactly (Session.stepTo); older ones are left to
+      // process the frame from their own seeked handler.
+      const time = (index + 0.5) * dt;
+      if (md.stepTo) md.stepTo(time);
+      else video.currentTime = time;
+    }
   });
 }
 
-const dt = 1 / args.fps;
 const every = Math.max(1, args.every || 1);
 const count = Math.max(1, args.frames || 6);
 const warmFrames = Math.max(1, Math.round((args.warmup ?? 1.5) / dt));
-const firstIndex = Math.max(0, Math.round(args.at / dt) - warmFrames);
 const captureFrom = Math.round(args.at / dt);
+const firstIndex = Math.max(0, captureFrom - warmFrames);
 
 const columns = Math.min(count, args.columns || 3);
 const rows = Math.ceil(count / columns);
@@ -103,27 +158,36 @@ const ox = original.getContext('2d');
 
 pipeline.clearState();
 const times = [];
+const truth = [];
 let missed = 0;
 let captured = 0;
 for (let index = firstIndex; captured < count; index++) {
   const isCapture = index >= captureFrom && (index - captureFrom) % every === 0;
   const cell = captured;
-  // Aim at the middle of the frame so the seek cannot straddle two.
-  const ok = await seekAndDraw((index + 0.5) * dt, isCapture ? () => {
+  const ok = await stepFrame(index, isCapture ? () => {
     const x = (cell % columns) * cellW;
     const y = Math.floor(cell / columns) * cellH;
     sx.drawImage(canvas, x, y, cellW, cellH);
-    ox.drawImage(video, x, y, cellW, cellH);
+    ox.drawImage(scene ? scene.source : video, x, y, cellW, cellH);
     times.push(+pipeline._lastTime.toFixed(4));
+    if (scene) truth.push(scene.made.truth(index));
   } : null);
   if (!ok) missed++;
   if (isCapture) captured++;
   if (index - firstIndex > 4000) break;
 }
 
+// For checks against ground truth: the mode's data output for the last frame.
+let data = null;
+if (args.readData && pipeline.readData) {
+  const field = pipeline.readData();
+  if (field) data = { kind: field.kind, width: field.width, height: field.height, values: Array.from(field.values, (v) => +v.toFixed(4)) };
+}
+
 return {
   strip: strip.toDataURL('image/png'),
   original: original.toDataURL('image/jpeg', 0.9),
-  meta: { cellW, cellH, columns, rows, count, times, missed, renderer: pipeline._useWebGL ? 'webgl' : 'canvas2d', output: [canvas.width, canvas.height] },
+  meta: { cellW, cellH, columns, rows, count, times, missed, truth: truth.length ? truth : undefined, renderer: pipeline._useWebGL ? 'webgl' : 'canvas2d', output: [canvas.width, canvas.height] },
+  data,
   logs: (window.__logs || []).filter((l) => /error|UNCAUGHT|REJECTION/i.test(l)).slice(-5),
 };
