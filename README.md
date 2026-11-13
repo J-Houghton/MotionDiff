@@ -89,7 +89,7 @@ Threshold suppresses noise before accumulation.
 │   │   ├── __tests__/              Unit tests (vitest, node).
 │   │   ├── analyze.js              Auto-configuration heuristic.
 │   │   ├── blur.js                 3 x 3 box blur.
-│   │   ├── buffer.js               Circular buffer primitive.
+│   │   ├── buffer.js               Ring buffers and frame-ring memory budgeting.
 │   │   ├── diff.js                 Posy Blend and Raw Diff pixel math.
 │   │   ├── energy.js               Motion energy grid and pitch/pan mapping for sonification.
 │   │   ├── magnify.js              Eulerian magnification math.
@@ -124,7 +124,7 @@ npm run build   # production build
 ## Renderer
 MotionDiff detects WebGL2 at runtime and uses it when available; otherwise it falls back to a Canvas 2D + Worker pipeline. The console logs which renderer is active, so you can confirm the path immediately on load.
 
-The WebGL renderer keeps diff, blur, accumulation, and composite passes on the GPU. Capture is not zero-readback: every frame is drawn to a 2D canvas, read back with `getImageData`, kept on the JS heap for lookback, and re-uploaded with `texImage2D`.
+On the WebGL path frames never leave the GPU: the video element is uploaded with `texImage2D`, scaled to the processing size, and past frames are kept in a `TEXTURE_2D_ARRAY` ring. Diff, blur, accumulation, and composite passes all run as shaders. The ring is sized from a memory budget (192 MiB), so it holds 120 frames at 640px, 54 at 1280x720 and 24 at 1920x1080. The Canvas 2D fallback still captures through `getImageData`.
 
 ## Tests
 Tests cover the pure functions under `src/core/`: diff math, blur, buffers, trails, analysis, the sonification energy grid, and the magnification math. Run them with `npm test`.

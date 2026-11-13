@@ -2,7 +2,7 @@ import { describe, it, test, expect } from 'vitest';
 import { posyBlend, rawDiff } from '../diff.js';
 import { accumulate } from '../trails.js';
 import { boxBlur } from '../blur.js';
-import { CircularBuffer } from '../buffer.js';
+import { CircularBuffer, FrameRing, ringCapacity } from '../buffer.js';
 import { analyzeSample } from '../analyze.js';
 import { buildSourceProfile, isStreamSource } from '../../app/source-profile.js';
 
@@ -348,6 +348,167 @@ describe('CircularBuffer', () => {
 
     expect(buf.size).toBe(0);
     expect(buf.get(0)).toBeNull();
+  });
+});
+
+describe('CircularBuffer.replaceNewest', () => {
+  it('overwrites the newest entry without growing', () => {
+    const buf = new CircularBuffer(3);
+    buf.push('a');
+    buf.push('b');
+    buf.replaceNewest('c');
+
+    expect(buf.size).toBe(2);
+    expect(buf.get(0)).toBe('c');
+    expect(buf.get(1)).toBe('a');
+  });
+
+  it('pushes when the buffer is empty', () => {
+    const buf = new CircularBuffer(3);
+    buf.replaceNewest('a');
+
+    expect(buf.size).toBe(1);
+    expect(buf.get(0)).toBe('a');
+  });
+});
+
+// ─────────────────────────────────────
+//  buffer.js — FrameRing
+// ─────────────────────────────────────
+
+describe('FrameRing', () => {
+  it('hands out slots in order and wraps at capacity', () => {
+    const ring = new FrameRing(3);
+
+    expect(ring.push(0.0)).toBe(0);
+    expect(ring.push(0.1)).toBe(1);
+    expect(ring.push(0.2)).toBe(2);
+    expect(ring.push(0.3)).toBe(0); // evicts the frame stamped 0.0
+
+    expect(ring.size).toBe(3);
+    expect(ring.capacity).toBe(3);
+    expect(ring.newestTime).toBe(0.3);
+    expect(ring.oldestTime).toBe(0.1);
+    expect(ring.slotAt(0)).toBe(0);
+    expect(ring.slotAt(1)).toBe(2);
+    expect(ring.slotAt(2)).toBe(1);
+  });
+
+  it('reports missing frames as -1 / NaN', () => {
+    const ring = new FrameRing(4);
+
+    expect(ring.slotAt(0)).toBe(-1);
+    expect(ring.newestTime).toBeNaN();
+    expect(ring.nearest(1)).toBe(-1);
+
+    ring.push(1);
+    expect(ring.slotAt(1)).toBe(-1);
+    expect(ring.slotAt(-1)).toBe(-1);
+    expect(ring.timeAt(1)).toBeNaN();
+  });
+
+  it('nearest picks the closest stamp', () => {
+    const ring = new FrameRing(8);
+    [0, 1, 2, 3, 4].forEach((t) => ring.push(t));
+
+    expect(ring.timeAt(ring.nearest(2.2))).toBe(2);
+    expect(ring.timeAt(ring.nearest(2.6))).toBe(3);
+    expect(ring.timeAt(ring.nearest(4))).toBe(4);
+  });
+
+  it('nearest breaks ties toward the newer frame', () => {
+    const ring = new FrameRing(8);
+    [0, 1, 2].forEach((t) => ring.push(t));
+
+    expect(ring.timeAt(ring.nearest(1.5))).toBe(2);
+  });
+
+  it('nearest clamps a target older than the ring to the oldest frame', () => {
+    const ring = new FrameRing(8);
+    [10, 11, 12].forEach((t) => ring.push(t));
+
+    expect(ring.timeAt(ring.nearest(3))).toBe(10);
+  });
+
+  it('nearest only considers frames stamped strictly before the limit', () => {
+    const ring = new FrameRing(8);
+    [0, 1, 2, 3].forEach((t) => ring.push(t));
+
+    // The current frame (3) must never be compared with itself.
+    expect(ring.timeAt(ring.nearest(3, 3))).toBe(2);
+    expect(ring.nearest(0, 0)).toBe(-1);
+  });
+
+  it('nearest still works after the ring has wrapped', () => {
+    const ring = new FrameRing(4);
+    for (let t = 0; t < 10; t++) ring.push(t);
+
+    expect(ring.oldestTime).toBe(6);
+    expect(ring.timeAt(ring.nearest(7.4))).toBe(7);
+    expect(ring.timeAt(ring.nearest(0))).toBe(6);
+  });
+
+  it('dropFrom removes frames at or after the given time', () => {
+    const ring = new FrameRing(8);
+    [0, 1, 2, 3, 4].forEach((t) => ring.push(t));
+
+    expect(ring.dropFrom(3)).toBe(2);
+    expect(ring.size).toBe(3);
+    expect(ring.newestTime).toBe(2);
+
+    // The freed slots are reused for the frames that follow.
+    ring.push(2.5);
+    expect(ring.newestTime).toBe(2.5);
+    expect(ring.timeAt(1)).toBe(2);
+  });
+
+  it('dropFrom past the oldest frame empties the ring', () => {
+    const ring = new FrameRing(4);
+    for (let t = 0; t < 6; t++) ring.push(t);
+
+    expect(ring.dropFrom(0)).toBe(4);
+    expect(ring.size).toBe(0);
+    expect(ring.push(0)).toBe(0);
+    expect(ring.newestTime).toBe(0);
+  });
+
+  it('clear resets state', () => {
+    const ring = new FrameRing(4);
+    ring.push(1);
+    ring.push(2);
+    ring.clear();
+
+    expect(ring.size).toBe(0);
+    expect(ring.nearest(1)).toBe(-1);
+    expect(ring.push(5)).toBe(0);
+  });
+});
+
+describe('ringCapacity', () => {
+  it('keeps the 120-frame cap at the default processing size', () => {
+    expect(ringCapacity(640, 360)).toBe(120);
+  });
+
+  it('scales down at 1280px and 1920px', () => {
+    const at1280 = ringCapacity(1280, 720);
+    const at1920 = ringCapacity(1920, 1080);
+
+    expect(at1280).toBeLessThan(120);
+    expect(at1920).toBeLessThan(at1280);
+    // Never more than the budget allows.
+    expect(at1280 * 1280 * 720 * 4).toBeLessThanOrEqual(192 * 1024 * 1024);
+    expect(at1920 * 1920 * 1080 * 4).toBeLessThanOrEqual(192 * 1024 * 1024);
+  });
+
+  it('honours an explicit budget and frame cap', () => {
+    expect(ringCapacity(100, 100, { budgetBytes: 400000, maxFrames: 50 })).toBe(10);
+    expect(ringCapacity(10, 10, { budgetBytes: 1e9, maxFrames: 50 })).toBe(50);
+  });
+
+  it('never drops below the minimum, even for huge or invalid sizes', () => {
+    expect(ringCapacity(8000, 8000)).toBe(4);
+    expect(ringCapacity(0, 0)).toBe(4);
+    expect(ringCapacity(NaN, 100)).toBe(4);
   });
 });
 

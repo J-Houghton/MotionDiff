@@ -1,6 +1,7 @@
 import PipelineWorker from './pipeline.worker.js?worker';
 import { WebGLRenderer } from './renderer.webgl.js';
 import { buildSourceProfile } from './source-profile.js';
+import { FrameRing, ringCapacity } from '../core/buffer.js';
 import { emaAlpha } from '../core/magnify.js';
 import { posyBlend } from '../core/diff.js';
 import { cellEnergies } from '../core/energy.js';
@@ -30,8 +31,16 @@ export class Pipeline {
     this._magCapCanvas = null;
     this._magCapCtx = null;
 
-    // ── Frame store (circular buffer of ImageData for Worker fallback
-    //    or ArrayBuffer references for WebGL texture uploads) ──
+    // ── WebGL frame history ──
+    // The pixels live in the renderer's texture-array ring; this only tracks
+    // which layer holds which frame.
+    this._ring = new FrameRing(1);
+    this._frameIndex = 0;
+    this._ringLayers = [0, 0, 0];
+    // Whether the last processed frame produced a diff (energy grid source)
+    this._hasDiff = false;
+
+    // ── Frame store for the Worker fallback (ArrayBuffers on the JS heap) ──
     this._frameStore = new Array(FRAME_STORE_CAP);
     this._storeHead = -1;
     this._storeSize = 0;
@@ -90,6 +99,8 @@ export class Pipeline {
   init(videoEl, outputCanvasEl) {
     this._videoEl = videoEl;
     this._outputCanvas = outputCanvasEl;
+    // 2D capture canvas: the worker fallback's frame source, and how
+    // sampleFrames reads pixels for auto-configure on either path.
     this._capCanvas = document.createElement('canvas');
     this._capCtx = this._capCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -170,6 +181,9 @@ export class Pipeline {
     this._frameStore = new Array(FRAME_STORE_CAP);
     this._storeHead = -1;
     this._storeSize = 0;
+    this._ring.clear();
+    this._frameIndex = 0;
+    this._hasDiff = false;
     this._energyGrid = null;
 
     if (this._useWebGL && this._glRenderer) {
@@ -217,6 +231,15 @@ export class Pipeline {
   logProcessingConfig() {
     const capLabel = this.params.fpsCap ? `${this.params.fpsCap}fps` : 'uncapped';
     console.log(`Pipeline: processing at ${this._processWidth}px, cap ${capLabel}`);
+  }
+
+  /**
+   * Frame history available for lookback on the active path.
+   * @returns {{frames: number, megabytes: number}}
+   */
+  getHistoryInfo() {
+    const frames = this._useWebGL ? this._ring.capacity : FRAME_STORE_CAP;
+    return { frames, megabytes: (frames * this.width * this.height * 4) / (1024 * 1024) };
   }
 
   setParams(params) {
@@ -280,7 +303,7 @@ export class Pipeline {
     if (nextCols < 1 || nextRows < 1) return null;
 
     if (this._useWebGL) {
-      if (!this._glRenderer || this._storeSize < 2) return null;
+      if (!this._glRenderer || !this._hasDiff) return null;
       return this._glRenderer.readEnergyGrid(nextCols, nextRows);
     }
 
@@ -315,15 +338,25 @@ export class Pipeline {
     this._capCanvas.height = this.height;
 
     if (this._useWebGL && this._glRenderer) {
-      this._glRenderer.setSize(this.width, this.height);
+      // The ring is sized from a memory budget, so it gets shorter as the
+      // processing resolution goes up.
+      const frames = this._glRenderer.setSize(
+        this.width, this.height, ringCapacity(this.width, this.height),
+      );
+      if (frames !== this._ring.capacity) {
+        this._ring = new FrameRing(frames);
+        const { megabytes } = this.getHistoryInfo();
+        console.log(`Frame ring: ${frames} frames at ${this.width}x${this.height} (${megabytes.toFixed(0)} MB on the GPU)`);
+      }
     }
 
     this.start();
   }
 
   /**
-   * Capture current video frame as ImageData.
-   * Uses VideoFrame bridge when available.
+   * Capture current video frame as ImageData through the 2D canvas.
+   * Uses VideoFrame bridge when available. The WebGL path never calls this
+   * while rendering — it uploads the video element directly.
    */
   captureFrame(video) {
     const w = this.width;
@@ -446,19 +479,10 @@ export class Pipeline {
   // ── WebGL Path ──────────────────────────────────────────────
 
   _processWebGL(video) {
-    const frame = this.captureFrame(video);
-    if (!frame) return;
-
-    // Store the ImageData for later lookback
-    this._storePush(frame);
-
-    if (this._storeSize < 2) {
-      // Not enough frames yet — show blank
-      this._glRenderer.renderBlank(this.params.algorithm, this.params.ageColorEnabled);
-      return;
-    }
-
     const gl = this._glRenderer;
+    // Video element → GPU texture; no readback, nothing kept on the JS heap.
+    if (!gl.captureVideo(video)) return;
+
     const {
       frameOffset,
       threshold,
@@ -473,47 +497,52 @@ export class Pipeline {
       ageColorNew,
       ageColorOld,
     } = this.params;
-    const k = frameOffset;
-    const spread = channelSpread;
 
-    // Calculate clamped offsets for RGB channel spread
-    const clamp = (off) => Math.min(off, this._storeSize - 1);
-    const offR = clamp(k);
-    const offG = clamp(k + spread);
-    const offB = clamp(k + spread * 2);
+    // The ring holds frames older than this one; the gap for each channel
+    // clamps to the oldest frame while the ring is still filling.
+    const index = this._frameIndex;
+    const ring = this._ring;
+    const ageR = ring.nearest(index - frameOffset, index);
+    const ageG = ring.nearest(index - (frameOffset + channelSpread), index);
+    const ageB = ring.nearest(index - (frameOffset + channelSpread * 2), index);
 
-    const oldR = this._storeGet(offR);
-    const oldG = this._storeGet(offG);
-    const oldB = this._storeGet(offB);
-
-    if (!oldR || !oldG || !oldB) {
+    if (ageR < 0 || ageG < 0 || ageB < 0) {
+      // Nothing to compare against yet — show blank
       gl.renderBlank(algorithm, ageColorEnabled);
-      return;
+      this._hasDiff = false;
+    } else {
+      const layers = this._ringLayers;
+      layers[0] = ring.slotAt(ageR);
+      layers[1] = ring.slotAt(ageG);
+      layers[2] = ring.slotAt(ageB);
+
+      // Run diff shader → _diffFB
+      gl.renderDiff({ threshold, algorithm, rgbTintR, rgbTintG, rgbTintB, layers });
+
+      // Optional blur
+      if (blurEnabled) {
+        gl.renderBlur();
+      }
+
+      // Push diff result into trail ring
+      gl.pushTrail();
+
+      // Accumulate trails → _accumFB
+      const isPosy = algorithm === 'posy';
+      gl.renderAccumulate(trailLength, isPosy, threshold, ageColorEnabled, ageColorNew, ageColorOld);
+
+      // Composite to canvas
+      gl.renderComposite(this._currentMode || 'diff', algorithm, ageColorEnabled);
+      this._hasDiff = true;
     }
 
-    // Upload textures
-    gl.uploadImageData(frame, 'current');
-    gl.uploadImageData(oldR, 'oldR');
-    gl.uploadImageData(oldG, 'oldG');
-    gl.uploadImageData(oldB, 'oldB');
+    this._storeCurrentFrame();
+  }
 
-    // Run diff shader → _diffFB
-    gl.renderDiff({ threshold, algorithm, rgbTintR, rgbTintG, rgbTintB });
-
-    // Optional blur
-    if (blurEnabled) {
-      gl.renderBlur();
-    }
-
-    // Push diff result into trail ring
-    gl.pushTrail();
-
-    // Accumulate trails → _accumFB
-    const isPosy = algorithm === 'posy';
-    gl.renderAccumulate(trailLength, isPosy, threshold, ageColorEnabled, ageColorNew, ageColorOld);
-
-    // Composite to canvas
-    gl.renderComposite(this._currentMode || 'diff', algorithm, ageColorEnabled);
+  /** Keep the frame just captured as history for the frames that follow. */
+  _storeCurrentFrame() {
+    this._glRenderer.storeCurrent(this._ring.push(this._frameIndex));
+    this._frameIndex += 1;
   }
 
   /**
@@ -528,13 +557,13 @@ export class Pipeline {
   // ── Magnify: WebGL path ─────────────────────────────────────
 
   _processMagnifyWebGL(video) {
-    const frame = this.captureFrame(video);
-    if (!frame) return;
-
-    // Keep the lookback store warm so switching back to Posy/Raw behaves.
-    this._storePush(frame);
-
     const gl = this._glRenderer;
+    if (!gl.captureVideo(video)) return;
+
+    // Keep the lookback ring warm so switching back to Posy/Raw behaves.
+    this._storeCurrentFrame();
+    this._hasDiff = false;
+
     if (!gl.magnifySupported) {
       // The UI disables the magnify option when unsupported; if we still
       // get here, show a blank frame rather than rendering garbage.
@@ -543,7 +572,6 @@ export class Pipeline {
     }
 
     const dtMs = this._magFrameDt(performance.now());
-    gl.uploadImageData(frame, 'current');
     const ok = gl.renderMagnify({
       alphaFast: emaAlpha(this.params.magFreqHigh, dtMs),
       alphaSlow: emaAlpha(this.params.magFreqLow, dtMs),
@@ -696,23 +724,23 @@ export function debugEnergyParity(pipeline, cols = 8, rows = 4) {
 
   const restoreWidth = gl.width;
   const restoreHeight = gl.height;
-  gl.setSize(width, height);
-  const prevImage = new ImageData(prev, width, height);
-  const nextImage = new ImageData(next, width, height);
-  gl.uploadImageData(nextImage, 'current');
-  gl.uploadImageData(prevImage, 'oldR');
-  gl.uploadImageData(prevImage, 'oldG');
-  gl.uploadImageData(prevImage, 'oldB');
+  const restoreFrames = gl.ringFrames;
+  gl.setSize(width, height, 2);
+  // Previous frame into ring layer 0, then the frame under test as current.
+  gl.uploadPixels(new ImageData(prev, width, height));
+  gl.storeCurrent(0);
+  gl.uploadPixels(new ImageData(next, width, height));
   gl.renderDiff({
     threshold: 0,
     algorithm: 'posy',
     rgbTintR: '#ff0000',
     rgbTintG: '#00ff00',
     rgbTintB: '#0000ff',
+    layers: [0, 0, 0],
   });
   const webgl = Array.from(gl.readEnergyGrid(cols, rows));
 
-  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight);
+  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
   pipeline.clearState();
 
   return { cols, rows, core: Array.from(core), webgl };
