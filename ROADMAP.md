@@ -81,7 +81,9 @@ Ranked by visible effect for the effort.
 | Optical flow: Lucas–Kanade core, shader mirror, probe, mode with colour and particle views; particle traces | `578ec21` | V5, V6 |
 | Schlieren mode; synthetic plume scenes with a known field; two real candle clips in the reference set; printable background pattern | `7687582` | V7 |
 | Fixes from the blind judges and the interface audit; schlieren probe | `2fc96fd` | I2 |
-| Research notes §6 and §7, design notes for particles and schlieren, optical-flow note brought up to date | with this roadmap update | |
+| Research notes §6 and §7, design notes for particles and schlieren, optical-flow note brought up to date | `c0095c2` | |
+| Schlieren's knife-edge view always shown on its own (laid over the video it looked like a plain camera) | `e481f4b` | From the first try on a phone |
+| Samples that open in a mode: one per mode, nine new, among them a real candle plume for Schlieren | branch `demo-clips` | Each checked in its mode from a filmstrip; six added to the reference clips |
 
 ### Session 3
 | Item | Commit | Notes |
@@ -111,7 +113,8 @@ Ranked by visible effect for the effort.
 | Research write-up, design mockups | `3922a07` |
 
 ## Known gaps
-- **Schlieren and the particle display have not run on a real phone.** Frame-rate
+- **Schlieren live on a phone does not work well yet** (owner's first try, session 4): the preset clips work there, the live camera gives a flat grey picture, which means nothing could be measured (a plain background or a moving phone are the likely causes; not diagnosed). The setup guide under Applications is the next step.
+- **Frame rates on a real phone have not been measured.** Frame-rate
   figures are from one desktop GPU. Schlieren has been checked on synthetic scenes and
   two recordings from the web, not on phone footage, weak sources or natural backgrounds.
 - Schlieren traces show nothing on the real candle recording (too fast between frames

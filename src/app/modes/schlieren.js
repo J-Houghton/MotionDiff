@@ -138,7 +138,9 @@ const VIEWS = { knife: 0, strength: 1, direction: 2, check: 3 };
 const SETUPS = new WeakMap();
 
 const NOTES = {
-  plain: (s) => [`Background too plain: only ${Math.round(s.usable * 100)}% can be measured. Use a patterned one, or a larger width`, 'error'],
+  // Little of the picture can be measured: that is a plain background, a pattern too fine for
+  // the processing width, or a camera moving so much that no patch matches its reference.
+  plain: (s) => [`Only ${Math.round(s.usable * 100)}% measurable: background too plain or too fine, or the camera is moving`, 'error'],
   moved: (s) => [`Camera moved ${Math.hypot(s.camera.dx, s.camera.dy).toFixed(1)} px off the held reference: release and hold again`, 'error'],
   shaking: () => ['Camera is moving: prop it against something solid', 'error'],
   settling: () => ['Settling the reference…', 'info'],

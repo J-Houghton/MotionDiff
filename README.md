@@ -27,7 +27,7 @@ How each mode works, and what its controls mean, is in **[docs/modes.md](docs/mo
 
 ## Using it
 
-1. Open a video file, paste a video or HLS URL, or choose the camera or the screen. There are three sample clips to start from.
+1. Open a video file, paste a video or HLS URL, or choose the camera or the screen. There are sample clips to start from: three plain ones, and one for each mode that opens in that mode with fitting settings (a real candle plume for Schlieren, a motorway for Optical flow, and so on).
 2. Pick a mode (keys **1** to **6**) and press **A** to let MotionDiff measure the clip and set the gap and threshold for you.
 3. Adjust from there in the parameter panel (**P**), or drag the markers on the time ruler under the picture.
 
@@ -74,5 +74,5 @@ It has been developed and tested in Chrome on desktop. Other browsers and real p
 [MIT](LICENSE) for the code.
 
 - The bundled fonts (Fraunces, IBM Plex Mono, Barlow Condensed) are not MIT: each is under the SIL Open Font License 1.1.
-- Sample and reference clips are loaded from their original hosts and are not part of this repository.
+- Sample and reference clips are loaded from their original hosts and are not part of this repository: Pexels (Pexels licence), and for the candle plume JPaonaskar/Background-Oriented-Schlieren on GitHub (MIT licence).
 - Magnify implements a published method that is covered by patents held by the Massachusetts Institute of Technology. This is a personal, non-commercial project; see [the note in docs/modes.md](docs/modes.md#magnify) before using that mode commercially.

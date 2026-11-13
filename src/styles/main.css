@@ -336,7 +336,7 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .panel-head button { min-height: 48px; min-width: 88px; background: var(--accent); color: #000; border: 0; font: 600 15px/1 var(--cond); letter-spacing: 0.14em; text-transform: uppercase; }
 
 #app[data-phone='true'] .sources button, #app[data-phone='true'] .sources-url input, #app[data-phone='true'] .sheet-close { min-height: 48px; }
-#app[data-phone='true'] .sources-samples { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+#app[data-phone='true'] .sources-samples { display: grid; grid-template-columns: 1fr 1fr; width: 100%; align-items: stretch; }
 #app[data-phone='true'] .sources-samples span { grid-column: 1 / -1; }
 #app[data-phone='true'] .sources-samples button { min-height: 44px; }
 #app[data-phone='true'] .sheet-close kbd { display: none; }

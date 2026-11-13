@@ -29,15 +29,51 @@ export const TEST_CLIPS = [
     url: 'https://videos.pexels.com/video-files/5646694/5646694-hd_1920_1080_30fps.mp4',
     credit: 'Pexels licence',
   },
+  // One sample per mode, in mode order. Each was checked in its mode with
+  // these settings (static camera, or the whole frame would light up).
   {
-    // A candle's plume in front of printed random dots, the flame out of
-    // frame: the frames show only the dots. Pinned to a commit so it cannot
-    // change under us.
-    label: 'Candle Plume',
-    url: 'https://raw.githubusercontent.com/JPaonaskar/Background-Oriented-Schlieren/f1ca8f60354c05260e2569af7826b5dc8380f9a7/Sample%20Data/Candle.MOV',
-    mode: 'schlieren',
-    params: { schlierenShow: 'knife', schlierenHold: false, schlierenRange: 25, schlierenWindow: 4, schlierenSmooth: 1, schlierenReference: 60, schlierenSteady: true },
-    credit: 'JPaonaskar/Background-Oriented-Schlieren, MIT licence',
+    // A timelapse: a flower unfolds against a still wall.
+    label: 'Flower Opening',
+    url: 'https://videos.pexels.com/video-files/12538831/12538831-hd_1920_1080_30fps.mp4',
+    mode: 'posy',
+    params: { frameOffset: 30, threshold: 8, trailLength: 20, channelSpread: 2, blurEnabled: false, ageColorEnabled: false },
+    display: 'diff',
+    credit: 'Pexels licence',
+  },
+  {
+    label: 'Face, Held Still',
+    url: 'https://videos.pexels.com/video-files/8724224/8724224-hd_1366_720_25fps.mp4',
+    mode: 'magnify',
+    params: { magAmp: 15, magFreqLow: 0.7, magFreqHigh: 2.0, magChroma: 1.0, magDownsample: 2, blurEnabled: false },
+    credit: 'Pexels licence',
+  },
+  {
+    // Dozens of bees on a plain wall: each is cut out where it is.
+    label: 'Bees at the Hive',
+    url: 'https://videos.pexels.com/video-files/9491523/9491523-hd_1920_1080_25fps.mp4',
+    mode: 'mask',
+    params: { frameOffset: 3, secondGap: 30, threshold: 20, maskBlur: true, maskClean: true, maskShow: 'cutout', trailLength: 5 },
+    display: 'diff',
+    credit: 'Pexels licence',
+  },
+  {
+    // A few gulls against clear sky: each leaves a ribbon along its path.
+    label: 'Gulls Overhead',
+    url: 'https://videos.pexels.com/video-files/28077187/12294615_1920_1080_30fps.mp4',
+    mode: 'history',
+    params: { historyShow: 'age', historyLength: 60, frameOffset: 5, secondGap: 30, threshold: 15, ageColorNew: '#ff4400', ageColorOld: '#0044ff' },
+    display: 'diff',
+    credit: 'Pexels licence',
+  },
+  {
+    // An intersection from high up: cars and people cut out whole, and the
+    // ones that stop are absorbed.
+    label: 'Crossing from Above',
+    url: 'https://videos.pexels.com/video-files/37252006/15781298_1920_1080_60fps.mp4',
+    mode: 'background',
+    params: { absorbSeconds: 4, threshold: 20, maskShow: 'cutout', frameOffset: 5, trailLength: 0 },
+    display: 'diff',
+    credit: 'Pexels licence',
   },
   {
     label: 'Motorway',
@@ -48,11 +84,32 @@ export const TEST_CLIPS = [
     credit: 'Pexels licence',
   },
   {
-    label: 'Face, Held Still',
-    url: 'https://videos.pexels.com/video-files/8724224/8724224-hd_1366_720_25fps.mp4',
-    mode: 'magnify',
-    params: { magAmp: 15, magFreqLow: 0.7, magFreqHigh: 2.0, magChroma: 1.0, magDownsample: 2 },
+    // A timelapse: cloud streams over a snowy ridge. Slow flow needs a
+    // longer gap and a small speed range; shown over the video.
+    label: 'Clouds over Peaks',
+    url: 'https://videos.pexels.com/video-files/27608396/12184838_1920_1080_24fps.mp4',
+    mode: 'flow',
+    params: { flowShow: 'particles', flowGap: 4, flowRange: 10, flowSmoothing: 15, traceDensity: 25, traceLength: 15, traceGain: 1, traceColour: 'heading' },
+    display: 'glow',
     credit: 'Pexels licence',
+  },
+  {
+    label: 'Weir',
+    url: 'https://videos.pexels.com/video-files/7876183/7876183-hd_1920_1080_30fps.mp4',
+    mode: 'flow',
+    params: { flowShow: 'particles', flowGap: 2, flowRange: 20, flowSmoothing: 6, traceDensity: 25, traceLength: 15, traceGain: 1, traceColour: 'heading' },
+    display: 'diff',
+    credit: 'Pexels licence',
+  },
+  {
+    // A candle's plume in front of printed random dots, the flame out of
+    // frame: the frames show only the dots. Pinned to a commit so it cannot
+    // change under us.
+    label: 'Candle Plume',
+    url: 'https://raw.githubusercontent.com/JPaonaskar/Background-Oriented-Schlieren/f1ca8f60354c05260e2569af7826b5dc8380f9a7/Sample%20Data/Candle.MOV',
+    mode: 'schlieren',
+    params: { schlierenShow: 'knife', schlierenHold: false, schlierenRange: 25, schlierenWindow: 4, schlierenSmooth: 1, schlierenReference: 60, schlierenSteady: true },
+    credit: 'JPaonaskar/Background-Oriented-Schlieren, MIT licence',
   },
 ];
 
