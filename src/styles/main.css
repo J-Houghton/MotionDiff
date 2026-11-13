@@ -133,6 +133,8 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .sources-url input::placeholder { color: var(--soft); opacity: 1; }
 .sources-samples span { color: var(--soft); }
 .sources-samples button { border-color: var(--rule); padding: 6px 10px; min-height: 32px; }
+/* the mode a sample opens in */
+.sources-samples button small { display: block; color: var(--soft); font-size: 10px; line-height: 1.3; letter-spacing: 0.04em; text-transform: uppercase; }
 
 /* caption strip */
 .cap { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(300px, 2.1fr) auto; column-gap: 28px; row-gap: 6px; align-items: end; border-top: 1px solid var(--ink); padding-top: 8px; }
