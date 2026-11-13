@@ -396,7 +396,8 @@
     "schlierenHold": false,
     "flowRange": 40
    },
-   "warmup": 4
+   "warmup": 4,
+   "readTarget": "schlieren:move:smoothed"
   },
   {
    "name": "dots-check",

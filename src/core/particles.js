@@ -37,7 +37,7 @@ export const PARTICLE_IDLE_SECONDS = 0.12;
 /** A trace fades in over this share of its life, and out over the same at the end. */
 export const PARTICLE_FADE_SHARE = 0.15;
 /** The slowest trace that is drawn at all is drawn at this share of full strength, so slow motion is still seen. */
-export const PARTICLE_FLOOR = 0.3;
+export const PARTICLE_FLOOR = 0.45;
 
 /**
  * @param {number} count

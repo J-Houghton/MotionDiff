@@ -17,6 +17,8 @@ import { renderBackground } from './modes/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH, createTrailState, trailStep } from '../core/trails.js';
 import { flowLuma as coreFlowLuma, pyramidFlow, reducedSize, smoothFlow, smoothedVector } from '../core/flow.js';
 import { flowBetween, flowLuma, flowSmooth, readField } from './flow.js';
+import { averageStep, referenceAlpha, shiftStrength, shiftWeight } from '../core/schlieren.js';
+import schlieren, { SCHLIEREN_TRUSTED } from './modes/schlieren.js';
 
 /**
  * Dev-only parity probe for the diff and blur shaders against core/diff.js
@@ -802,4 +804,121 @@ export function debugFlowParity(pipeline) {
   if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
   pipeline.clearState();
   return { cases, pass: cases.every((c) => c.pass) };
+}
+
+/**
+ * Dev-only parity probe for the schlieren mode (app/modes/schlieren.js)
+ * against core/schlieren.js and core/flow.js: three frames of a printed-style
+ * background build the reference, the reference is held, and a fourth frame
+ * is the same background shifted by up to 0.3 px in a column down the middle.
+ * Both sides average, solve and weigh the result; the probe compares the
+ * mode's data output (the shift, and its strength) with the core's.
+ *
+ * Half-float state, as with the flow probe: the largest difference is
+ * reported and trusted shifts more than 0.02 px apart are counted.
+ *
+ * It resizes the renderer and clears the pipeline — run it on an idle page.
+ *
+ * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
+ * @returns {object|null}
+ */
+export function debugSchlierenParity(pipeline) {
+  const gl = pipeline?._glRenderer;
+  if (!gl || !gl.floatTargets) return null;
+
+  const width = 120;
+  const height = 72;
+  let seed = 9001;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  const cols = Math.ceil(width / 3) + 2;
+  const cells = Array.from({ length: cols * (Math.ceil(height / 3) + 2) }, () => (random() < 0.5 ? 205 : 50));
+  const pattern = (x, y) => {
+    const fx = x / 3 + 1;
+    const fy = y / 3 + 1;
+    const x0 = Math.floor(fx);
+    const y0 = Math.floor(fy);
+    const at = (cx, cy) => cells[cy * cols + cx];
+    const tx = fx - x0;
+    const ty = fy - y0;
+    return (at(x0, y0) * (1 - tx) + at(x0 + 1, y0) * tx) * (1 - ty) + (at(x0, y0 + 1) * (1 - tx) + at(x0 + 1, y0 + 1) * tx) * ty;
+  };
+  const shiftAt = (x) => 0.3 * Math.exp(-((x - 60) ** 2) / (2 * 9 * 9));
+  const frame = (shifted) => {
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const value = pattern(x - (shifted ? shiftAt(x) : 0), y) + (random() - 0.5) * 6;
+        data.set([value, value, value, 255], (y * width + x) * 4);
+      }
+    }
+    return data;
+  };
+  const frames = [frame(false), frame(false), frame(false), frame(true)];
+
+  const params = {
+    ...pipeline.params, algorithm: 'schlieren', schlierenShow: 'strength', schlierenHold: false, schlierenRange: 25,
+    schlierenWindow: 4, schlierenSmooth: 1, schlierenReference: 60, schlierenSteady: false,
+  };
+  const STEP_MS = 1000 / 30;
+  const full = params.schlierenRange / 100;
+
+  // Core
+  const count = width * height;
+  let reference = new Float32Array(count);
+  let current = new Float32Array(count);
+  frames.forEach((data, n) => {
+    const luma = coreFlowLuma(data, width, height, 1, new Float32Array(count));
+    current = averageStep(current, luma, n === 0 ? 1 : 1 - Math.exp(-(STEP_MS / 1000) / (params.schlierenSmooth / 30)), current);
+    // The reference is held from the fourth frame on.
+    if (n < 3) reference = averageStep(reference, luma, referenceAlpha(STEP_MS, params.schlierenReference / 30, n, false), reference);
+  });
+  const expected = pyramidFlow(reference, current, width, height, { levels: 2, radius: params.schlierenWindow, still: 0 });
+
+  // GPU: the mode itself, frame by frame
+  const restoreWidth = gl.width;
+  const restoreHeight = gl.height;
+  const restoreFrames = gl.ringFrames;
+  gl.setSize(width, height, 2);
+  pipeline.clearState();
+  frames.forEach((data, n) => {
+    gl.uploadPixels(new ImageData(data, width, height));
+    schlieren.render({ gl, params: { ...params, schlierenHold: n === 3 }, step: 'advance', stepMs: STEP_MS, dtMs: STEP_MS, display: 'diff' });
+  });
+  const got = gl.readDataField().values;
+
+  let maxDiff = 0;
+  let strengthDiff = 0;
+  let trusted = 0;
+  let mismatches = 0;
+  let peak = 0;
+  const border = params.schlierenWindow + 1;
+  for (let y = border; y < height - border; y++) {
+    for (let x = border; x < width - border; x++) {
+      const p = y * width + x;
+      const weight = shiftWeight(expected[p * 3 + 2], SCHLIEREN_TRUSTED);
+      if (weight < 1) continue;
+      trusted++;
+      const diff = Math.hypot(expected[p * 3] - got[p * 4 + 1], expected[p * 3 + 1] - got[p * 4 + 2]);
+      maxDiff = Math.max(maxDiff, diff);
+      if (diff > 0.02) mismatches++;
+      strengthDiff = Math.max(strengthDiff, Math.abs(shiftStrength(expected[p * 3], expected[p * 3 + 1], full, weight) - got[p * 4]));
+      peak = Math.max(peak, got[p * 4 + 1]);
+    }
+  }
+
+  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
+  pipeline.clearState();
+  const share = trusted ? mismatches / trusted : 1;
+  return {
+    trusted,
+    peakShift: +peak.toFixed(3),
+    maxDiff: +maxDiff.toFixed(4),
+    mismatches,
+    mismatchShare: +(share * 100).toFixed(3),
+    strengthDiff: +strengthDiff.toFixed(4),
+    pass: trusted > 3000 && peak > 0.2 && share < 0.001 && strengthDiff < 0.1,
+  };
 }

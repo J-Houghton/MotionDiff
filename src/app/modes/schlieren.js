@@ -60,11 +60,15 @@ uniform sampler2D uFlow;     // RG = shift in working pixels, B = confidence
 uniform vec2 uCamera;        // the whole picture's shift, working pixels
 uniform float uFull;         // shift drawn at full scale, working pixels
 uniform float uTrusted;
+uniform float uBorder;       // working pixels at each edge where a patch hangs over the picture
 
-// xy = shift with the camera's taken out; z = weight (mirrors shiftWeight)
+// xy = shift with the camera's taken out; z = weight (mirrors shiftWeight;
+// nothing is drawn in the border, where the solve repeats the edge pixels)
 vec3 shiftAt(vec2 at) {
   vec3 flow = between(uFlow, at).rgb;
-  return vec3(flow.rg - uCamera, clamp((flow.b / uTrusted - 0.5) * 2.0, 0.0, 1.0));
+  vec2 size = vec2(textureSize(uFlow, 0));
+  float inside = step(uBorder, min(min(at.x, at.y), min(size.x - 1.0 - at.x, size.y - 1.0 - at.y)));
+  return vec3(flow.rg - uCamera, clamp((flow.b / uTrusted - 0.5) * 2.0, 0.0, 1.0) * inside);
 }`;
 
 // The picture, or the data field. Knife edge is in Posy space, the rest in Raw.
@@ -134,10 +138,10 @@ const VIEWS = { knife: 0, strength: 1, direction: 2, check: 3 };
 const SETUPS = new WeakMap();
 
 const NOTES = {
-  plain: (s) => [`Schlieren: only ${Math.round(s.usable * 100)}% of the picture has texture to measure against. Put a patterned background behind the hot air.`, 'error'],
-  moved: (s) => [`Schlieren: the camera has moved ${Math.hypot(s.camera.dx, s.camera.dy).toFixed(1)} px since the reference was held. Prop it still, then release and hold again.`, 'error'],
-  shaking: () => ['Schlieren: the camera is moving. Prop it against something solid.', 'error'],
-  settling: () => ['Schlieren: settling the reference…', 'info'],
+  plain: (s) => [`Background too plain: only ${Math.round(s.usable * 100)}% can be measured. Use a patterned one, or a larger width`, 'error'],
+  moved: (s) => [`Camera moved ${Math.hypot(s.camera.dx, s.camera.dy).toFixed(1)} px off the held reference: release and hold again`, 'error'],
+  shaking: () => ['Camera is moving: prop it against something solid', 'error'],
+  settling: () => ['Settling the reference…', 'info'],
 };
 
 /**
@@ -197,7 +201,7 @@ function measure(frame) {
       frame.note?.(...NOTES[problem]({ usable: setup.usable, camera: setup.measured }));
     } else {
       const floor = Math.max(0.01, setup.noise * factor * 2.5);
-      frame.note?.(`Schlieren: measuring ${Math.round(setup.usable * 100)}% of the picture. Shifts above about ${floor.toFixed(2)} px stand out. ${params.schlierenHold ? 'Reference held.' : 'Reference follows: steady hot air fades out; hold it to keep everything.'}`, 'info');
+      frame.note?.(`${Math.round(setup.usable * 100)}% measurable · shifts over ${floor.toFixed(2)} px show · reference ${params.schlierenHold ? 'held' : 'follows'}`, 'info');
     }
   }
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -213,7 +217,7 @@ export default {
     'Setup: prop the camera so it cannot move; put a detailed background a metre or so behind the hot air (print public/schlieren-pattern.svg, or use brick, gravel, foliage, a bookshelf); lock focus and exposure on the background. The Setup check view hatches in red whatever cannot be measured.',
     'Reference: by default it follows the scene, so only hot air that changes is shown and a steady plume fades out. Let it settle with nothing hot in view, switch on Hold reference, then light the candle: everything is shown.',
     'Knife edge is the classic look: light where the background is pushed one way, dark where it is pushed the other. Strength and Direction show the size and the heading of the shift.',
-    'Traces follow how the pattern of hot air travels from frame to frame: the movement of its eddies. That is slower than the air itself, and there is nothing to follow where the flow is smooth.',
+    'Traces (experimental) follow how the pattern of hot air travels from frame to frame: the movement of its eddies. That is slower than the air itself, there is nothing to follow where the flow is smooth, and a plume that crosses more than about a twentieth of the picture between two frames is too fast to follow: a candle filmed close up at 30 frames a second is.',
     'Nothing is drawn where the background is plain. Lamp flicker, auto-exposure and focus hunting all read as signal; video compression smooths away the smallest shifts.',
     'Sensitivity is the shift drawn at full strength. A larger window and more smoothing see weaker plumes, more coarsely and more slowly.',
   ],
@@ -222,7 +226,7 @@ export default {
   worker: false,
   needsFloat: true,
   params: [
-    { key: 'schlierenShow', label: 'Show', type: 'select', default: 'knife', options: { 'Knife edge': 'knife', 'Strength': 'strength', 'Direction': 'direction', 'Particle traces': 'traces', 'Setup check': 'check' } },
+    { key: 'schlierenShow', label: 'Show', type: 'select', default: 'knife', options: { 'Knife edge': 'knife', 'Strength': 'strength', 'Direction': 'direction', 'Traces (experimental)': 'traces', 'Setup check': 'check' } },
     { key: 'schlierenHold', label: 'Hold reference', type: 'toggle', default: false },
     { key: 'schlierenRange', label: 'Sensitivity', type: 'range', min: 2, max: 200, step: 1, default: 25, format: (v) => `${(v / 100).toFixed(2)} px` },
     { key: 'schlierenWindow', label: 'Window', type: 'range', min: 2, max: 7, step: 1, default: 4, format: (v) => `${2 * v + 1} px` },
@@ -258,6 +262,7 @@ export default {
       gl.uniform2f(u.uCamera, setup.camera.dx, setup.camera.dy);
       gl.uniform1f(u.uFull, full);
       gl.uniform1f(u.uTrusted, SCHLIEREN_TRUSTED);
+      gl.uniform1f(u.uBorder, params.schlierenWindow + 1);
     };
     const show = (framebuffer, output) => flowPass(renderer, 'schlieren:show', SHOW_FRAG, { uFlow: 0, uCurrent: 1 }, { fb: framebuffer, width, height }, [flow.tex, renderer.currentTexture], (gl, u) => {
       shift(gl, u);

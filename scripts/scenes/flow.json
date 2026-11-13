@@ -1,8 +1,318 @@
-{ "scenes": [
-  { "name": "flow-colour", "clip": "flow", "at": 2.0, "frames": 6, "every": 6, "display": "diff", "readData": true,
-    "params": { "algorithm": "flow", "flowShow": "colour", "flowGap": 2, "flowRange": 25, "flowSmoothing": 6 } },
-  { "name": "flow-particles", "clip": "flow", "at": 2.0, "frames": 6, "every": 6, "display": "diff", "readData": true,
-    "params": { "algorithm": "flow", "flowShow": "particles", "flowGap": 2, "flowRange": 25, "flowSmoothing": 6, "traceColour": "heading" } },
-  { "name": "flow-particles-plain", "clip": "flow", "at": 2.0, "frames": 6, "every": 6, "display": "diff",
-    "params": { "algorithm": "flow", "flowShow": "particles", "flowGap": 2, "flowRange": 25, "flowSmoothing": 6, "traceColour": "plain" } }
-] }
+{
+ "scenes": [
+  {
+   "name": "flow-colour",
+   "clip": "flow",
+   "at": 2,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "readData": true,
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "colour",
+    "flowGap": 2,
+    "flowRange": 25,
+    "flowSmoothing": 6
+   }
+  },
+  {
+   "name": "flow-particles",
+   "clip": "flow",
+   "at": 2,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "readData": true,
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "particles",
+    "flowGap": 2,
+    "flowRange": 25,
+    "flowSmoothing": 6,
+    "traceColour": "heading"
+   }
+  },
+  {
+   "name": "flow-particles-plain",
+   "clip": "flow",
+   "at": 2,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "particles",
+    "flowGap": 2,
+    "flowRange": 25,
+    "flowSmoothing": 6,
+    "traceColour": "plain"
+   }
+  },
+  {
+   "name": "river-raw",
+   "clip": "river",
+   "at": 3,
+   "frames": 6,
+   "every": 3,
+   "display": "diff",
+   "params": {
+    "algorithm": "raw",
+    "frameOffset": 5,
+    "threshold": 20,
+    "trailLength": 5,
+    "channelSpread": 0
+   }
+  },
+  {
+   "name": "river-history",
+   "clip": "river",
+   "at": 3,
+   "frames": 6,
+   "every": 3,
+   "display": "diff",
+   "params": {
+    "algorithm": "history",
+    "historyShow": "direction",
+    "frameOffset": 5,
+    "threshold": 20
+   }
+  },
+  {
+   "name": "river-particles",
+   "clip": "river",
+   "at": 3,
+   "frames": 6,
+   "every": 3,
+   "display": "diff",
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "particles",
+    "flowGap": 2,
+    "flowRange": 25,
+    "flowSmoothing": 6,
+    "traceColour": "heading"
+   }
+  },
+  {
+   "name": "river-particles-glow",
+   "clip": "river",
+   "at": 3,
+   "frames": 6,
+   "every": 3,
+   "display": "glow",
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "particles",
+    "flowGap": 2,
+    "flowRange": 25,
+    "flowSmoothing": 6,
+    "traceColour": "heading"
+   }
+  },
+  {
+   "name": "river-colour",
+   "clip": "river",
+   "at": 3,
+   "frames": 6,
+   "every": 3,
+   "display": "diff",
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "colour",
+    "flowGap": 2,
+    "flowRange": 25,
+    "flowSmoothing": 6,
+    "traceColour": "heading"
+   }
+  },
+  {
+   "name": "traffic-raw",
+   "clip": "traffic",
+   "at": 3,
+   "frames": 6,
+   "every": 3,
+   "display": "diff",
+   "params": {
+    "algorithm": "raw",
+    "frameOffset": 5,
+    "threshold": 20,
+    "trailLength": 5,
+    "channelSpread": 0
+   }
+  },
+  {
+   "name": "traffic-history",
+   "clip": "traffic",
+   "at": 3,
+   "frames": 6,
+   "every": 3,
+   "display": "diff",
+   "params": {
+    "algorithm": "history",
+    "historyShow": "direction",
+    "frameOffset": 5,
+    "threshold": 20
+   }
+  },
+  {
+   "name": "traffic-particles",
+   "clip": "traffic",
+   "at": 3,
+   "frames": 6,
+   "every": 3,
+   "display": "diff",
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "particles",
+    "flowGap": 2,
+    "flowRange": 40,
+    "flowSmoothing": 6,
+    "traceColour": "heading"
+   }
+  },
+  {
+   "name": "traffic-particles-glow",
+   "clip": "traffic",
+   "at": 3,
+   "frames": 6,
+   "every": 3,
+   "display": "glow",
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "particles",
+    "flowGap": 2,
+    "flowRange": 40,
+    "flowSmoothing": 6,
+    "traceColour": "heading"
+   }
+  },
+  {
+   "name": "traffic-colour",
+   "clip": "traffic",
+   "at": 3,
+   "frames": 6,
+   "every": 3,
+   "display": "diff",
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "colour",
+    "flowGap": 2,
+    "flowRange": 40,
+    "flowSmoothing": 6,
+    "traceColour": "heading"
+   }
+  },
+  {
+   "name": "trees-raw",
+   "clip": "trees",
+   "at": 4,
+   "frames": 6,
+   "every": 3,
+   "display": "diff",
+   "params": {
+    "algorithm": "raw",
+    "frameOffset": 5,
+    "threshold": 20,
+    "trailLength": 5,
+    "channelSpread": 0
+   }
+  },
+  {
+   "name": "trees-history",
+   "clip": "trees",
+   "at": 4,
+   "frames": 6,
+   "every": 3,
+   "display": "diff",
+   "params": {
+    "algorithm": "history",
+    "historyShow": "direction",
+    "frameOffset": 5,
+    "threshold": 20
+   }
+  },
+  {
+   "name": "trees-particles",
+   "clip": "trees",
+   "at": 4,
+   "frames": 6,
+   "every": 3,
+   "display": "diff",
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "particles",
+    "flowGap": 2,
+    "flowRange": 25,
+    "flowSmoothing": 6,
+    "traceColour": "heading"
+   }
+  },
+  {
+   "name": "trees-particles-glow",
+   "clip": "trees",
+   "at": 4,
+   "frames": 6,
+   "every": 3,
+   "display": "glow",
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "particles",
+    "flowGap": 2,
+    "flowRange": 25,
+    "flowSmoothing": 6,
+    "traceColour": "heading"
+   }
+  },
+  {
+   "name": "trees-colour",
+   "clip": "trees",
+   "at": 4,
+   "frames": 6,
+   "every": 3,
+   "display": "diff",
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "colour",
+    "flowGap": 2,
+    "flowRange": 25,
+    "flowSmoothing": 6,
+    "traceColour": "heading"
+   }
+  },
+  {
+   "name": "noisy-colour",
+   "clip": "truth-noisy",
+   "at": 2,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "readData": true,
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "colour",
+    "flowGap": 2,
+    "flowRange": 25,
+    "flowSmoothing": 6,
+    "traceColour": "heading"
+   }
+  },
+  {
+   "name": "truth-colour",
+   "clip": "truth",
+   "at": 2,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "readData": true,
+   "params": {
+    "algorithm": "flow",
+    "flowShow": "colour",
+    "flowGap": 2,
+    "flowRange": 25,
+    "flowSmoothing": 6,
+    "traceColour": "heading"
+   }
+  }
+ ]
+}

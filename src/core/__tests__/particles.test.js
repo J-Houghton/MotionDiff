@@ -93,7 +93,7 @@ describe('stepParticles', () => {
     particles.data.set([20, 50, 1, 2]); // mid-life
     stepParticles(particles, f, 0.03, options);
     const grown = particles.segments[4];
-    expect(grown).toBeCloseTo(0.3 + 0.7 * 0.5, 5); // 50 of 100 px/s, above the floor of 0.3
+    expect(grown).toBeCloseTo(0.45 + 0.55 * 0.5, 5); // 50 of 100 px/s, above the floor of 0.45
     expect(young).toBeGreaterThan(0);
     expect(young).toBeLessThan(grown);
   });

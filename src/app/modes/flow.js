@@ -121,7 +121,7 @@ export default {
   blurb: 'How fast and which way each patch of the picture is moving, measured between two frames: as flowing traces, or as colour.',
   help: [
     'A trace is the path a point of the picture followed; its direction and, at true speed, its length are measured. Where traces start is random, and how many there are in a place means nothing: they gather on whatever moves.',
-    'Heading colours: right is red, down is yellow-green, left is cyan, up is violet.',
+    'Heading colours: right is red, down is yellow-green, left is cyan, up is violet. Plain traces show the line of travel in a still picture, but which way along it only in motion.',
     'Nothing is measured on a flat surface: a plain object carries flow only at its edges and markings.',
     'Along a straight edge only the motion across the edge can be seen.',
     'Fast things need a short gap, slow things a long one: beyond the reach shown under the picture, the answer is wrong, not just weak.',
