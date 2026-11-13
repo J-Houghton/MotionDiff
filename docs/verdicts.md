@@ -384,3 +384,59 @@ are re-seeded at once, so traces gather on whatever moves.
   particle step measured per frame on this machine, on both a desktop and a throttled
   phone profile; the target is 30 frames a second at the phone's 480 px processing
   width. A real phone cannot be measured here and will be reported as such.
+
+### V7. Schlieren mode — visual (new mode)
+**What it is.** Background-oriented schlieren: hot air bends light, so a textured
+background seen through it appears shifted by a fraction of a pixel. The mode
+measures that shift for every patch (the Lucas–Kanade solve of V5, one or two sizes,
+against a reference picture of the background) and draws it. The reference is a
+running average of the scene; "Hold reference" freezes it, so that everything that
+changes afterwards is shown in full.
+
+**What the picture means, fixed before building.** The shift is proportional to the
+change of air density across the line of sight, summed along it: the picture shows
+*where the air is unevenly hot*, not how fast it moves. With a held reference it is
+the whole deflection; with a running reference only the part that changes over time
+(a steady, smooth plume fades out of it). Particle traces in this mode follow the
+movement of the *pattern* of hot air from frame to frame: a measurement of how the
+eddies travel, which is slower than the air itself and absent where the flow is
+smooth. Nothing in the mode is simulated.
+
+**Expected effect, written before building.** Real flames cannot be filmed here, so
+these are set on a new synthetic scene, `plume`: a printed-style random background
+warped by a known field (a smooth column over a source plus eddies rising at
+150 px/s; peak shift 0.3 px), with sensor noise. `plume-weak` has a peak of 0.08 px,
+`plume-wall` a natural texture with a plain strip, `plume-drift` a camera that
+creeps by 0.4 px and trembles.
+- *Invisible in the source, visible in the mode:* a judge shown the original frames
+  of `plume` sees nothing rising; shown the schlieren strip, describes a column
+  above the source with moving structure. Raw at any threshold shows at most
+  speckle there (numeric guard: under 0.5% of pixels differ between two Raw frames
+  of the scene by more than 4/255 above its noise).
+- *The measurement is right, with a held reference:* over the plume, the measured
+  shift correlates with the true one above 0.8 and its size is within 25%; outside
+  the plume the picture is quiet: the noise floor is under a fifth of the plume's
+  typical shift.
+- *Weak plume (`plume-weak`):* still visible to the judge with smoothing and a larger
+  window; if not, that is reported as the sensitivity limit, with the number.
+- *Running reference:* the eddies show, the smooth column near the source does not;
+  the judge's description must match that, since it is the stated meaning.
+- *Plain background (`plume-wall`):* nothing is drawn on the plain strip, and the
+  setup view marks it as unusable; the plume shows where texture exists.
+- *Camera drift (`plume-drift`):* with the global-shift correction the still
+  background stays quiet (noise floor within 1.5 times that of `plume`); without it
+  the whole frame lights up.
+- *Traces:* over the eddies they head upwards within 20° of the truth, and their
+  speed is reported against the known 150 px/s whatever it turns out to be (the
+  literature expects an underestimate); none on the still background (under 2% of
+  trace brightness).
+- *Guidance:* the status line names a setup problem when there is one: a background
+  too plain to measure against, a camera that is moving, a reference not yet settled.
+- *Known limits for the help text:* needs a still camera and a textured background
+  well behind the hot air; shows nothing where the background is plain; a shift is
+  not a speed; lamp flicker, auto-exposure and focus hunting all read as signal;
+  video compression smooths away the smallest shifts.
+- **Not verifiable here, and said so in the result:** a real plume, a real phone
+  camera's noise and compression, and the frame rate on a real phone.
+- **Performance** (its own tag): measured per frame at the phone's 480 px processing
+  width and at 640 px.
