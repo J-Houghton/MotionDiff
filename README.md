@@ -71,45 +71,34 @@ Threshold suppresses noise before accumulation.
 ## Project structure
 ```text
 .
-├── .github/
-│   └── workflows/
-│       └── deploy.yml              GitHub Actions workflow for production build and Pages deploy.
-├── public/
-│   ├── favicon.svg                 Browser tab icon.
-│   └── icons.svg                   Shared SVG icon sheet.
+├── .github/workflows/deploy.yml    Build and GitHub Pages deploy on push to master.
+├── public/                         Favicon and shared SVG icon sheet.
+├── specs/                          Specs the sonification and magnification features were built from.
 ├── src/
 │   ├── app/
-│   │   ├── clips.js                Built-in preset clip catalog.
+│   │   ├── audio.js                Sonification engine (Tone.js, loaded lazily).
+│   │   ├── clips.js                Built-in preset clips and parameter presets.
 │   │   ├── exporter.js             MediaRecorder-based WebM export helper.
-│   │   ├── loader.js               URL source detection for direct, HLS, and DASH cases.
+│   │   ├── loader.js               URL source detection and HLS attachment.
 │   │   ├── pipeline.js             Runtime orchestration for capture, buffering, and renderer selection.
-│   │   ├── pipeline.worker.js      Canvas fallback worker for diff, blur, and trail accumulation.
-│   │   ├── renderer.js             Canvas 2D compositing for diff, overlay, and glow modes.
-│   │   └── renderer.webgl.js       WebGL2 renderer and shader pipeline.
+│   │   ├── pipeline.worker.js      Canvas fallback worker for diff, blur, trails, and magnify.
+│   │   ├── renderer.js             Canvas 2D compositing for the fallback path.
+│   │   ├── renderer.webgl.js       WebGL2 renderer and shader pipeline.
+│   │   └── source-profile.js       Per-source capture settings (file, URL, HLS, camera, screen).
 │   ├── core/
-│   │   ├── __tests__/
-│   │   │   └── core.test.js        Unit tests for pure motion-processing logic.
-│   │   ├── analyze.js              Auto-configuration heuristic for sampled frame motion.
-│   │   ├── blur.js                 3 x 3 box blur implementation.
-│   │   ├── buffer.js               Circular frame buffer primitive.
+│   │   ├── __tests__/              Unit tests (vitest, node).
+│   │   ├── analyze.js              Auto-configuration heuristic.
+│   │   ├── blur.js                 3 x 3 box blur.
+│   │   ├── buffer.js               Circular buffer primitive.
 │   │   ├── diff.js                 Posy Blend and Raw Diff pixel math.
+│   │   ├── energy.js               Motion energy grid and pitch/pan mapping for sonification.
+│   │   ├── magnify.js              Eulerian magnification math.
 │   │   └── trails.js               Trail accumulation rules for Posy and Raw modes.
-│   ├── styles/
-│   │   └── main.css                Main application stylesheet and theme variables.
-│   ├── ui/
-│   │   ├── controls.js             DOM event bindings for controls and presets.
-│   │   ├── help.js                 Help drawer rendering and open/close behavior.
-│   │   ├── presets.js              Saved-configuration dropdown and localStorage persistence.
-│   │   ├── status.js               Status bar helper.
-│   │   ├── theme.js                Color-theme swatches and persisted aurora palette handling.
-│   │   └── timeline.js             Timeline scrubber, transport controls, and shortcuts.
+│   ├── styles/main.css             Application stylesheet and theme variables.
+│   ├── ui/                         DOM bindings: controls, timeline, presets, audio panel, help, theme, status.
 │   └── main.js                     App wiring and render loop control.
-├── docs/
-│   └── examples/
-│       └── *.md                    Extended examples and parameter recipes.
-├── index.html                      Single-page shell and DOM structure.
-├── package.json                    Scripts and top-level dependency declarations.
-├── README.md                       Project overview and algorithm reference.
+├── docs/                           Extended examples, parameter recipes, screenshots.
+├── index.html                      Single-page shell.
 └── vite.config.js                  Vite base-path configuration.
 ```
 
@@ -119,7 +108,7 @@ Layer dependencies are intentionally strict:
 core/ <- no imports
 app/  <- core/ only
 ui/   <- app/ only
-main.js <- app/ + ui/
+main.js <- app/ + ui/ (and core/ for pure helpers)
 ```
 
 ## Development
@@ -135,7 +124,7 @@ npm run build   # production build
 ## Renderer
 MotionDiff detects WebGL2 at runtime and uses it when available; otherwise it falls back to a Canvas 2D + Worker pipeline. The console logs which renderer is active, so you can confirm the path immediately on load.
 
-The WebGL renderer uploads frame data with `texImage2D` and keeps diff, blur, accumulation, and composite passes on the GPU. That avoids reading processed pixels back to the CPU every frame. The renderer also includes a `VideoFrame -> texImage2D` upload path, which is the ideal zero-readback direction for browser-native frame processing.
+The WebGL renderer keeps diff, blur, accumulation, and composite passes on the GPU. Capture is not zero-readback: every frame is drawn to a 2D canvas, read back with `getImageData`, kept on the JS heap for lookback, and re-uploaded with `texImage2D`.
 
 ## Tests
-Core coverage is focused on the pure functions under `src/core/`, including diff math, blur, buffer behavior, trails, and analysis helpers. Run the suite with `npm test`. The current suite contains 27 passing tests.
+Tests cover the pure functions under `src/core/`: diff math, blur, buffers, trails, analysis, the sonification energy grid, and the magnification math. Run them with `npm test`.
