@@ -1,16 +1,30 @@
 name: Build & Deploy
 
+# Builds the site and publishes it to GitHub Pages straight from the build
+# output, with no gh-pages branch. A merged pull request is a push to master.
+#
+# Needs, once, in the repository settings: Pages → Build and deployment →
+# Source: "GitHub Actions".
+
 on:
   push:
     branches:
       - master
-  workflow_dispatch:     # manual trigger for testing feature branches
-  
+  workflow_dispatch:     # manual run from the Actions tab
+
 permissions:
-  contents: write   
+  contents: read
+  pages: write           # publish to Pages
+  id-token: write        # prove to Pages that this run is the one deploying
+
+# One deployment at a time; a newer push waits for the one in progress
+# rather than cancelling it half-way.
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,10 +34,22 @@ jobs:
           node-version: lts/*
           cache: npm
 
-      - run: npm ci && npm run build
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
 
-      - name: Deploy to gh-pages branch
-        uses: peaceiris/actions-gh-pages@v4
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
+          path: ./dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

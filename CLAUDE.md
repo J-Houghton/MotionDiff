@@ -236,3 +236,5 @@ Tag every change as **visual**, **performance** or **robustness**.
   from. Both have shipped; they are history, not a to-do list. Where a convention
   above contradicts a spec, the convention wins.
 - Don't push or deploy without being asked: a push to `master` publishes the site.
+  The workflow uploads `dist/` to Pages directly (no `gh-pages` branch), runs the
+  tests first, and needs the repository's Pages source set to "GitHub Actions".
