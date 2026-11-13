@@ -6,10 +6,12 @@ import { emaAlpha } from '../core/magnify.js';
 import {
   classifyStep,
   frameDeltaMs,
+  framesToSeconds,
   lookbackTime,
   shouldStore,
   storeInterval,
 } from '../core/timebase.js';
+import { TRAIL_HOLD, TRAIL_REFRESH, createTrailState, trailStep } from '../core/trails.js';
 import { boxBlur } from '../core/blur.js';
 import { posyBlend, rawDiff } from '../core/diff.js';
 import { diffMagnitude, poolMagnitude } from '../core/magnitude.js';
@@ -38,6 +40,8 @@ export class Pipeline {
     this._lastStoredTime = NaN;
     // A seek completed since the last processed frame
     this._seeked = false;
+    // Media time the last new frame advanced by (reused when it is re-rendered)
+    this._lastDtMs = 0;
 
     // ── Frame history ──
     // WebGL: the pixels live in the renderer's texture-array ring and this
@@ -528,19 +532,32 @@ export class Pipeline {
     this._seeked = false;
     this._lastTime = time;
     const dtMs = frameDeltaMs(step, prevTime, time);
+    // A re-rendered frame advances the magnify filters by nothing, but its
+    // trail is recomputed with the step it had the first time.
+    if (step !== 'repeat') this._lastDtMs = dtMs;
+    const trailAgeStep = this._trailAgeStep();
 
     if (this._useWebGL) {
       this._applyStepWebGL(step, time);
       if (this.params.algorithm === 'magnify') {
         this._processMagnifyWebGL(video, time, step, dtMs);
       } else {
-        this._processWebGL(video, time, step);
+        this._processWebGL(video, time, step, trailAgeStep);
       }
     } else if (this.params.algorithm === 'magnify') {
       this._processMagnifyWorker(video, time, step, dtMs);
     } else {
-      this._processWorker(video, time, step);
+      this._processWorker(video, time, step, trailAgeStep);
     }
+  }
+
+  /**
+   * How far trail ages advance for the current frame, in trail windows.
+   * `trailLength` is in the same 1/30 s units as `frameOffset`.
+   */
+  _trailAgeStep() {
+    const windowSeconds = framesToSeconds(Math.max(this.params.trailLength, 0.001));
+    return this._lastDtMs / 1000 / windowSeconds;
   }
 
   /**
@@ -576,7 +593,7 @@ export class Pipeline {
     this._glRenderer.clearTrails();
   }
 
-  _processWebGL(video, time, step) {
+  _processWebGL(video, time, step, trailAgeStep) {
     const gl = this._glRenderer;
     // Video element → GPU texture; no readback, nothing kept on the JS heap.
     if (!gl.captureVideo(video)) return;
@@ -585,7 +602,6 @@ export class Pipeline {
       frameOffset,
       threshold,
       channelSpread,
-      trailLength,
       algorithm,
       blurEnabled,
       ageColorEnabled,
@@ -622,14 +638,19 @@ export class Pipeline {
         gl.renderBlur();
       }
 
-      // Add the diff to the trail ring. The same frame rendered again (a
-      // parameter change while paused) replaces its entry instead.
-      if (step === 'repeat') gl.replaceTrail();
-      else gl.pushTrail();
-
-      // Accumulate trails → _accumFB
-      const isPosy = algorithm === 'posy';
-      gl.renderAccumulate(trailLength, isPosy, threshold, ageColorEnabled, ageColorNew, ageColorOld);
+      // Advance the trail by this diff → trail image. The same frame
+      // rendered again (a parameter change while paused) is recomputed from
+      // the state before it rather than stacked on top.
+      gl.renderTrail({
+        isPosy: algorithm === 'posy',
+        ageStep: trailAgeStep,
+        hold: TRAIL_HOLD,
+        refresh: TRAIL_REFRESH,
+        repeat: step === 'repeat',
+        ageColorEnabled,
+        ageColorNew,
+        ageColorOld,
+      });
 
       // Composite to canvas
       gl.renderComposite(this._currentMode || 'diff', algorithm, ageColorEnabled);
@@ -719,7 +740,7 @@ export class Pipeline {
 
   // ── Worker Path (fallback) ──────────────────────────────────
 
-  _processWorker(video, time, step) {
+  _processWorker(video, time, step, trailAgeStep) {
     const frame = this.captureFrame(video);
     if (!frame) return;
     this._workerBusy = true;
@@ -734,6 +755,7 @@ export class Pipeline {
       currentFrameBuffer: pixels.buffer,
       time,
       step,
+      trailAgeStep,
       params: { ...this.params },
       width: this.width,
       height: this.height,
@@ -839,6 +861,108 @@ export function debugDiffParity(pipeline) {
   pipeline.clearState();
 
   return { cases, pass: cases.every((c) => c.pass) };
+}
+
+/**
+ * Dev-only parity probe for the trail shader against core/trails.js
+ * trailStep. Runs a short sequence of pseudo-random frames through diff and
+ * trail on both sides — Posy, Raw and colour-by-age — including one
+ * re-rendered frame, and reports the largest per-channel difference.
+ *
+ * It resizes the renderer and clears the pipeline — run it on an idle page.
+ *
+ * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
+ * @returns {{cases: {name: string, maxDiff: number}[], floatAges: boolean, pass: boolean}|null}
+ */
+export function debugTrailParity(pipeline) {
+  const gl = pipeline?._glRenderer;
+  if (!gl) return null;
+
+  const width = 32;
+  const height = 16;
+  let seed = 4242;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  // Frames that change in patches, so peaks of different ages overlap.
+  const frames = [];
+  let last = new Uint8ClampedArray(width * height * 4).fill(120);
+  for (let k = 0; k < 7; k++) {
+    const frame = new Uint8ClampedArray(last);
+    for (let i = 0; i < frame.length; i += 4) {
+      const x = (i / 4) % width;
+      if (Math.floor(x / 4) % 7 === k % 7 || random() < 0.08) {
+        for (let c = 0; c < 3; c++) frame[i + c] = Math.min(255, Math.max(0, frame[i + c] + Math.round((random() - 0.5) * 160)));
+      }
+      frame[i + 3] = 255;
+    }
+    frames.push(frame);
+    last = frame;
+  }
+  const AGE_STEPS = [0, 0.22, 0.31, 0.18, 0.4, 0.27];
+  const hexToUnit = (hex) => [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16) / 255);
+
+  const restoreWidth = gl.width;
+  const restoreHeight = gl.height;
+  const restoreFrames = gl.ringFrames;
+  gl.setSize(width, height, 2);
+
+  const CASES = [
+    { name: 'posy', algorithm: 'posy' },
+    { name: 'raw', algorithm: 'raw' },
+    { name: 'posy colour by age', algorithm: 'posy', ageColor: true },
+  ];
+  const ageNew = '#ff4400';
+  const ageOld = '#0044ff';
+
+  const cases = CASES.map(({ name, algorithm, ageColor = false }) => {
+    const isPosy = algorithm === 'posy';
+    let prev = createTrailState(width * height);
+    let next = createTrailState(width * height);
+    const shown = new Uint8ClampedArray(width * height * 4);
+    gl.clearTrails();
+    let maxDiff = 0;
+
+    for (let k = 1; k < frames.length; k++) {
+      const ageStep = AGE_STEPS[k - 1];
+      const diff = new Uint8ClampedArray(width * height * 4);
+      (isPosy ? posyBlend : rawDiff)(frames[k], frames[k - 1], diff, 10);
+
+      gl.uploadPixels(new ImageData(frames[k - 1], width, height));
+      gl.storeCurrent(0);
+      gl.uploadPixels(new ImageData(frames[k], width, height));
+      const drawDiff = () => gl.renderDiff({
+        threshold: 10, algorithm, rgbTintR: '#ff0000', rgbTintG: '#00ff00', rgbTintB: '#0000ff', layers: [0, 0, 0],
+      });
+      const trailOpts = { isPosy, ageStep, hold: TRAIL_HOLD, refresh: TRAIL_REFRESH, ageColorEnabled: ageColor, ageColorNew: ageNew, ageColorOld: ageOld };
+      const coreOpts = { isPosy, ageStep, hold: TRAIL_HOLD };
+      if (ageColor) Object.assign(coreOpts, { ageColorNew: hexToUnit(ageNew), ageColorOld: hexToUnit(ageOld) });
+
+      drawDiff();
+      gl.renderTrail({ ...trailOpts, repeat: false });
+      trailStep(prev, next, diff, shown, coreOpts);
+      if (k === 3) {
+        // Render frame 3 a second time, as a parameter change while paused would.
+        drawDiff();
+        gl.renderTrail({ ...trailOpts, repeat: true });
+        trailStep(prev, next, diff, shown, coreOpts);
+      }
+      [prev, next] = [next, prev];
+
+      const gpu = gl.readTrailPixels();
+      for (let i = 0; i < shown.length; i++) {
+        if ((i & 3) === 3) continue;
+        maxDiff = Math.max(maxDiff, Math.abs(shown[i] - gpu[i]));
+      }
+    }
+    return { name, maxDiff, pass: maxDiff <= 1 };
+  });
+
+  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
+  pipeline.clearState();
+
+  return { cases, floatAges: gl._trailAgesFloat, pass: cases.every((c) => c.pass) };
 }
 
 /**

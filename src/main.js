@@ -1,4 +1,4 @@
-import { Pipeline, debugDiffParity, debugEnergyParity } from './app/pipeline.js';
+import { Pipeline, debugDiffParity, debugEnergyParity, debugTrailParity } from './app/pipeline.js';
 import { AudioEngine } from './app/audio.js';
 import { attachHlsSource, isDashUrl, isHlsUrl, isYouTubeUrl } from './app/loader.js';
 import { CanvasRecorder } from './app/exporter.js';
@@ -926,6 +926,8 @@ if (import.meta.env.DEV) {
   window.__motionDiffEnergyParity = (cols, rows) => debugEnergyParity(pipeline, cols, rows);
   // Diff and blur shaders against core/diff.js and core/blur.js.
   window.__motionDiffDiffParity = () => debugDiffParity(pipeline);
+  // Trail shader against core/trails.js.
+  window.__motionDiffTrailParity = () => debugTrailParity(pipeline);
   // Lets a test harness observe frames as they are processed.
   window.__motionDiffPipeline = pipeline;
 }

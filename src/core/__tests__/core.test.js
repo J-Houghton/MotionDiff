@@ -1,8 +1,7 @@
 import { describe, it, test, expect } from 'vitest';
 import { posyBlend, rawDiff } from '../diff.js';
-import { accumulate } from '../trails.js';
 import { boxBlur } from '../blur.js';
-import { CircularBuffer, FrameRing, ringCapacity } from '../buffer.js';
+import { FrameRing, ringCapacity } from '../buffer.js';
 import { analyzeSample } from '../analyze.js';
 import { buildSourceProfile, isStreamSource } from '../../app/source-profile.js';
 import { PARAMETER_PRESETS, PRESET_VERSION, migratePresetParams } from '../../app/clips.js';
@@ -253,76 +252,6 @@ describe('migratePresetParams', () => {
 });
 
 // ─────────────────────────────────────
-//  trails.js — accumulate
-// ─────────────────────────────────────
-
-describe('accumulate', () => {
-  it('empty frames returns null (raw mode)', () => {
-    expect(accumulate([], false)).toBeNull();
-  });
-
-  it('empty frames returns null (Posy mode)', () => {
-    expect(accumulate([], true)).toBeNull();
-  });
-
-  it('raw mode — single frame passes through exactly', () => {
-    const frame = makePixels([100, 50, 200, 255]);
-    const result = accumulate([frame], false);
-
-    expect(result[0]).toBe(100);
-    expect(result[1]).toBe(50);
-    expect(result[2]).toBe(200);
-    expect(result[3]).toBe(255);
-  });
-
-  it('raw mode — max wins per channel', () => {
-    const frame1 = makePixels([200, 50, 100, 255]);
-    const frame2 = makePixels([100, 180, 80, 255]);
-    const result = accumulate([frame1, frame2], false);
-
-    expect(result[0]).toBe(200);
-    expect(result[1]).toBe(180);
-    expect(result[2]).toBe(100);
-    expect(result[3]).toBe(255);
-  });
-
-  it('Posy mode — highest deviation from 128 wins', () => {
-    // frame1: R=180 (dev 52), G=128 (dev 0)
-    // frame2: R=128 (dev 0),  G=60  (dev 68)
-    const frame1 = makePixels([180, 128, 128, 255]);
-    const frame2 = makePixels([128, 60, 128, 255]);
-    const result = accumulate([frame1, frame2], true);
-
-    expect(result[0]).toBe(180); // deviation 52 wins
-    expect(result[1]).toBe(60);  // deviation 68 wins (60 < 128 but higher deviation)
-    expect(result[2]).toBe(128); // no deviation in either frame
-    expect(result[3]).toBe(255);
-  });
-
-  it('Posy mode — base frame is gray (128)', () => {
-    const frame = makePixels([128, 128, 128, 255]);
-    const result = accumulate([frame], true);
-
-    expect(result[0]).toBe(128);
-    expect(result[1]).toBe(128);
-    expect(result[2]).toBe(128);
-    expect(result[3]).toBe(255);
-  });
-
-  it('does not mutate input frames', () => {
-    const frame1 = makePixels([200, 50, 100, 255]);
-    const frame2 = makePixels([100, 180, 80, 255]);
-    const copy1 = new Uint8ClampedArray(frame1);
-    const copy2 = new Uint8ClampedArray(frame2);
-
-    accumulate([frame1, frame2], false);
-
-    expect(frame1).toEqual(copy1);
-    expect(frame2).toEqual(copy2);
-  });
-});
-
-// ─────────────────────────────────────
 //  blur.js — boxBlur
 // ─────────────────────────────────────
 
@@ -391,80 +320,6 @@ describe('boxBlur', () => {
     // Same reference, but value changed
     expect(ref).toBe(data);
     expect(data[center]).not.toBe(90);
-  });
-});
-
-// ─────────────────────────────────────
-//  buffer.js — CircularBuffer
-// ─────────────────────────────────────
-
-describe('CircularBuffer', () => {
-  it('push and get', () => {
-    const buf = new CircularBuffer(5);
-    buf.push('a');
-    expect(buf.get(0)).toBe('a');
-  });
-
-  it('size tracks correctly', () => {
-    const buf = new CircularBuffer(5);
-    expect(buf.size).toBe(0);
-    buf.push('a');
-    buf.push('b');
-    expect(buf.size).toBe(2);
-  });
-
-  it('get out of bounds returns null', () => {
-    const buf = new CircularBuffer(5);
-    buf.push('a');
-    expect(buf.get(-1)).toBeNull();
-    expect(buf.get(1)).toBeNull(); // size is 1, offset 1 is out of range
-  });
-
-  it('wraps correctly at capacity', () => {
-    const buf = new CircularBuffer(3);
-    buf.push('a');
-    buf.push('b');
-    buf.push('c');
-    buf.push('d'); // overwrites 'a'
-
-    expect(buf.get(0)).toBe('d');
-    expect(buf.get(1)).toBe('c');
-    expect(buf.get(2)).toBe('b');
-    expect(buf.size).toBe(3);
-
-    // 'a' is no longer accessible
-    expect(buf.get(3)).toBeNull();
-  });
-
-  it('clear resets state', () => {
-    const buf = new CircularBuffer(5);
-    buf.push('a');
-    buf.push('b');
-    buf.clear();
-
-    expect(buf.size).toBe(0);
-    expect(buf.get(0)).toBeNull();
-  });
-});
-
-describe('CircularBuffer.replaceNewest', () => {
-  it('overwrites the newest entry without growing', () => {
-    const buf = new CircularBuffer(3);
-    buf.push('a');
-    buf.push('b');
-    buf.replaceNewest('c');
-
-    expect(buf.size).toBe(2);
-    expect(buf.get(0)).toBe('c');
-    expect(buf.get(1)).toBe('a');
-  });
-
-  it('pushes when the buffer is empty', () => {
-    const buf = new CircularBuffer(3);
-    buf.replaceNewest('a');
-
-    expect(buf.size).toBe(1);
-    expect(buf.get(0)).toBe('a');
   });
 });
 

@@ -10,7 +10,7 @@
  *   - Diff (Posy + Raw in one shader, branched by uniform), sampling the
  *     current frame and three ring layers
  *   - 3x3 box blur
- *   - Trail accumulation (max-deviation merge across trail frames)
+ *   - Trail: one decaying feedback state (peak + age per pixel and channel)
  *   - Composite (diff / overlay / glow modes)
  *   - Magnify (EMA update + add-back)
  */
@@ -195,64 +195,73 @@ void main() {
   fragColor = vec4(mean, 0.0, 0.0, 1.0);
 }`;
 
-// Two-input accumulation: merges "current best" with "next trail frame".
-// Called iteratively from JS — one draw call per trail frame.
-const ACCUM_FRAG = `#version 300 es
+// Trail step. Mirrors core/trails.js trailStep: per pixel and channel, the
+// strongest recent diff value ("peak") and its age in trail windows live in
+// two feedback textures. One pass advances the ages, lets this frame's diff
+// refresh any trail it is at least uRefresh as strong as, and writes the
+// image to show — three outputs, so the whole trail costs one draw whatever
+// its length.
+const TRAIL_FRAG = `#version 300 es
 precision highp float;
 
-uniform sampler2D uAccum;   // current accumulated result (or base fill)
-uniform sampler2D uTrail;   // next trail frame to merge
-uniform int uIsPosy;        // 1 = posy, 0 = raw
-uniform int uIsFirst;       // 1 = first pass (use base fill), 0 = read uAccum
-uniform int uAgeColorEnabled;
-uniform int uTrailIndex;
-uniform float uTrailAge[20];
-uniform float uThreshold;
+uniform sampler2D uPeaks;   // previous peaks (8-bit diff values)
+uniform sampler2D uAges;    // previous ages, 0..1 of the trail window
+uniform sampler2D uDiff;    // this frame's diff
+uniform int uIsPosy;        // 1 = Posy space (baseline 128), 0 = Raw (baseline 0)
+uniform int uEmpty;         // 1 = no previous state: every peak counts as expired
+uniform float uAgeStep;     // media time since the previous frame, in windows
+uniform float uHold;        // share of the window held at full strength
+uniform float uRefresh;     // a new value this share of the shown one refreshes the trail
+uniform int uAgeColor;      // 1 = show Posy motion as a colour by age
 uniform vec3 uAgeColorNew;
 uniform vec3 uAgeColorOld;
 
-in vec2 vUV;
-out vec4 fragColor;
+layout(location = 0) out vec4 outPeaks;
+layout(location = 1) out vec4 outAges;
+layout(location = 2) out vec4 outShown;
 
-// Posy "no motion" value: 128 of 255, not 0.5 (which is 127.5 and would
-// make 127 and 128 equally far from the baseline).
-const float POSY_BASE = 128.0 / 255.0;
+vec3 envelope(vec3 age) {
+  vec3 fade = (1.0 - age) / max(1.0 - uHold, 1e-6);
+  vec3 env = mix(fade, vec3(1.0), vec3(lessThanEqual(age, vec3(uHold))));
+  return mix(env, vec3(0.0), vec3(greaterThanEqual(age, vec3(1.0))));
+}
 
 void main() {
-  float baseVal = (uIsPosy == 1 && uAgeColorEnabled == 0) ? POSY_BASE : 0.0;
-  vec3 best;
-  if (uIsFirst == 1) {
-    best = vec3(baseVal);
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  float base = uIsPosy == 1 ? 128.0 : 0.0;
+
+  vec3 peak = floor(texelFetch(uPeaks, p, 0).rgb * 255.0 + 0.5);
+  vec3 age = uEmpty == 1 ? vec3(1.0) : min(texelFetch(uAges, p, 0).rgb + uAgeStep, 1.0);
+  vec3 env = envelope(age);
+
+  vec3 fresh = floor(texelFetch(uDiff, p, 0).rgb * 255.0 + 0.5);
+  vec3 freshDev = abs(fresh - base);
+  vec3 held = (peak - base) * env; // what the trail shows now, signed
+  vec3 take = vec3(greaterThan(freshDev, vec3(0.0))) * vec3(greaterThanEqual(freshDev, uRefresh * abs(held)));
+  // Keep the stronger of the new value and what the old peak had faded to.
+  vec3 stronger = mix(floor(base + held + 0.5), fresh, vec3(greaterThanEqual(freshDev, abs(held))));
+  peak = mix(peak, stronger, take);
+  age = mix(age, vec3(0.0), take);
+  env = mix(env, vec3(1.0), take);
+
+  outPeaks = vec4(peak / 255.0, 1.0);
+  outAges = vec4(age, 1.0);
+
+  vec3 shown = (peak - base) * env; // signed deviation from the baseline
+  if (uAgeColor == 1 && uIsPosy == 1) {
+    // Unfaded strength until the peak expires: the colour carries the age.
+    vec3 d = abs(peak - base) * vec3(lessThan(age, vec3(1.0)));
+    float sum = d.r + d.g + d.b;
+    vec3 colour = vec3(0.0);
+    if (sum > 0.0) {
+      float mag = min(1.0, sum / (3.0 * 127.0));
+      float t = dot(d, age) / sum;
+      colour = mix(uAgeColorNew, uAgeColorOld, t) * mag;
+    }
+    outShown = vec4(floor(colour * 255.0 + 0.5) / 255.0, 1.0);
   } else {
-    best = texture(uAccum, vUV).rgb;
+    outShown = vec4(floor(base + shown + 0.5) / 255.0, 1.0);
   }
-
-  vec3 s = texture(uTrail, vUV).rgb;
-
-  if (uIsPosy == 1 && uAgeColorEnabled == 1) {
-    float age = uTrailAge[uTrailIndex];
-    // Mean deviation over the Posy range of 127, as in the worker.
-    float motionMagnitude = (
-      abs(s.r - POSY_BASE) +
-      abs(s.g - POSY_BASE) +
-      abs(s.b - POSY_BASE)
-    ) * 255.0 / (3.0 * 127.0);
-    vec3 ageColor = mix(uAgeColorNew, uAgeColorOld, age);
-    vec3 tinted = motionMagnitude > uThreshold ? ageColor * motionMagnitude : vec3(0.0);
-    best = max(best, tinted);
-  } else if (uIsPosy == 1) {
-    // Max deviation from the baseline per channel
-    vec3 bestDev = abs(best - POSY_BASE);
-    vec3 srcDev = abs(s - POSY_BASE);
-    if (srcDev.r > bestDev.r) best.r = s.r;
-    if (srcDev.g > bestDev.g) best.g = s.g;
-    if (srcDev.b > bestDev.b) best.b = s.b;
-  } else {
-    // Max raw value per channel
-    best = max(best, s);
-  }
-
-  fragColor = vec4(best, 1.0);
 }`;
 
 // True box average of the current frame into the magnify working grid.
@@ -487,8 +496,6 @@ function hexToVec3(hex, fallback) {
 
 // ── WebGLRenderer class ─────────────────────────────────────────
 
-const MAX_TRAILS = 20;
-
 /**
  * Above this source/processing width ratio a single bilinear tap skips
  * source texels, so the capture pass switches to a mipmapped source.
@@ -517,7 +524,7 @@ export class WebGLRenderer {
     // Programs
     this._diffProg = null;
     this._blurProg = null;
-    this._accumProg = null;
+    this._trailProg = null;
     this._compositeProg = null;
     this._magnitudeDiffProg = null;
     this._magnitudeBandProg = null;
@@ -536,23 +543,27 @@ export class WebGLRenderer {
     this._ringTex = null;
     this._ringFrames = 0;
 
-    // Trail textures (ring of framebuffers)
-    this._trailAges = new Float32Array(MAX_TRAILS);
-    this._trailTextures = [];
-    this._trailFBs = [];
-    this._trailHead = -1;
-    this._trailSize = 0;
+    // Trail feedback state, ping-ponged: peaks (RGBA8) + ages (float where
+    // renderable). Each framebuffer also carries the shown image (_accumTex)
+    // as a third colour attachment.
+    this._trailPeaks = [null, null];
+    this._trailAgeTex = [null, null];
+    this._trailFB = [null, null];
+    this._trailAgesFloat = false;
+    this._trailCur = 0;        // state after the last rendered frame
+    this._trailPrev = 0;       // state that frame was computed from
+    this._trailEmpty = true;   // _trailCur holds nothing yet
+    this._trailPrevEmpty = true;
+    this._trailHasFrame = false;
 
     // Intermediate framebuffers
     this._diffTex = null;
     this._diffFB = null;
     this._blurTex = null;
     this._blurFB = null;
+    // Trail image the composite reads
     this._accumTex = null;
     this._accumFB = null;
-    // Ping-pong buffer for iterative accumulation
-    this._accumTex2 = null;
-    this._accumFB2 = null;
 
     // ── Magnify resources (allocated lazily at the downsampled size) ──
     this._copyProg = null;
@@ -610,7 +621,7 @@ export class WebGLRenderer {
 
     this._diffProg = createProgram(gl, vs, DIFF_FRAG, { uCurrent: 0, uRing: 1 });
     this._blurProg = createProgram(gl, vs, BLUR_FRAG, { uInput: 0 });
-    this._accumProg = createProgram(gl, vs, ACCUM_FRAG, { uAccum: 0, uTrail: 1 });
+    this._trailProg = createProgram(gl, vs, TRAIL_FRAG, { uPeaks: 0, uAges: 1, uDiff: 2 });
     this._compositeProg = createProgram(gl, vs, COMPOSITE_FRAG, { uDiff: 0, uOriginal: 1 });
     this._copyProg = createProgram(gl, vs, COPY_FRAG, { uInput: 0 });
     this._boxPoolProg = createProgram(gl, vs, BOX_POOL_FRAG, { uInput: 0 });
@@ -704,29 +715,13 @@ export class WebGLRenderer {
     this._blurTex = this._createSizedTexture(width, height);
     this._blurFB = createFramebuffer(gl, this._blurTex);
 
-    // Accumulation output (ping-pong pair)
+    // Trail image
     this._cleanupTexFB(this._accumTex, this._accumFB);
     this._accumTex = this._createSizedTexture(width, height);
     this._accumFB = createFramebuffer(gl, this._accumTex);
 
-    this._cleanupTexFB(this._accumTex2, this._accumFB2);
-    this._accumTex2 = this._createSizedTexture(width, height);
-    this._accumFB2 = createFramebuffer(gl, this._accumTex2);
-
-    // ── Trail ring buffer (re-create all) ──
-    for (let i = 0; i < this._trailTextures.length; i++) {
-      this._cleanupTexFB(this._trailTextures[i], this._trailFBs[i]);
-    }
-    this._trailTextures = [];
-    this._trailFBs = [];
-    for (let i = 0; i < MAX_TRAILS; i++) {
-      const tex = this._createSizedTexture(width, height);
-      const fb = createFramebuffer(gl, tex);
-      this._trailTextures.push(tex);
-      this._trailFBs.push(fb);
-    }
-    this._trailHead = -1;
-    this._trailSize = 0;
+    // ── Trail feedback state ──
+    this._allocateTrailState(width, height);
     this._magNeedsSeed = true;
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -765,6 +760,48 @@ export class WebGLRenderer {
       console.warn(`Frame ring: ${frames} layers refused, retrying with ${frames >> 1}`);
       frames >>= 1;
     }
+  }
+
+  /**
+   * Allocate the two trail states. Ages want float precision (a step can be
+   * a small fraction of the window); where the float attachment will not
+   * complete the framebuffer they fall back to 8 bits.
+   */
+  _allocateTrailState(width, height) {
+    const gl = this.gl;
+    const build = (floatAges) => {
+      const wasFloat = this._dataFloat;
+      for (let i = 0; i < 2; i++) {
+        if (this._trailPeaks[i]) gl.deleteTexture(this._trailPeaks[i]);
+        if (this._trailAgeTex[i]) gl.deleteTexture(this._trailAgeTex[i]);
+        if (this._trailFB[i]) gl.deleteFramebuffer(this._trailFB[i]);
+
+        this._trailPeaks[i] = this._createSizedTexture(width, height);
+        this._dataFloat = floatAges;
+        this._trailAgeTex[i] = this._createDataTexture(width, height);
+        this._dataFloat = wasFloat;
+
+        const fb = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this._trailPeaks[i], 0);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this._trailAgeTex[i], 0);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, this._accumTex, 0);
+        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
+        this._trailFB[i] = fb;
+      }
+      return gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    };
+
+    this._trailAgesFloat = this._dataFloat;
+    if (!build(this._trailAgesFloat) && this._trailAgesFloat) {
+      this._trailAgesFloat = false;
+      build(false);
+    }
+    this._trailCur = 0;
+    this._trailPrev = 0;
+    this._trailEmpty = true;
+    this._trailPrevEmpty = true;
+    this._trailHasFrame = false;
   }
 
   /** Layers in the frame ring. */
@@ -981,118 +1018,86 @@ export class WebGLRenderer {
   }
 
   /**
-   * Push the current diff result into the trail ring buffer.
-   * Copies from _diffTex to the next trail slot.
+   * Advance the trail by the current diff result and write the trail image
+   * the composite reads. One draw, whatever the trail length.
+   *
+   * @param {object} opts
+   * @param {boolean} opts.isPosy
+   * @param {number} opts.ageStep - Media time since the previous frame, in
+   *   trail windows
+   * @param {number} opts.hold - Share of the window held at full strength
+   * @param {number} opts.refresh - See core/trails.js TRAIL_REFRESH
+   * @param {boolean} [opts.repeat] - The same frame rendered again (a
+   *   parameter change while paused): recompute from the state the first
+   *   attempt started from instead of stacking onto its result
+   * @param {boolean} [opts.ageColorEnabled]
+   * @param {string} [opts.ageColorNew] - Hex colour
+   * @param {string} [opts.ageColorOld] - Hex colour
    */
-  pushTrail() {
-    this._trailHead = (this._trailHead + 1) % MAX_TRAILS;
-    if (this._trailSize < MAX_TRAILS) this._trailSize++;
-    this._writeTrailHead();
-  }
+  renderTrail(opts) {
+    const gl = this.gl;
 
-  /**
-   * Overwrite the newest trail entry with the current diff result — for
-   * re-rendering the same frame (a parameter change while paused), which
-   * must not add a duplicate to the trail.
-   */
-  replaceTrail() {
-    if (this._trailSize === 0) {
-      this.pushTrail();
-      return;
+    let read;
+    let empty;
+    if (opts.repeat && this._trailHasFrame) {
+      read = this._trailPrev;
+      empty = this._trailPrevEmpty;
+    } else {
+      read = this._trailCur;
+      empty = this._trailEmpty;
+      this._trailPrev = read;
+      this._trailPrevEmpty = empty;
+      this._trailCur = 1 - read;
     }
-    this._writeTrailHead();
-  }
+    const write = this._trailCur;
 
-  _writeTrailHead() {
-    const gl = this.gl;
+    // 8-bit ages cannot represent a step below one level; never let them stall.
+    let ageStep = opts.ageStep;
+    if (!this._trailAgesFloat && ageStep > 0) ageStep = Math.max(ageStep, 1 / 255);
 
-    // Blit diff → trail slot
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._diffFB);
-    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._trailFBs[this._trailHead]);
-    gl.blitFramebuffer(0, 0, this.width, this.height, 0, 0, this.width, this.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  }
-
-  /**
-   * Run the trail accumulation via iterative ping-pong.
-   * For each trail frame, merge it with the running accumulated result.
-   * The final result ends up in _accumTex/_accumFB.
-   * @param {number} trailLength - How many trail frames to merge
-   * @param {boolean} isPosy
-   */
-  renderAccumulate(trailLength, isPosy, threshold, ageColorEnabled, ageColorNew, ageColorOld) {
-    const gl = this.gl;
-    const { prog, u } = this._accumProg;
+    const { prog, u } = this._trailProg;
     gl.useProgram(prog);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this._trailPeaks[read]);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this._trailAgeTex[read]);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this._diffTex);
 
-    const T = Math.min(trailLength, this._trailSize);
-    if (T === 0) return;
+    gl.uniform1i(u.uIsPosy, opts.isPosy ? 1 : 0);
+    gl.uniform1i(u.uEmpty, empty ? 1 : 0);
+    gl.uniform1f(u.uAgeStep, ageStep);
+    gl.uniform1f(u.uHold, opts.hold);
+    gl.uniform1f(u.uRefresh, opts.refresh);
+    gl.uniform1i(u.uAgeColor, opts.ageColorEnabled ? 1 : 0);
+    gl.uniform3fv(u.uAgeColorNew, hexToVec3(opts.ageColorNew, '#ff4400'));
+    gl.uniform3fv(u.uAgeColorOld, hexToVec3(opts.ageColorOld, '#0044ff'));
 
-    const {
-      uIsPosy, uIsFirst, uAgeColorEnabled, uTrailIndex, uTrailAge,
-      uThreshold, uAgeColorNew, uAgeColorOld,
-    } = u;
-
-    gl.uniform1i(uIsPosy, isPosy ? 1 : 0);
-    gl.uniform1i(uAgeColorEnabled, ageColorEnabled ? 1 : 0);
-    gl.uniform1f(uThreshold, threshold / 255.0);
-    gl.uniform3fv(uAgeColorNew, hexToVec3(ageColorNew, '#ff4400'));
-    gl.uniform3fv(uAgeColorOld, hexToVec3(ageColorOld, '#0044ff'));
-    gl.bindVertexArray(this._quadVAO);
-
-    const ages = this._trailAges;
-    ages.fill(0);
-    for (let i = 0; i < T; i++) {
-      ages[i] = T <= 1 ? 0 : i / (T - 1);
-    }
-    gl.uniform1fv(uTrailAge, ages);
-
-    // Ping-pong between _accumFB and _accumFB2
-    // Read from A, write to B, then swap
-    let readTex = this._accumTex;   // "current best" texture
-    let readFB = this._accumFB;
-    let writeTex = this._accumTex2;
-    let writeFB = this._accumFB2;
-
-    for (let i = 0; i < T; i++) {
-      const trailIdx = (this._trailHead - i + MAX_TRAILS) % MAX_TRAILS;
-
-      // Bind accumulated-so-far on unit 0
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, readTex);
-
-      // Bind this trail frame on unit 1
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, this._trailTextures[trailIdx]);
-
-      // On first pass, tell shader to use base fill instead of reading uAccum
-      gl.uniform1i(uIsFirst, i === 0 ? 1 : 0);
-      gl.uniform1i(uTrailIndex, i);
-
-      // Render to the write FB
-      gl.bindFramebuffer(gl.FRAMEBUFFER, writeFB);
-      gl.viewport(0, 0, this.width, this.height);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-      // Swap ping-pong
-      const tmpTex = readTex;
-      const tmpFB = readFB;
-      readTex = writeTex;
-      readFB = writeFB;
-      writeTex = tmpTex;
-      writeFB = tmpFB;
-    }
-
-    // After the loop, the final result is in readTex/readFB.
-    // We need it in _accumTex/_accumFB for the composite step.
-    // If it's already there, great. If not, blit.
-    if (readTex !== this._accumTex) {
-      // The result ended up in _accumTex2 — blit to _accumTex
-      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, readFB);
-      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._accumFB);
-      gl.blitFramebuffer(0, 0, this.width, this.height, 0, 0, this.width, this.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
-    }
+    this._drawQuadTo(this._trailFB[write], this.width, this.height);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    this._trailEmpty = false;
+    this._trailHasFrame = true;
+  }
+
+  /**
+   * Read the trail image back as top-down RGBA rows. Dev parity probes only.
+   * @returns {Uint8Array} width*height*4 bytes, row 0 at the top
+   */
+  readTrailPixels() {
+    const gl = this.gl;
+    const w = this.width;
+    const h = this.height;
+    const raw = new Uint8Array(w * h * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this._accumFB);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    const out = new Uint8Array(raw.length);
+    for (let y = 0; y < h; y++) {
+      out.set(raw.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);
+    }
+    return out;
   }
 
   /**
@@ -1382,8 +1387,8 @@ export class WebGLRenderer {
    * states re-seed on the same occasions.
    */
   clearTrails() {
-    this._trailHead = -1;
-    this._trailSize = 0;
+    this._trailEmpty = true;
+    this._trailHasFrame = false;
     this._magNeedsSeed = true;
     this._magnitudeSource = null;
   }
@@ -1396,7 +1401,7 @@ export class WebGLRenderer {
     if (!gl) return;
 
     // Delete programs
-    [this._diffProg, this._blurProg, this._accumProg, this._compositeProg,
+    [this._diffProg, this._blurProg, this._trailProg, this._compositeProg,
      this._copyProg, this._boxPoolProg, this._emaProg, this._magCompositeProg, this._magnitudeDiffProg, this._magnitudeBandProg,
      this._poolProg].forEach(p => {
       if (p) gl.deleteProgram(p.prog);
@@ -1404,7 +1409,8 @@ export class WebGLRenderer {
 
     // Delete textures
     [this._srcTex, this._curTex, this._ringTex,
-     this._diffTex, this._blurTex, this._accumTex, this._accumTex2,
+     this._diffTex, this._blurTex, this._accumTex,
+     ...this._trailPeaks, ...this._trailAgeTex,
      this._magFrameTex, this._magBlurTex,
      ...this._magFastTex, ...this._magSlowTex,
      this._magnitudeTex, this._poolHTex, this._poolTex].forEach(t => {
@@ -1412,18 +1418,12 @@ export class WebGLRenderer {
     });
 
     // Delete framebuffers
-    [this._curFB, this._diffFB, this._blurFB, this._accumFB, this._accumFB2,
+    [this._curFB, this._diffFB, this._blurFB, this._accumFB, ...this._trailFB,
      this._magFrameFB, this._magBlurFB,
      ...this._magFastFB, ...this._magSlowFB,
      this._magnitudeFB, this._poolHFB, this._poolFB].forEach(fb => {
       if (fb) gl.deleteFramebuffer(fb);
     });
-
-    // Delete trail resources
-    for (let i = 0; i < this._trailTextures.length; i++) {
-      if (this._trailTextures[i]) gl.deleteTexture(this._trailTextures[i]);
-      if (this._trailFBs[i]) gl.deleteFramebuffer(this._trailFBs[i]);
-    }
 
     // VAO
     if (this._quadVAO) gl.deleteVertexArray(this._quadVAO);

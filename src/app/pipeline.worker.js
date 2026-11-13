@@ -1,13 +1,35 @@
 import { posyBlend, rawDiff } from '../core/diff.js';
 import { boxBlur, boxBlurFloat } from '../core/blur.js';
-import { accumulate } from '../core/trails.js';
+import { TRAIL_HOLD, clearTrailState, createTrailState, trailStep } from '../core/trails.js';
 import { addBand, boxPool, emaAlpha, emaStep, pooledSize, seedStatesFloat } from '../core/magnify.js';
 import { bandMagnitude, diffMagnitude, poolMagnitude } from '../core/magnitude.js';
-import { CircularBuffer, FrameRing, ringCapacity } from '../core/buffer.js';
+import { FrameRing, ringCapacity } from '../core/buffer.js';
 import { lookbackTime, shouldStore, storeInterval } from '../core/timebase.js';
 
-const TRAIL_CAP = 20;
-const trails = new CircularBuffer(TRAIL_CAP);
+// ── Trail feedback state (see core/trails.js) ──
+// Two states, ping-ponged: `trailCur` is the state after the last frame,
+// `trailPrev` the one that frame was computed from, kept so the same frame
+// can be re-rendered (a parameter change while paused) without stacking.
+const trailStates = [null, null];
+let trailCur = 0;
+let trailPrev = 0;
+let trailHasFrame = false;
+
+function trailsClear() {
+  for (const state of trailStates) if (state) clearTrailState(state);
+  trailCur = 0;
+  trailPrev = 0;
+  trailHasFrame = false;
+}
+
+function ensureTrailStates(pixelCount) {
+  if (trailStates[0] && trailStates[0].peaks.length === pixelCount * 4) return;
+  trailStates[0] = createTrailState(pixelCount);
+  trailStates[1] = createTrailState(pixelCount);
+  trailCur = 0;
+  trailPrev = 0;
+  trailHasFrame = false;
+}
 
 // ── Frame store ──
 // Lives here, not on the main thread: each message carries exactly one
@@ -57,7 +79,7 @@ function applyStep(step, time) {
   } else {
     ringClear();
   }
-  trails.clear();
+  trailsClear();
   magClear();
 }
 
@@ -112,44 +134,18 @@ function tintChannel(frame, index, tint) {
   );
 }
 
-function tintAgeFrame(frame, age, threshold, newestColor, oldestColor) {
-  const out = new Uint8ClampedArray(frame.length);
-  const thresholdNorm = threshold / 255;
-  const rFactor = newestColor[0] + ((oldestColor[0] - newestColor[0]) * age);
-  const gFactor = newestColor[1] + ((oldestColor[1] - newestColor[1]) * age);
-  const bFactor = newestColor[2] + ((oldestColor[2] - newestColor[2]) * age);
-
-  for (let i = 0; i < frame.length; i += 4) {
-    const motion = (
-      Math.abs(frame[i] - 128) +
-      Math.abs(frame[i + 1] - 128) +
-      Math.abs(frame[i + 2] - 128)
-    ) / (3 * 127);
-
-    if (motion > thresholdNorm) {
-      out[i] = Math.round(rFactor * motion * 255);
-      out[i + 1] = Math.round(gFactor * motion * 255);
-      out[i + 2] = Math.round(bFactor * motion * 255);
-    }
-
-    out[i + 3] = 255;
-  }
-
-  return out;
-}
-
 self.onmessage = function (e) {
   const msg = e.data;
 
   if (msg.type === 'clear') {
-    trails.clear();
+    trailsClear();
     ringClear();
     magClear();
     return;
   }
 
   if (msg.type === 'clearTrails') {
-    trails.clear();
+    trailsClear();
     return;
   }
 
@@ -174,7 +170,6 @@ self.onmessage = function (e) {
   const {
     frameOffset,
     threshold,
-    trailLength,
     channelSpread,
     algorithm,
     blurEnabled,
@@ -308,34 +303,22 @@ self.onmessage = function (e) {
     energyBuffer = pooledEnergy(magnitude, width, height, energyCols, energyRows);
   }
 
-  // The same frame rendered again replaces its trail entry.
-  if (step === 'repeat') trails.replaceNewest(diffData);
-  else trails.push(diffData);
-
-  const T = Math.min(trailLength, trails.size);
-  const frames = [];
-  for (let t = 0; t < T; t++) {
-    const frame = trails.get(t);
-    if (!frame) continue;
-
-    if (ageColorEnabled && algorithm === 'posy') {
-      const age = T <= 1 ? 0 : t / (T - 1);
-      frames.push(tintAgeFrame(frame, age, threshold, ageNewest, ageOldest));
-    } else {
-      frames.push(frame);
-    }
+  // Advance the trail by this diff. The same frame rendered again starts
+  // from the state the first attempt started from.
+  ensureTrailStates(width * height);
+  const isPosy = algorithm === 'posy';
+  if (!(step === 'repeat' && trailHasFrame)) {
+    trailPrev = trailCur;
+    trailCur = 1 - trailCur;
   }
-
-  const isPosy = algorithm === 'posy' && !ageColorEnabled;
-  const accResult = accumulate(frames, isPosy);
-
-  if (!accResult) {
-    self.postMessage(
-      { type: 'result', accumulatedBuffer: null, energyBuffer, energyCols, energyRows },
-      energyBuffer ? [energyBuffer] : []
-    );
-    return;
+  const accResult = new Uint8ClampedArray(len);
+  const trailOpts = { isPosy, ageStep: msg.trailAgeStep || 0, hold: TRAIL_HOLD };
+  if (ageColorEnabled && isPosy) {
+    trailOpts.ageColorNew = ageNewest;
+    trailOpts.ageColorOld = ageOldest;
   }
+  trailStep(trailStates[trailPrev], trailStates[trailCur], diffData, accResult, trailOpts);
+  trailHasFrame = true;
 
   const accBuffer = accResult.buffer;
   const transfers = [accBuffer];
