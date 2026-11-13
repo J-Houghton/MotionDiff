@@ -5,8 +5,8 @@
  * the arrow keys.
  *
  * Works for any mode whose params include `frameOffset`; `channelSpread` and
- * `trailLength` add their markers when the mode has them. Other modes get a
- * plain readout of their first few params instead.
+ * `trailLength` add their markers when the mode has them. Other modes show
+ * their `summary(params)` sentence instead.
  */
 import { asMs } from '../app/modes/params.js';
 
@@ -87,14 +87,11 @@ export function initRuler({ container, session }) {
     const has = (key) => mode.params.some((p) => p.key === key);
 
     if (!has('frameOffset')) {
-      // No lookback to draw: show the mode's main settings as text.
+      // No lookback to draw: the mode says in a sentence what its settings
+      // amount to (the panel already lists the numbers).
       track.hidden = true;
       readout.hidden = false;
-      readout.textContent = mode.params
-        .filter((p) => p.type === 'range' && (!p.when || p.when(params)))
-        .slice(0, 4)
-        .map((p) => `${p.label} ${p.format ? p.format(params[p.key]) : params[p.key]}`)
-        .join('   ·   ');
+      readout.textContent = mode.summary ? mode.summary(params) : '';
       return;
     }
     track.hidden = false;

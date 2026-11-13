@@ -24,6 +24,11 @@ export default {
     { key: 'magDownsample', label: 'Pool', type: 'select', default: 2, options: { '1x (full)': 1, '2x': 2, '4x': 4 } },
     BLUR,
   ],
+  summary(params) {
+    const low = Math.min(params.magFreqLow, params.magFreqHigh - 0.05);
+    const perMinute = (hz) => Math.round(hz * 60);
+    return `Amplifies what repeats ${perMinute(low)} to ${perMinute(params.magFreqHigh)} times a minute, ${params.magAmp} times over. A resting pulse is 50 to 90, breathing 12 to 20.`;
+  },
   // Magnify compares against nothing in the ring, but keeps it warm so
   // switching back to a differencing mode has history.
   render(frame) {

@@ -19,6 +19,9 @@
  *   composite true when diff / overlay / glow display applies
  *   worker    true when the Canvas2D worker fallback can run it too
  *   needsFloat true when it needs float render targets
+ *   summary(params)  optional: one sentence saying what the current
+ *             settings amount to, shown where the time ruler would be for
+ *             modes that do not look back by a gap.
  *   lookback(params)  optional: [shortest, longest] distance it reads back
  *             into the frame ring, in 1/30 s. Defaults to the gap and the
  *             gap plus two spreads.

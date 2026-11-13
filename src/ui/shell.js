@@ -49,14 +49,17 @@ const TEMPLATE = `
     <div class="vf vf-mode chrome">
       <span class="vf-num" id="vfNum"></span>
       <div class="vf-name">
-        <button type="button" class="vf-step" id="vfPrev" aria-label="Previous mode">◂</button>
+        <button type="button" class="vf-step" id="vfPrev" aria-label="Previous mode">‹</button>
         <b id="vfName"></b>
-        <button type="button" class="vf-step" id="vfNext" aria-label="Next mode">▸</button>
+        <button type="button" class="vf-step" id="vfNext" aria-label="Next mode">›</button>
       </div>
     </div>
     <div class="vf vf-meta chrome" id="vfMeta"></div>
     <div class="vf vf-readout chrome" id="vfReadout" aria-hidden="true"></div>
-    <button type="button" class="vf vf-exit chrome" id="vfExit" aria-label="Leave fullscreen">✕</button>
+    <div class="vf vf-actions chrome">
+      <button type="button" id="btnSource2">Source</button>
+      <button type="button" id="btnParams">Params</button>
+    </div>
 
     <div class="empty" id="empty">
       <h2>See what moves.</h2>
@@ -66,7 +69,10 @@ const TEMPLATE = `
     </div>
   </div>
   <aside class="panel chrome" id="panel" aria-label="Parameters">
-    <button type="button" class="panel-done phone-only" id="panelDone">Done</button>
+    <div class="panel-head">
+      <b>Parameters</b>
+      <button type="button" id="panelDone">Done</button>
+    </div>
     <div id="paneHost"></div>
   </aside>
 </main>
@@ -85,8 +91,7 @@ const TEMPLATE = `
     <button type="button" id="btnRate" aria-label="Playback speed">1×</button>
     <button type="button" id="btnFlip" aria-label="Flip camera" hidden>⟲ Flip</button>
     <button type="button" id="btnRec" aria-pressed="false">● Rec</button>
-    <button type="button" id="btnParams" class="phone-only">Params</button>
-    <button type="button" id="btnSource2" class="phone-only">Source</button>
+    <button type="button" id="btnExit" class="immersive-only">✕ Exit</button>
   </div>
   <input class="scrub" id="scrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Seek" disabled>
 </footer>
@@ -144,6 +149,7 @@ export function initShell({ root, session }) {
     original: false,
     immersive: false,   // fullscreen viewfinder on a desktop
     hidden: false,      // H: picture only
+    fill: null,         // viewfinder: true = crop to fill, false = show it all, null = decide by shape
     panel: !phone.matches,
     scrubbing: false,
   };
@@ -153,9 +159,17 @@ export function initShell({ root, session }) {
     const viewfinder = phone.matches || view.immersive;
     root.dataset.layout = viewfinder ? 'viewfinder' : 'plate';
     root.dataset.phone = String(phone.matches);
+    root.dataset.immersive = String(view.immersive && !phone.matches);
     root.dataset.panel = view.panel ? 'open' : 'closed';
     root.dataset.hidden = String(view.hidden);
     root.dataset.source = session.loaded ? 'ready' : 'empty';
+    // In the viewfinder the picture fills the screen, cropping what does not
+    // fit, unless that would lose more than half of it (a landscape clip on
+    // an upright phone): then it is shown whole. A double tap switches.
+    const shape = session.pipeline.width / session.pipeline.height || 16 / 9;
+    const screen = window.innerWidth / window.innerHeight;
+    const kept = Math.min(shape / screen, screen / shape);
+    root.dataset.fit = (view.fill ?? kept >= 0.5) ? 'fill' : 'whole';
     measureChrome();
     $('btnPanel').setAttribute('aria-expanded', String(view.panel));
     $('panel').inert = !view.panel;
@@ -168,7 +182,7 @@ export function initShell({ root, session }) {
     root.style.setProperty('--chrome-h', `${chrome}px`);
   }
   new ResizeObserver(measureChrome).observe(root.querySelector('.cap'));
-  window.addEventListener('resize', measureChrome);
+  window.addEventListener('resize', () => applyLayout());
 
   function setTheme(theme) {
     document.documentElement.dataset.theme = theme;
@@ -264,8 +278,9 @@ export function initShell({ root, session }) {
       .filter(Boolean).map((line) => Object.assign(document.createElement('div'), { textContent: line })));
     $('btnFlip').hidden = source?.kind !== 'camera';
     scrub.disabled = !session.loaded || session.isLive;
+    scrub.hidden = session.loaded && session.isLive; // nothing to seek in a live source
     $('timeTotal').textContent = !session.loaded ? '' : session.isLive ? ' · live' : ` / ${formatTime(session.duration, false)}`;
-    for (const id of ['btnBack', 'btnForward']) $(id).disabled = !session.loaded || session.isLive;
+    for (const id of ['btnBack', 'btnForward', 'btnRate']) $(id).disabled = !session.loaded || session.isLive;
     $('btnPlay').disabled = $('btnRec').disabled = !session.loaded;
     applyLayout();
     applySplit();
@@ -384,7 +399,8 @@ export function initShell({ root, session }) {
   }
   const keysList = $('keysList');
   for (const [keys, what] of SHORTCUTS) {
-    keysList.append(Object.assign(document.createElement('dt'), { textContent: keys }), Object.assign(document.createElement('dd'), { textContent: what }));
+    const shown = what === 'Mode' ? `1 – ${MODES.length}` : keys;
+    keysList.append(Object.assign(document.createElement('dt'), { textContent: shown }), Object.assign(document.createElement('dd'), { textContent: what }));
   }
 
   // ── Actions (buttons and keys share them) ───────────────────
@@ -448,7 +464,7 @@ export function initShell({ root, session }) {
   click('btnParams', actions.panel);
   click('panelDone', actions.panel);
   click('btnFull', actions.fullscreen);
-  click('vfExit', actions.fullscreen);
+  click('btnExit', actions.fullscreen);
   click('btnTheme', actions.theme);
   click('btnKeys', actions.keys);
   click('btnPlay', actions.toggle);
@@ -460,6 +476,11 @@ export function initShell({ root, session }) {
   const cycleMode = (direction) => actions.mode((MODES.indexOf(session.mode) + direction + MODES.length) % MODES.length);
   click('vfPrev', () => cycleMode(-1));
   click('vfNext', () => cycleMode(1));
+  canvas.addEventListener('dblclick', () => {
+    if (root.dataset.layout !== 'viewfinder') return;
+    view.fill = root.dataset.fit !== 'fill';
+    applyLayout();
+  });
   // Tapping the picture on a phone brings the overlays back (or hides them).
   canvas.addEventListener('click', () => {
     if (root.dataset.layout !== 'viewfinder') return;

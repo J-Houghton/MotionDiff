@@ -69,7 +69,7 @@ const offscreen = [...app.querySelectorAll('button, [role="slider"], input, sele
   .filter(visible).filter((el) => { const r = el.getBoundingClientRect(); return r.left < -1 || r.top < -1 || r.right > vw + 1 || r.bottom > vh + 1; })
   .filter((el) => !el.closest('.panel, .sheet-body')) // those scroll
   .map(name);
-const blocks = [...app.querySelectorAll('.mast, .cap, .panel, .vf-mode, .vf-meta, .vf-readout, .vf-exit, .status, .tag, .ruler-mark b, .ruler-now b, .ruler-lab')]
+const blocks = [...app.querySelectorAll('.mast, .cap, .panel, .vf-mode, .vf-meta, .vf-readout, .vf-actions, .status, .tag, .ruler-mark b, .ruler-now b, .ruler-lab')]
   .filter(visible).filter((el) => el.textContent.trim() || el.matches('.mast, .cap, .panel'));
 const overlaps = [];
 for (let i = 0; i < blocks.length; i++) {
