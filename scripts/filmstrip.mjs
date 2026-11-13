@@ -96,6 +96,8 @@ async function cmdRender(args) {
       const result = await page.eval(pageScript('scene.js') + pageScript('render.js'), {
         synthetic: clip.synthetic,
         readData: scene.readData,
+        readTarget: scene.readTarget,
+        switch: scene.switch,
         clipUrl: new URL(`ref-clips/${clip.file}`, base).href,
         clipName: clip.file,
         fps: clip.fps,
@@ -113,6 +115,7 @@ async function cmdRender(args) {
       saveDataUrl(path.join(outDir, `${tag}${scene.name}.original.jpg`), result.original);
       meta[scene.name] = result.meta;
       if (result.data) fs.writeFileSync(path.join(outDir, `${tag}${scene.name}.data.json`), JSON.stringify(result.data));
+      if (result.target) fs.writeFileSync(path.join(outDir, `${tag}${scene.name}.target.json`), JSON.stringify(result.target));
       const note = result.meta.missed ? `  (${result.meta.missed} frames timed out)` : '';
       console.log(`${tag}${scene.name}: ${result.meta.count} frames, t=${result.meta.times[0]}..${result.meta.times.at(-1)} [${result.meta.renderer}]${note}`);
       for (const line of result.logs) console.log('   page:', line);

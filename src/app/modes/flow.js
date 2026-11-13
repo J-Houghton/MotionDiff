@@ -71,6 +71,9 @@ void main() {
   fragColor = vec4(hue(atan(v.y, v.x) / 6.2831853) * shown, 1.0);
 }`;
 
+/** The speed drawn at full strength, as a share of the picture's width per second. */
+export const SPEED_RANGE = { key: 'flowRange', label: 'Speed range', type: 'range', min: 2, max: 100, step: 1, default: 25, format: (v) => `${v}% of width / s` };
+
 /** Controls for particle traces, shared by every mode that can show them. */
 export const TRACE_PARAMS = [
   { key: 'traceDensity', label: 'Traces', type: 'range', min: 5, max: 60, step: 5, default: 25, format: (v) => `${v} per 1000 px` },
@@ -132,7 +135,7 @@ export default {
   params: [
     { key: 'flowShow', label: 'Show', type: 'select', default: 'particles', options: { 'Particle traces': 'particles', 'Colour': 'colour' } },
     { key: 'flowGap', label: 'Gap', type: 'range', min: 1, max: 15, step: 1, default: 2, format: asMs },
-    { key: 'flowRange', label: 'Speed range', type: 'range', min: 2, max: 100, step: 1, default: 25, format: (v) => `${v}% of width / s` },
+    SPEED_RANGE,
     { key: 'flowSmoothing', label: 'Smoothing', type: 'range', min: 0, max: 30, step: 1, default: 6, format: asMs },
     ...TRACE_PARAMS.map((param) => ({ ...param, when: (p) => p.flowShow === 'particles' })),
   ],

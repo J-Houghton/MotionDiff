@@ -101,6 +101,21 @@ const hexToUnit = (hex, fallback) => {
 const STATES = new WeakMap();
 
 /**
+ * Reduce a float texture by whole-block means until it is at most
+ * `maxWidth` wide: small enough to read back every frame.
+ * @param {object} renderer
+ * @param {string} key - Names the target
+ * @param {{tex, width, height}} source
+ * @param {number} maxWidth
+ * @returns {{tex, fb, width, height}}
+ */
+export function reduceField(renderer, key, source, maxWidth) {
+  const factor = Math.max(1, Math.ceil(source.width / maxWidth));
+  const target = renderer.target(key, Math.ceil(source.width / factor), Math.ceil(source.height / factor), { float: true });
+  return flowPass(renderer, 'particles:field', FIELD_FRAG, { uSource: 0 }, target, [source.tex], (gl, u) => gl.uniform1i(u.uFactor, factor));
+}
+
+/**
  * Reduce a velocity texture to the size the particles read.
  * @param {object} renderer
  * @param {string} key
@@ -108,9 +123,7 @@ const STATES = new WeakMap();
  * @returns {{tex, fb, width, height}}
  */
 export function particleField(renderer, key, velocity) {
-  const factor = Math.max(1, Math.ceil(velocity.width / FIELD_MAX_WIDTH));
-  const target = renderer.target(`${key}:field`, Math.ceil(velocity.width / factor), Math.ceil(velocity.height / factor), { float: true });
-  return flowPass(renderer, 'particles:field', FIELD_FRAG, { uSource: 0 }, target, [velocity.tex], (gl, u) => gl.uniform1i(u.uFactor, factor));
+  return reduceField(renderer, `${key}:field`, velocity, FIELD_MAX_WIDTH);
 }
 
 /**

@@ -23,7 +23,16 @@
 // against the truth, and for any scene how much of the still background reads
 // under 5 px/s.
 //   node scripts/truth-check.mjs --dir filmstrips --tag flow --scene flow-colour --flow 1
+//
+// With --schlieren 1 (data G, B = the measured shift in pixels) on a `plume`
+// scene it compares the shift with the known field of the synthetic plume:
+// how well they correlate and how their sizes compare where the plume is,
+// and how quiet the picture is beside it. Only meaningful with a reference
+// held from before the plume was lit. With --target 1 it reads the scene's
+// saved velocity target instead (traces): heading and speed of the eddies.
+//   node scripts/truth-check.mjs --dir filmstrips --tag sch --scene plume-knife-held --schlieren 1
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const args = {};
@@ -62,6 +71,100 @@ function outlines(state, dt, grow) {
     shapes.push((x, y) => Math.hypot(x - (d.cx + dx), y - (d.cy + dy)) <= d.r + grow);
   }
   return (x, y) => shapes.some((inside) => inside(x, y));
+}
+
+// ── Schlieren: the measured shift against the synthetic plume ────
+if (args.schlieren) {
+  // The scenes file is plain script; its plume field has no DOM in it.
+  const source = fs.readFileSync(fileURLToPath(new URL('./page/scene.js', import.meta.url)), 'utf8');
+  const field = new Function(`${source}; return plumeField;`)()(now.plume);
+  const W = 640;
+  const H = 360;
+  const truth = field.fieldAt(now.t, W, H);
+
+  if (args.target) {
+    const target = JSON.parse(fs.readFileSync(path.join(dir, `${tag}${args.scene}.target.json`), 'utf8'));
+    const sx = W / target.width;
+    const sy = H / target.height;
+    const inside = { n: 0, present: 0, sumX: 0, sumY: 0, speed: 0, within20: 0 };
+    const outside = { n: 0, moving: 0 };
+    for (let y = 0; y < target.height; y++) {
+      for (let x = 0; x < target.width; x++) {
+        const i = (y * target.width + x) * 4;
+        const vx = target.values[i];
+        const vy = target.values[i + 1];
+        const speed = Math.hypot(vx, vy);
+        const px = (x + 0.5) * sx;
+        const py = (y + 0.5) * sy;
+        // Where the eddies are: above the smooth column, inside the cone.
+        if (field.inPlume(px, py, -14) && field.source.y - py > field.columnHeight + 20 && field.source.y - py < field.span - 60) {
+          inside.n++;
+          if (speed > 5) {
+            inside.present++;
+            inside.sumX += vx; inside.sumY += vy; inside.speed += speed;
+            const error = Math.abs((((Math.atan2(vy, vx) * 180) / Math.PI - now.heading + 540) % 360) - 180);
+            if (error <= 20) inside.within20++;
+          }
+        } else if (!field.inPlume(px, py, 30)) {
+          outside.n++;
+          if (speed > 5) outside.moving++;
+        }
+      }
+    }
+    const heading = ((Math.atan2(inside.sumY, inside.sumX) * 180) / Math.PI + 360) % 360;
+    console.log(JSON.stringify({
+      scene: args.scene, t: now.t,
+      eddies: {
+        measuredShare: +((100 * inside.present) / inside.n).toFixed(1),
+        meanHeading: +heading.toFixed(1), knownHeading: now.heading,
+        headingError: +Math.abs(((heading - now.heading + 540) % 360) - 180).toFixed(1),
+        within20deg: +((100 * inside.within20) / Math.max(1, inside.present)).toFixed(1),
+        meanSpeed: +(inside.speed / Math.max(1, inside.present)).toFixed(1), knownSpeed: now.rise,
+        speedAlongHeading: +(Math.hypot(inside.sumX, inside.sumY) / Math.max(1, inside.present)).toFixed(1),
+      },
+      stillBackgroundMoving: +((100 * outside.moving) / outside.n).toFixed(2),
+    }, null, 1));
+    process.exit(0);
+  }
+
+  const unit = 1 / scale;
+  let sumMT = 0, sumMM = 0, sumTT = 0, n = 0, drawn = 0;
+  const quiet = [];
+  let typical = 0, typicalN = 0;
+  for (let y = 0; y < data.height; y++) {
+    for (let x = 0; x < data.width; x++) {
+      const i = (y * data.width + x) * 4;
+      const mx = data.values[i + 1] * unit;
+      const my = data.values[i + 2] * unit;
+      const px = Math.min(W - 1, Math.floor((x + 0.5) / scale));
+      const py = Math.min(H - 1, Math.floor((y + 0.5) / scale));
+      const tx = truth[(py * W + px) * 2];
+      const ty = truth[(py * W + px) * 2 + 1];
+      const size = Math.hypot(tx, ty);
+      if (size > 0.05 * field.peak / 0.3 && (!args.xmax || px < Number(args.xmax))) {
+        sumMT += mx * tx + my * ty; sumMM += mx * mx + my * my; sumTT += tx * tx + ty * ty; n++;
+        typical += size; typicalN++;
+        if (data.values[i] > 0) drawn++;
+      } else if (!field.inPlume(px, py, 30) && px > 12 && py > 12 && px < W - 12 && py < H - 12 && (!args.xmax || px < Number(args.xmax))) {
+        quiet.push(Math.hypot(mx, my));
+      }
+    }
+  }
+  quiet.sort((a, b) => a - b);
+  const rms = Math.sqrt(quiet.reduce((s, v) => s + v * v, 0) / Math.max(1, quiet.length));
+  console.log(JSON.stringify({
+    scene: args.scene, t: now.t, plumePixels: n,
+    correlation: +(sumMT / Math.sqrt(sumMM * sumTT)).toFixed(3),
+    sizeRatio: +(sumMT / sumTT).toFixed(3),
+    typicalShift: +(typical / Math.max(1, typicalN)).toFixed(4),
+    largestTrueShift: +truth.reduce((m, v, k) => (k % 2 ? m : Math.max(m, Math.hypot(v, truth[k + 1]))), 0).toFixed(3),
+    drawnShareOfPlume: +((100 * drawn) / Math.max(1, n)).toFixed(1),
+    quietRms: +rms.toFixed(4),
+    quietMedian: +(quiet[quiet.length >> 1] || 0).toFixed(4),
+    quiet99: +(quiet[Math.floor(quiet.length * 0.99)] || 0).toFixed(4),
+    noiseOverTypical: +(rms / (typical / Math.max(1, typicalN))).toFixed(3),
+  }, null, 1));
+  process.exit(0);
 }
 
 // ── Optical flow: velocity against the truth ─────────────────────

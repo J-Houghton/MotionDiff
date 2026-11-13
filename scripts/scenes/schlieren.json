@@ -1,0 +1,419 @@
+{
+ "scenes": [
+  {
+   "name": "plume-raw",
+   "clip": "plume",
+   "at": 3,
+   "frames": 6,
+   "every": 6,
+   "warmup": 99,
+   "display": "diff",
+   "params": {
+    "algorithm": "raw",
+    "frameOffset": 3,
+    "threshold": 0,
+    "trailLength": 0,
+    "channelSpread": 0
+   }
+  },
+  {
+   "name": "plume-knife-held",
+   "clip": "plume",
+   "at": 3,
+   "frames": 6,
+   "every": 6,
+   "warmup": 99,
+   "display": "diff",
+   "readData": true,
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenShow": "knife",
+    "schlierenHold": false,
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1
+   },
+   "switch": {
+    "at": 0.9,
+    "params": {
+     "schlierenHold": true
+    }
+   }
+  },
+  {
+   "name": "plume-strength-held",
+   "clip": "plume",
+   "at": 3,
+   "frames": 6,
+   "every": 6,
+   "warmup": 99,
+   "display": "diff",
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenShow": "strength",
+    "schlierenHold": false,
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1
+   },
+   "switch": {
+    "at": 0.9,
+    "params": {
+     "schlierenHold": true
+    }
+   }
+  },
+  {
+   "name": "plume-knife-follow",
+   "clip": "plume",
+   "at": 3,
+   "frames": 6,
+   "every": 6,
+   "warmup": 99,
+   "display": "diff",
+   "readData": true,
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenShow": "knife",
+    "schlierenHold": false,
+    "schlierenReference": 60,
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1
+   }
+  },
+  {
+   "name": "plume-traces",
+   "clip": "plume",
+   "at": 3,
+   "frames": 6,
+   "every": 6,
+   "warmup": 99,
+   "display": "diff",
+   "readTarget": "schlieren:move:smoothed",
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenShow": "traces",
+    "schlierenHold": false,
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1,
+    "flowRange": 40,
+    "traceColour": "heading"
+   },
+   "switch": {
+    "at": 0.9,
+    "params": {
+     "schlierenHold": true
+    }
+   },
+   "readData": true
+  },
+  {
+   "name": "weak-knife-held",
+   "clip": "plume-weak",
+   "at": 3,
+   "frames": 6,
+   "every": 6,
+   "warmup": 99,
+   "display": "diff",
+   "readData": true,
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenShow": "knife",
+    "schlierenHold": false,
+    "schlierenRange": 8,
+    "schlierenWindow": 6,
+    "schlierenSmooth": 2
+   },
+   "switch": {
+    "at": 0.9,
+    "params": {
+     "schlierenHold": true
+    }
+   }
+  },
+  {
+   "name": "wall-strength-held",
+   "clip": "plume-wall",
+   "at": 3,
+   "frames": 6,
+   "every": 6,
+   "warmup": 99,
+   "display": "diff",
+   "readData": true,
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenShow": "strength",
+    "schlierenHold": false,
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1
+   },
+   "switch": {
+    "at": 0.9,
+    "params": {
+     "schlierenHold": true
+    }
+   }
+  },
+  {
+   "name": "wall-check",
+   "clip": "plume-wall",
+   "at": 3,
+   "frames": 3,
+   "every": 6,
+   "warmup": 99,
+   "display": "diff",
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenShow": "check",
+    "schlierenHold": false
+   }
+  },
+  {
+   "name": "drift-strength-steady",
+   "clip": "plume-drift",
+   "at": 5,
+   "frames": 6,
+   "every": 6,
+   "warmup": 99,
+   "display": "diff",
+   "readData": true,
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenShow": "strength",
+    "schlierenHold": false,
+    "schlierenSteady": true,
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1
+   },
+   "switch": {
+    "at": 0.9,
+    "params": {
+     "schlierenHold": true
+    }
+   }
+  },
+  {
+   "name": "drift-strength-uncorrected",
+   "clip": "plume-drift",
+   "at": 5,
+   "frames": 6,
+   "every": 6,
+   "warmup": 99,
+   "display": "diff",
+   "readData": true,
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenShow": "strength",
+    "schlierenHold": false,
+    "schlierenSteady": false,
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1
+   },
+   "switch": {
+    "at": 0.9,
+    "params": {
+     "schlierenHold": true
+    }
+   }
+  },
+  {
+   "name": "screen-raw",
+   "clip": "candle-screen",
+   "at": 4.2,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "params": {
+    "algorithm": "raw",
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1,
+    "frameOffset": 3,
+    "threshold": 0,
+    "trailLength": 0,
+    "channelSpread": 0
+   },
+   "warmup": 99
+  },
+  {
+   "name": "screen-knife-held",
+   "clip": "candle-screen",
+   "at": 4.2,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1,
+    "schlierenShow": "knife",
+    "schlierenHold": false
+   },
+   "warmup": 99,
+   "switch": {
+    "at": 0.8,
+    "params": {
+     "schlierenHold": true
+    }
+   }
+  },
+  {
+   "name": "screen-strength-held",
+   "clip": "candle-screen",
+   "at": 4.2,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1,
+    "schlierenShow": "strength",
+    "schlierenHold": false
+   },
+   "warmup": 99,
+   "switch": {
+    "at": 0.8,
+    "params": {
+     "schlierenHold": true
+    }
+   }
+  },
+  {
+   "name": "screen-knife-follow",
+   "clip": "candle-screen",
+   "at": 4.2,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1,
+    "schlierenShow": "knife",
+    "schlierenHold": false
+   },
+   "warmup": 99
+  },
+  {
+   "name": "screen-traces",
+   "clip": "candle-screen",
+   "at": 4.2,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1,
+    "schlierenShow": "traces",
+    "schlierenHold": false,
+    "flowRange": 40
+   },
+   "warmup": 99,
+   "switch": {
+    "at": 0.8,
+    "params": {
+     "schlierenHold": true
+    }
+   }
+  },
+  {
+   "name": "dots-raw",
+   "clip": "candle-dots",
+   "at": 9,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "params": {
+    "algorithm": "raw",
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1,
+    "frameOffset": 3,
+    "threshold": 0,
+    "trailLength": 0,
+    "channelSpread": 0
+   },
+   "warmup": 4
+  },
+  {
+   "name": "dots-knife-follow",
+   "clip": "candle-dots",
+   "at": 9,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1,
+    "schlierenShow": "knife",
+    "schlierenHold": false
+   },
+   "warmup": 4
+  },
+  {
+   "name": "dots-strength-follow",
+   "clip": "candle-dots",
+   "at": 9,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1,
+    "schlierenShow": "strength",
+    "schlierenHold": false
+   },
+   "warmup": 4
+  },
+  {
+   "name": "dots-traces",
+   "clip": "candle-dots",
+   "at": 9,
+   "frames": 6,
+   "every": 6,
+   "display": "diff",
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1,
+    "schlierenShow": "traces",
+    "schlierenHold": false,
+    "flowRange": 40
+   },
+   "warmup": 4
+  },
+  {
+   "name": "dots-check",
+   "clip": "candle-dots",
+   "at": 9,
+   "frames": 3,
+   "every": 6,
+   "display": "diff",
+   "params": {
+    "algorithm": "schlieren",
+    "schlierenRange": 25,
+    "schlierenWindow": 4,
+    "schlierenSmooth": 1,
+    "schlierenShow": "check",
+    "schlierenHold": false
+   },
+   "warmup": 2
+  }
+ ]
+}

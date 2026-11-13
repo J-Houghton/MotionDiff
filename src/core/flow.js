@@ -470,22 +470,21 @@ export function smoothedVector(state, i, floor, out) {
  * shifts everything by about this much; subtracting it leaves what moved
  * within the picture.
  *
- * @param {Float32Array} flow - 3 per pixel
+ * @param {Float32Array} flow - `stride` values per pixel: dx, dy, confidence
  * @param {number} count - Pixels
  * @param {number} trusted - Only vectors with at least this confidence count
- * @param {number} [stride] - Use every stride-th pixel
+ * @param {number} [stride] - Values per pixel (3; 4 for a field read back from the GPU)
  * @returns {{dx: number, dy: number, share: number}} share: how much of the
- *   sampled field was trusted
+ *   field was trusted
  */
-export function globalShift(flow, count, trusted, stride = 1) {
+export function globalShift(flow, count, trusted, stride = 3) {
   const xs = [];
   const ys = [];
-  let sampled = 0;
-  for (let p = 0; p < count; p += stride) {
-    sampled++;
-    if (flow[p * 3 + 2] >= trusted) {
-      xs.push(flow[p * 3]);
-      ys.push(flow[p * 3 + 1]);
+  const sampled = count;
+  for (let p = 0; p < count; p++) {
+    if (flow[p * stride + 2] >= trusted) {
+      xs.push(flow[p * stride]);
+      ys.push(flow[p * stride + 1]);
     }
   }
   if (!xs.length) return { dx: 0, dy: 0, share: 0 };

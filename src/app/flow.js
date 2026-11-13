@@ -294,8 +294,51 @@ export function flowBetween(renderer, key, older, current, options = {}) {
   return at[0].flow;
 }
 
-/** Which of the two smoothing targets is current, per renderer and key. */
-const SMOOTH_STATES = new WeakMap();
+/** Which of two feedback targets is current, per renderer and key. */
+const PING_STATES = new WeakMap();
+
+/**
+ * Bookkeeping for feedback state kept in two targets (the trail's rules):
+ * each frame reads one and writes the other; a frame rendered again while
+ * paused reads what it read the first time, so the state is recomputed, not
+ * advanced twice; everything starts over when the renderer's epoch changes
+ * or a target was rebuilt.
+ *
+ * @param {object} renderer
+ * @param {string} key
+ * @param {{tex, fb, fresh}[]} targets - Two targets
+ * @param {boolean} repeat - The same frame again
+ * @param {boolean} [hold] - Leave the state as it is (once it has content):
+ *   `to` is then the current target and must not be drawn to
+ * @returns {{from: object, to: object, empty: boolean, seen: number, held: boolean}}
+ *   empty: `from` has no content yet; seen: frames written before this one
+ */
+export function pingPong(renderer, key, targets, repeat, hold = false) {
+  let states = PING_STATES.get(renderer);
+  if (!states) PING_STATES.set(renderer, (states = new Map()));
+  let state = states.get(key);
+  if (!state || state.epoch !== renderer.epoch || targets[0].fresh || targets[1].fresh) {
+    state = { epoch: renderer.epoch, current: 0, previous: 0, seen: 0, previousSeen: 0, drawn: false };
+    states.set(key, state);
+    targets[0].fresh = targets[1].fresh = false;
+  }
+  if (hold && state.seen > 0) return { from: targets[state.current], to: targets[state.current], empty: false, seen: state.seen, held: true };
+  let read;
+  let seen;
+  if (repeat && state.drawn) {
+    read = state.previous;
+    seen = state.previousSeen;
+  } else {
+    read = state.current;
+    seen = state.seen;
+    state.previous = read;
+    state.previousSeen = seen;
+    state.current = 1 - read;
+  }
+  state.seen = seen + 1;
+  state.drawn = true;
+  return { from: targets[read], to: targets[state.current], empty: seen === 0, seen, held: false };
+}
 
 /**
  * Running average of a flow texture, weighted by confidence (mirrors
@@ -315,34 +358,12 @@ export function flowSmooth(renderer, key, measured, options) {
   const { width, height } = measured;
   const targets = [renderer.target(`${key}:smooth0`, width, height, { float: true }), renderer.target(`${key}:smooth1`, width, height, { float: true })];
   const resolved = renderer.target(`${key}:smoothed`, width, height, { float: true });
-  let states = SMOOTH_STATES.get(renderer);
-  if (!states) SMOOTH_STATES.set(renderer, (states = new Map()));
-  let state = states.get(key);
-  if (!state || state.epoch !== renderer.epoch || targets[0].fresh || targets[1].fresh) {
-    state = { epoch: renderer.epoch, current: 0, previous: 0, empty: true, previousEmpty: true, drawn: false };
-    states.set(key, state);
-    targets[0].fresh = targets[1].fresh = false;
-  }
-  let read;
-  let empty;
-  if (options.repeat && state.drawn) {
-    read = state.previous;
-    empty = state.previousEmpty;
-  } else {
-    read = state.current;
-    empty = state.empty;
-    state.previous = read;
-    state.previousEmpty = empty;
-    state.current = 1 - read;
-  }
-  const out = targets[state.current];
-  flowPass(renderer, 'flow:smooth', SMOOTH_FRAG, { uPrevious: 0, uMeasured: 1 }, out, [targets[read].tex, measured.tex], (gl, u) => {
+  const { from, to: out, empty } = pingPong(renderer, `${key}:smooth`, targets, options.repeat);
+  flowPass(renderer, 'flow:smooth', SMOOTH_FRAG, { uPrevious: 0, uMeasured: 1 }, out, [from.tex, measured.tex], (gl, u) => {
     gl.uniform1f(u.uAlpha, options.alpha);
     gl.uniform1f(u.uTrusted, options.trusted);
     gl.uniform1i(u.uEmpty, empty ? 1 : 0);
   });
-  state.empty = false;
-  state.drawn = true;
   return flowPass(renderer, 'flow:resolve', RESOLVE_FRAG, { uState: 0 }, resolved, [out.tex], (gl, u) => gl.uniform1f(u.uFloor, options.floor));
 }
 

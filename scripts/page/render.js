@@ -10,7 +10,9 @@
 //     timestamp. Browser-recorded clips cannot be seeked frame-accurately.
 //
 // `args`: { clipUrl, clipName, synthetic, fps, at, frames, every, warmup,
-//           params, display, width, cell, columns }
+//           params, display, width, cell, columns,
+//           switch: { at, params }   settings applied from that moment on
+//           readTarget               name of a mode's render target to save }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Builds before the dev API existed (old UI) are driven through their DOM,
@@ -161,7 +163,9 @@ const times = [];
 const truth = [];
 let missed = 0;
 let captured = 0;
+let switched = false;
 for (let index = firstIndex; captured < count; index++) {
+  if (args.switch && !switched && index * dt >= args.switch.at) { md.setParams(args.switch.params); switched = true; }
   const isCapture = index >= captureFrom && (index - captureFrom) % every === 0;
   const cell = captured;
   const ok = await stepFrame(index, isCapture ? () => {
@@ -184,7 +188,24 @@ if (args.readData && pipeline.readData) {
   if (field) data = { kind: field.kind, width: field.width, height: field.height, values: Array.from(field.values, (v) => +v.toFixed(4)) };
 }
 
+// A mode's own float target (for example a velocity field), row 0 at the top.
+let target = null;
+if (args.readTarget && pipeline._glRenderer) {
+  const found = pipeline._glRenderer._modeTargets.get(args.readTarget);
+  if (found) {
+    const gl = pipeline._glRenderer.gl;
+    const raw = new Float32Array(found.width * found.height * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, found.fb);
+    gl.readPixels(0, 0, found.width, found.height, gl.RGBA, gl.FLOAT, raw);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const values = [];
+    for (let y = found.height - 1; y >= 0; y--) for (let i = 0; i < found.width * 4; i++) values.push(+raw[y * found.width * 4 + i].toFixed(4));
+    target = { name: args.readTarget, width: found.width, height: found.height, values };
+  }
+}
+
 return {
+  target,
   strip: strip.toDataURL('image/png'),
   original: original.toDataURL('image/jpeg', 0.9),
   meta: { cellW, cellH, columns, rows, count, times, missed, truth: truth.length ? truth : undefined, renderer: pipeline._useWebGL ? 'webgl' : 'canvas2d', output: [canvas.width, canvas.height] },
