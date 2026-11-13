@@ -1,6 +1,11 @@
 # Optical flow: design note
 
-Status: **design only, nothing built.** Feature 4 of the session 3 plan. The method
+Status: **built in session 4** as `core/flow.js`, `app/flow.js` and the Optical flow
+mode (`app/modes/flow.js`); results in `verdicts.md` V5. The global-motion estimate,
+camera compensation and the stabiliser are still to do. What follows is the design as
+written beforehand; **"As built" at the end lists where the code differs.**
+
+Feature 4 of the session 3 plan. The method
 was chosen in `docs/research.md` §4; this note turns it into a build plan against the
 code as it stands after the motion mask, motion history and background model modes.
 
@@ -120,3 +125,31 @@ correction, particles, and the Canvas2D path. Reasons in `docs/research.md` §4.
 4. `globalMotion` with an asynchronous 8×8 readback; the `handheld` check.
 5. Only then, and as separate roadmap items: camera compensation as a pre-pass for
    the other modes, and the stabiliser.
+
+## As built (session 4)
+- **Separable window.** Each size is solved in passes: warp the older frame by the
+  guess, write the tensor terms and the mismatch terms to two targets, average each
+  over the window by rows and then columns, solve. A 7×7 window costs 14 reads that
+  way instead of 49, and larger windows (schlieren uses 9×9 and up) stay cheap.
+- **Brightness in levels (0..255)**, not 0..1: the squares of 0..1 slopes fall into
+  the range where half floats lose precision or are flushed to zero.
+- **Slopes averaged over both frames**, which cancels most of the error of a
+  half-pixel shift.
+- **Confidence is three things multiplied**: texture (the smaller eigenvalue, as
+  planned); how much of the change the shift leaves unexplained (`FLOW_MISFIT`); and
+  whether "nothing moved" explains the frames as well (`FLOW_STILL`). The last was
+  not planned. Without it the coarse sizes smeared a mover's motion up to 40 px into
+  its still surroundings: 9% of the still background read as moving; with it, 0.65%.
+- **Four sizes** when the working width is 240 px or more (reach about 15 working
+  pixels per gap), three below.
+- **Its own Gap control** (67 ms by default), not the shared one: flow wants a much
+  shorter gap than differencing.
+- **Smoothing is unbiased**: a running sum of confidence-weighted vectors and a running
+  sum of the weights, divided at the end. A first version weighted the vectors alone
+  and read speeds 8% to 14% low.
+- **Particles** are in, by the owner's decision (`particles.md`). The arrow grid was
+  not built.
+- **The probe** `__motionDiffFlowParity()` passes at 0.033 px largest difference,
+  no trusted vector more than 0.05 px apart.
+- **Not built yet:** `globalMotion` for a moving camera (a `globalShift` median
+  exists and schlieren uses it), camera compensation, the stabiliser.

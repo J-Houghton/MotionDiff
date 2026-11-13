@@ -86,6 +86,11 @@ export class Pipeline {
       gl: null, ring: null, time: 0, step: 'first', dtMs: 0, stepMs: 0, trailAgeStep: 0,
       params: this.params, display: 'diff', layers: [0, 0, 0],
     };
+    // A mode may say something about what it sees (frame.note): passed on to
+    // the status line when the text changes, at most about once a second.
+    this._frame.note = (message, type = 'info') => this._note(message, type);
+    this._lastNote = '';
+    this._lastNoteAt = 0;
     // Why the active mode cannot run here, if it cannot (reported once)
     this._unavailable = null;
 
@@ -539,6 +544,14 @@ export class Pipeline {
   }
 
   /** Tell the UI once why the active mode shows nothing. */
+  _note(message, type) {
+    const now = performance.now();
+    if (message === this._lastNote || now - this._lastNoteAt < 1200) return;
+    this._lastNote = message;
+    this._lastNoteAt = now;
+    if (this.onStatus) this.onStatus(message, type);
+  }
+
   _reportUnavailable(reason) {
     if (this._unavailable === reason) return;
     this._unavailable = reason;

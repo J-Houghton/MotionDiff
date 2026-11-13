@@ -16,6 +16,8 @@ See what moves. MotionDiff is a browser tool that takes a video (a file, a URL, 
 | 4 | **Motion mask** | Whatever is moving, cut out once, where it is now, in its own colours |
 | 5 | **Motion history** | A band along each mover's path, coloured by how long ago it passed, or by which way it was heading |
 | 6 | **Background model** | Whatever is not part of the usual scene, whole, whether it is moving or has stopped |
+| 7 | **Optical flow** | How fast and which way each patch of the picture is moving: as flowing particle traces in the manner of a wind map, or as colour |
+| 8 | **Schlieren** | Hot air and gas made visible. Film a candle or a heater against a detailed background with a still camera: the plume appears where the video shows nothing |
 
 | ![Posy mode on trees in wind](docs/screenshots/plate-posy.png) | ![Background model on traffic](docs/screenshots/plate-background-model.png) | ![The viewfinder layout on a phone](docs/screenshots/phone-viewfinder.png) |
 |---|---|---|
@@ -62,7 +64,9 @@ It has been developed and tested in Chrome on desktop. Other browsers and real p
 | [ROADMAP.md](ROADMAP.md) | What is done, what is next, what is deferred and why |
 | [docs/verdicts.md](docs/verdicts.md) | What each visual change was expected to do, and what was measured |
 | [docs/research.md](docs/research.md) | What other implementations do, and which ideas were adopted |
-| [docs/optical-flow.md](docs/optical-flow.md) | Design note for the next mode |
+| [docs/optical-flow.md](docs/optical-flow.md) | Optical flow: the method and how it was built |
+| [docs/particles.md](docs/particles.md) | Particle traces: what the picture means, and what it does not |
+| [docs/schlieren.md](docs/schlieren.md) | Schlieren: how to film it, what it shows, what was and was not checked |
 | [scripts/README.md](scripts/README.md) | Dev tooling: reference clips, filmstrips, checks against known motion |
 
 ## Licence

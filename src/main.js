@@ -48,5 +48,7 @@ if (import.meta.env.DEV) {
     window.__motionDiffMaskParity = () => probes.debugMaskParity(session.pipeline);
     window.__motionDiffHistoryParity = () => probes.debugHistoryParity(session.pipeline);
     window.__motionDiffBackgroundParity = () => probes.debugBackgroundParity(session.pipeline);
+    window.__motionDiffFlowParity = () => probes.debugFlowParity(session.pipeline);
+    window.__motionDiffSchlierenParity = () => probes.debugSchlierenParity(session.pipeline);
   });
 }

@@ -35,6 +35,9 @@ Useful URL switches in a dev build: `?renderer=canvas2d` forces the Canvas 2D fa
 │   │   ├── mask.js                 Motion mask: three-frame differencing, clean-up vote
 │   │   ├── history.js              Motion history: age per pixel, heading from its slope
 │   │   ├── background.js           Background model: running mean and variance
+│   │   ├── flow.js                 Optical flow: Lucas–Kanade, coarse to fine, with a confidence
+│   │   ├── particles.js            Particle traces through a velocity field (no shader copy)
+│   │   ├── schlieren.js            Schlieren: the reference, the knife-edge picture, judging the setup
 │   │   ├── magnify.js              Eulerian magnification maths
 │   │   ├── magnitude.js            Shared unsigned motion magnitude, grid pooling
 │   │   ├── timebase.js             Media-time base: stamps, seek and loop detection, lookback
@@ -48,6 +51,8 @@ Useful URL switches in a dev build: `?renderer=canvas2d` forces the Canvas 2D fa
 │   │   ├── renderer.webgl.js       WebGL2 renderer and the built-in shaders
 │   │   ├── pipeline.worker.js      Canvas 2D fallback: diff, blur, trails, magnify in a worker
 │   │   ├── renderer.js             Canvas 2D compositing for the fallback
+│   │   ├── flow.js                 Optical flow on the GPU, shared by the flow and schlieren modes
+│   │   ├── particles.js            Draws the particle traces
 │   │   ├── probes.js               Dev-only shader-versus-core parity probes
 │   │   ├── loader.js               URL source detection, HLS
 │   │   ├── source-profile.js       Per-source capture settings
@@ -95,6 +100,12 @@ main.js imports app/ and ui/, and core/ for pure helpers
 
 **Feedback state in a mode.** A mode with state of its own (history, background) follows the trail's pattern: two targets from `renderer.target()`, a per-renderer record of which is current, recompute rather than advance when `frame.step === 'repeat'` (use `frame.stepMs`, which keeps its value on a repeat), and start over when `renderer.epoch` changes (it counts every seek, source change, mode change and resize).
 
+**Optical flow** (`core/flow.js`, `app/flow.js`). One solver serves the Optical flow mode (two frames a gap apart) and Schlieren (a reference picture against now). Brightness is luma in levels, 0..255; a vector is a shift in pixels from the older picture to the newer, x right and y down; every vector carries a confidence, and nothing downstream may use a vector without it. The shaders work in image coordinates through the prelude in `app/flow.js` (`here()`, `px()`, `between()`), which does the flip from the bottom-up textures in one place.
+
+**Particles** (`core/particles.js`) are stepped in JavaScript from a small field read back each frame: there is deliberately no shader copy. What a trace means is fixed in [particles.md](particles.md); anything that is not a measurement (where traces start, how many there are) is said to be so in the help text.
+
+**A mode's note to the person.** `frame.note(message, type)` puts a sentence on the status line (schlieren reports its setup that way). It is rate-limited; keep the sentence short.
+
 **Shared motion magnitude** (`core/magnitude.js`). Every mode reduces its result to one unsigned value per pixel, 0..1. Anything that wants "how much motion, where" (the sonification grid today) pools from that, never from a mode's own signed output: pooling a signed difference cancels a moving edge to zero. A registry mode draws its data into `renderer.dataFramebuffer()` with the magnitude in R.
 
 **Two render paths.** WebGL2 is preferred; Canvas 2D with `pipeline.worker.js` is the fallback. Posy, Raw and Magnify must keep working on both. A new mode may be WebGL-only, but must then report that through the status line on the fallback.
@@ -122,10 +133,11 @@ The shaders are checked against those functions in a real browser. In a dev buil
 __motionDiffDiffParity()        __motionDiffMaskParity()
 __motionDiffTrailParity()       __motionDiffHistoryParity()
 __motionDiffEnergyParity()      __motionDiffBackgroundParity()
-__magnifyParityHarness()
+__magnifyParityHarness()        __motionDiffFlowParity()
+__motionDiffSchlierenParity()
 ```
 
-Each runs the same synthetic frames through core and GPU and reports the difference. 8-bit and Float32 results are expected to agree within about 2/255. State kept in half floats cannot match a Float32 core bit for bit, so the background probe counts mismatched decisions (under 0.1%) instead of demanding none. Run the probes after touching a shader or its core function.
+Each runs the same synthetic frames through core and GPU and reports the difference. 8-bit and Float32 results are expected to agree within about 2/255. State kept in half floats cannot match a Float32 core bit for bit, so the background probe counts mismatched decisions (under 0.1%) instead of demanding none; the flow and schlieren probes likewise report the largest difference between vectors (0.03 and 0.02 px) and count trusted vectors that are further apart than a set distance. Run the probes after touching a shader or its core function.
 
 ## How changes are accepted
 Every change is tagged **visual**, **performance** or **robustness**.
@@ -167,6 +179,9 @@ Clarifications made along the way, with their reasons:
 - `gl.finish()` does not wait for the GPU in Chrome. To time a frame, read one pixel back after it.
 - A camera reports a placeholder picture size (0×0, or 2×2 on phones) until its first real frame. `Session` waits for a real size before sizing the pipeline, and follows the video element's `resize` event afterwards (a rotated phone, a resized shared window).
 - Not every browser keeps delivering frame callbacks for a video nobody can see, or advances the decoded-frame counter on a camera stream. The frame loop falls back to the display clock when both stand still; do not make processing depend on either alone.
+- Half floats cannot hold the squares of 0..1 brightness slopes (they fall into the range where precision goes, or are flushed to zero on some GPUs): the flow solver works in levels, 0..255.
+- A grid with one implicit column sizes it to its widest item: a long unbroken status line once stretched the whole page. `#app` declares `minmax(0, 1fr)`.
+- A fine regular pattern (a checkerboard on a monitor) reduced to the processing size blurs to flat grey with moiré: a measuring mode then has nothing to measure. Schlieren says so and suggests a larger width.
 - Video decoders start slowly: give playback two or three seconds before counting frames. Browser-recorded WebM cannot be seeked frame-accurately, which is why the filmstrip tool draws its synthetic scenes itself.
 
 ## Deployment

@@ -28,7 +28,9 @@ How to read this:
 | 11 | Magnify | Normalise band gain so "amplify" means the same at any band setting | Needs a decision: it changes what existing amp values look like |
 | 12 | Magnify | Presets for pulse (colour) vs motion; deeper pooling for pulse | Roadmap |
 | 13 | Magnify | Document the MIT patents | Adopt now. See the licensing note |
-| 14 | Optical flow | Dense pyramidal Lucas-Kanade at 320×180, not the widely copied single-pass shader | Design note (feature 4) |
+| 14 | Optical flow | Dense pyramidal Lucas-Kanade at 320×180, not the widely copied single-pass shader | Built in session 4 |
+| 15 | Particles (session 4, §6) | Wind-map traces stepped on media time in JavaScript, re-seeded off unmeasured spots | Built. Reverses "no particles" in §4 |
+| 16 | Schlieren (session 4, §7) | Measure the background's shift live with Lucas-Kanade against an averaged reference; cancel the camera's shift; judge the setup | Built. Others subtract frames live and measure offline |
 
 ## 1. Browser and creative-coding motion extraction
 
@@ -273,7 +275,7 @@ performance figure. No source gave timings for our target hardware.
   velocity in px/s. A longer gap lifts slow motion above the noise; the shortest gap
   keeps fast motion inside the pyramid's range.
 - Show as a hue wheel (direction) with value = magnitude × confidence, and a coarse
-  arrow grid. No particles.
+  arrow grid. No particles. (Reversed in session 4 by the owner: see §6.)
 - Global motion: pool confidence-weighted flow to an 8×8 grid in a shader, read it
   back asynchronously, take the per-axis median on the CPU (optionally fit a
   4-parameter similarity). This is the same estimate camera compensation and a
@@ -302,3 +304,71 @@ small pass after building it sets `aria-label` on every control from its label,
 gives slider tracks `role="slider"` with min, max and current value, and a stylesheet
 restores a visible focus ring. Keyboard shortcuts cover the common adjustments
 without entering the pane.
+
+## 6. Wind-map particles (session 4)
+
+Read before designing the particle display (`particles.md`). The source code of the three
+main implementations was downloaded and read; numbers below are from code unless marked.
+
+### Sources
+- http://hint.fm/wind/ and its `wind-bundle.js`; http://hint.fm/projects/wind/ — Viégas and Wattenberg. © the authors, no open licence: ideas only.
+- https://github.com/cambecc/earth (`earth.js`, `products.js`, `micro.js`) — MIT.
+- https://github.com/mapbox/webgl-wind (`src/index.js`, the shaders, issue 12) — ISC; Agafonkin's "How I built a wind map with WebGL" via the Wayback Machine.
+- One fork of Esri wind-js; https://github.com/onaci/leaflet-velocity; https://github.com/anvaka/fieldplay (MIT); https://github.com/weatherlayers/deck.gl-particle (MPL-2.0).
+- Particles from optical flow: https://github.com/moostrik/ofxFlowTools (MIT), https://github.com/diwi/PixelFlow (MIT).
+- Terminology: Wikipedia, "Streamlines, streaklines, and pathlines"; Laramee et al., "The State of the Art in Flow Visualization: Dense and Texture-Based Techniques".
+
+Not opened: blog.mapbox.com directly (403), the original Esri repository (404), MoMA's page, windy.com (no technical description found), TouchDesigner tutorials (video only).
+
+### What others do
+| | hint.fm wind map | earth | webgl-wind |
+|---|---|---|---|
+| Where the step runs | JavaScript, 2D canvas | JavaScript, 2D canvas | GPU, positions packed in 8-bit textures |
+| Particles | 5,000 (3,500 on slow browsers) on 900×600 | 7 per pixel of width | 65,536 in the demo, up to a million |
+| Life | 1 to 41 frames | 100 frames, random first ages | none; a random drop rate, higher where fast |
+| Step | Euler, per frame, no time base | per frame | per frame |
+| Trail | background painted over at 2% alpha | alpha multiplied by 0.97 | screen multiplied by 0.996, rounded down |
+| Speed shown as | step length and grey level | 18 grey buckets | a colour ramp |
+| Seeding | random; never on a zero vector; biased to slow areas for even cover | random; retried off undefined cells | random |
+
+- Every one draws a steady, precomputed field that is defined everywhere, and steps per displayed frame.
+- Pitfalls named by their authors: without re-seeding, particles collapse into a few lines (Mapbox); fast areas look denser (Mapbox); an 8-bit fade never reaches zero without rounding down (Mapbox); 8-bit position packing drifts and bands on phones (webgl-wind issue 12, fieldplay).
+- From video: ofxFlowTools gives particles birth only where there is flow, with fixed homes on a grid; PixelFlow treats flow as a force on a persistent crowd. **Nothing was found that draws short-lived, re-seeded wind-map traces through optical flow from video.**
+- Terminology: a trace through a frozen field is a streamline; through a field that changes every frame it is a pathline. Density of traces is a seeding choice in all of them and encodes nothing.
+
+### What we took, and what we did differently
+- Took: line segments, bilinear field lookup, random first ages (earth), the rounded-down fade (Mapbox), no seeding on still spots (hint.fm).
+- Different: stepped on media time; the field is measured live and mostly undefined, so particles on unmeasured spots are re-seeded within about 0.12 s; lengths are true to the measured movement at 1x; the step stays in JavaScript (thousands, not a million) so there is one implementation and nothing packed into textures.
+
+## 7. Schlieren (session 4)
+
+Read before designing the schlieren mode (`schlieren.md`).
+
+### Sources
+- Rabha, Kumar, Kumar, Saini, Kumar (IIT Delhi), "Pocket Schlieren": https://arxiv.org/abs/2404.16060 (read in full, with supplement); project page https://web.iitd.ac.in/~kmanish/pocketschlieren; data https://zenodo.org/records/10949272 (CC BY-NC; an APK and raw photo pairs, no source code).
+- Raffel, "Background-oriented schlieren (BOS) techniques", Exp. Fluids 2015: https://elib.dlr.de/95959/1/Raffel_2015.pdf (sections 1–3, 10, 12, 13).
+- Atcheson, Heidrich, Ihrke, "An evaluation of optical flow algorithms for background oriented schlieren imaging": https://www.cs.ubc.ca/nest/imager/tr/2008/Atcheson_BOS_EiF/eif08.pdf (in full).
+- Settles and Hargather, review, Meas. Sci. Technol. 2017 (through a summariser); Settles and Liberzon, https://arxiv.org/abs/2202.04122 (velocity from schlieren).
+- Taberlet et al., https://arxiv.org/abs/1710.04078 (classroom synthetic schlieren, plume speeds).
+- Wernet, NASA real-time BOS: https://ntrs.nasa.gov/citations/20190002831.
+- Xue et al., "Refraction wiggles", ECCV 2014: https://people.csail.mit.edu/tfxue/proj/fluidflow/ (project page only).
+- Implementations: https://github.com/kambara/air-visualizer, https://github.com/Adrian-Winter/BOS-Python-, https://calebkruse.com/10-projects/schlieren, Pattabiraman et al. 2012 (abstract).
+- Test footage (both MIT): https://github.com/JPaonaskar/Background-Oriented-Schlieren (`Candle.MOV`), https://github.com/FinFetChannel/SyntheticSchlieren (`sample.mp4`).
+
+Not opened or secondhand: Jonassen 2006 and Hargather 2011 (schlieren velocimetry; known through the reviews), Dalziel 2000, Richard and Raffel 2001, Hayasaka and Tagawa 2019 (search snippets only). **No opened source gave a measured candle shift in pixels or a measured candle plume speed**; figures for those below are estimates and are marked.
+
+### What others do
+- **Pocket Schlieren, live mode:** subtracts consecutive frames at 45–50 fps (720p). The authors: it does "not provide a quantitative relation with density gradients" and smooth flow "is hard to visualize". **Accurate mode:** Farnebäck optical flow on two photos picked from a burst; 2 s (1080p) to about 12 s per pair on a Snapdragon 712. The arrows in its figures are background shifts, not air velocity.
+- **What is measured** (Raffel): the first spatial derivative of density, integrated along the path of light. Shift on the sensor = (distance background to hot air) × magnification × deflection angle: a far background and a near camera give the largest shift. The lens focuses on the background.
+- **Size of the shift:** "only sub-pixel" in a raw pair (Settles and Liberzon); under 0.5 px is still measurable (Raffel). Our own estimate for a 640 px picture, not from a source: 0.04 to 0.35 px.
+- **Backgrounds:** random dots or squares 2 to 5 pixels across in the image; binary random squares scored best in Pocket Schlieren (25.9 dB against 12.5 for grey squares); fine natural texture works; nothing shows where texture stops. A regular pattern at a whole-pixel period gives moiré (Taberlet).
+- **Algorithms** (Atcheson): gradient methods beat block matching; Lucas–Kanade with a 3×3 to 7×7 window is the robust one; Horn–Schunck is slightly more accurate and needs tuning; under 0.1 px error in the best case.
+- **Live systems:** NASA's does FFT cross-correlation on a desktop GPU and re-registers each frame against a quiet region (the only global-shift correction found). Hobby tools subtract a stored reference; subtraction needs shifts from about a pixel up.
+- **Velocity from schlieren:** eddies in a turbulent plume can be followed as tracers ("schlieren velocimetry"). It gives the speed of the structures, not of the air; line-of-sight averaging biases it low (30% to 100% recovered in published comparisons); it fails in smooth flow. Space-time ("kymograph") slopes beat frame-to-frame matching at ordinary frame rates. Speeds found: 0.24 m/s above a person, 0.3 to 0.7 m/s above warm objects.
+- **Filming:** tripod or stand everywhere; fixed references are "vulnerable to motion"; steady light; short exposure.
+- **No browser or WebGL implementation was found.**
+
+### What we took, and what we did differently
+- Took: Lucas–Kanade with a small window (Atcheson); the global-shift correction (NASA); random binary squares as the printable background (Pocket Schlieren); a reference that can follow or be fixed.
+- Different: the shift is **measured live** rather than approximated by subtraction; the reference is a multi-frame average (finer than 8 bits); the app judges the setup and says what is wrong; traces, where shown, follow the eddies and are labelled for what they are.
+- Confirmed by our own tests: a fine regular pattern on a screen is a poor background (the monitor recording), and a close-up candle at 30 fps is too fast for frame-to-frame eddy tracking. The kymograph route is the roadmap item for that.

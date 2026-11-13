@@ -309,3 +309,298 @@ to 12.5 ms a frame; JS heap 851 MB to 6 MB).
 Nothing built this session was dropped by the "no visible effect" rule: every visual
 change was told apart by its judge. Deferred before building, for the same reason
 (see `ROADMAP.md`): the luma-only branch.
+
+---
+
+## Session 4
+
+Two ideas from the owner: wind-map particles as a display for motion, and schlieren
+(making hot air visible). Both stand on dense optical flow, so that is built first.
+Research in `research.md` §6 and §7; designs in `optical-flow.md`, `particles.md`
+and `schlieren.md`.
+
+### V5. Optical flow mode — visual (new mode)
+**What it is.** Between two frames one gap apart, how far and which way each small
+patch of the picture moved: pyramidal Lucas–Kanade on luma (`core/flow.js`), with a
+confidence beside every vector. Shown as colour (hue = heading, brightness = speed)
+or as particle traces (V6).
+
+**Expected effect, written before building** (the numbers are those set in advance
+in `optical-flow.md`, checked on a new synthetic scene `flow` with textured movers,
+because the flat objects of `truth` carry flow only at their rims):
+- *Heading, on `flow`:* within 10° of the truth, as the mean over each mover: a
+  band sliding right (0°), a block sliding down-left (135°), and around a turning
+  disc the heading at each point square to its radius. From one frame pair; no trail
+  is needed, unlike motion history.
+- *Speed, on `flow`:* within 20% of the truth (band 90 px/s, block 60 px/s, the
+  disc's rim 75 px/s falling to zero at its centre).
+- *Still background:* speed under 5 px/s over 99% of it; with the heavy noise of
+  `truth-noisy`, over 95%.
+- *Flat areas:* the inside of a flat object (`truth`'s square) reads as "nothing
+  measured" (dark), not as noise. Its rim carries the flow.
+- *On real footage:* `traffic` shows the two carriageways in two opposite hues;
+  `river` one dominant hue along the water's course.
+- *Blind judge* names what it shows that motion history does not: speed, and a
+  heading without waiting for a trail.
+- *Known limits for the help text:* nothing is measured where the picture is flat;
+  along a straight edge only the motion across the edge is seen; motion of more than
+  about a twentieth of the picture width per gap is beyond its reach and comes out
+  wrong, so fast things need a short gap; a moving camera colours everything.
+- No regression: other modes untouched.
+
+**Result: accepted.**
+
+Built as `core/flow.js` (22 unit tests), its shader mirror `app/flow.js` and the mode
+`app/modes/flow.js`. Parity `__motionDiffFlowParity()`: largest difference between
+core and GPU vectors 0.033 px, no trusted vector more than 0.05 px apart, at two sizes,
+one of which does not halve evenly. WebGL with float targets only.
+
+On `flow`, from the data output (`scripts/truth-check.mjs --flow 1`), gap 67 ms:
+
+| Mover | Heading error (mean) | Within 10° | Speed measured / known | Within 20% |
+|---|---|---|---|---|
+| Band, right at 90 px/s | 1.1° | 99.9% | 87.9 / 90 | 96.6% |
+| Block, down-left at 60 px/s | 3.3° | 95.4% | 59.1 / 60 | 96.2% |
+| Disc, outer part | 2.8° | 97.5% | 55.9 / 55.6 | 98.8% |
+| Disc, inner part | 3.3° | 95.9% | 34.2 / 34.2 | 98.6% |
+
+| Still background under 5 px/s | Result | Target |
+|---|---|---|
+| `flow` | 99.35% | 99% |
+| `truth` | 99.32% | 99% |
+| `truth-noisy` | 98.77% | 95% |
+
+| Other checks | Result |
+|---|---|
+| Flat areas | On `truth` the inside of the square and the centre of the disc are dark; flow shows at the square's corners and the disc's rim, in the right hues (my own reading of the strip, not a judge's) |
+| Real footage, `traffic` | Two carriageways in opposed hues: the judge read "right-lane cars go down to down-right… the far carriageway goes up-right" from one moment |
+| Real footage, `river` | **Not as expected.** The clip's camera moves forward, which no earlier mode had revealed: the flow fans out from the upper centre, and the judge named it "an expansion pattern: the camera moving forward (or zooming in)". True to the footage; the expectation of one hue along the water was wrong |
+| Shows what motion history does not | Speed: "T-m is clearest. Strokes lengthen steadily towards the near car… T-q [history] barely shows it". A heading without a trail was checked by the numbers above only (two frames 67 ms apart, averaged over 200 ms); a judge cannot see that in stills |
+
+Changes made during the check:
+- Confidence gained two factors beyond texture. Without the test for "nothing moved",
+  9% of the still background within 40 px of a mover read as moving (the coarse sizes
+  smear motion outwards); with it, 0.65%.
+- Smoothing weights by confidence without shrinking the vectors: the first version read
+  speeds 8% to 14% low.
+- The mode has its own Gap (67 ms), not the shared one.
+
+Defects left as they are: ragged outlines on movers (the judge: "ragged square edges
+with a few stray dots"); faint traces over an empty stretch of road at the bottom of
+`traffic` in the first moments (not traced to a cause); nothing measured along the
+middle of a straight edge.
+
+### V6. Particle traces — visual (new display)
+**What it is.** A wind-map display for a velocity field: a few thousand particles,
+each carried along by the measured flow for a second or two and drawing its path.
+Stepped on media time in plain JavaScript (`core/particles.js`), drawn as lines on
+the GPU with a fading trail. Used by the optical flow mode and by schlieren (V7).
+
+**What the picture means, fixed before building.** Each trace is the path a point of
+the picture followed while the particle lived; its direction and (at gain 1) its
+length are the measured movement. Where traces start is random, and how many there
+are in a place is not a measurement: particles that land where nothing is measured
+are re-seeded at once, so traces gather on whatever moves.
+
+**Expected effect:**
+- *On `flow`:* straight level traces along the band, slanted ones on the block,
+  arcs around the disc's centre that are longer towards its rim; under 2% of all
+  trace brightness on the still background.
+- *Direction readable from one still frame:* with heading colours, the band, block
+  and the two sides of the disc are in visibly different hues; without colour, a
+  judge can still say which way each region moves from the traces' bright heads.
+- *Length means speed:* on the disc, traces near the rim are about three times as
+  long as those a third of the way out.
+- *The same at any frame rate:* `sixty` (60 fps) gives traces as long as the same
+  motion at 30 fps.
+- *On real footage:* `river` reads as streams along the current; `traffic` as two
+  opposed streams; `trees` as short traces that swing back and forth. A judge shown
+  one frame of each of Raw, motion history and particles says the particles show
+  direction and speed at a glance and names the picture as the pleasantest to watch,
+  or the display has not earned its place.
+- *Known limits for the help text:* the density of traces is not a measurement; a
+  flat surface carries no traces even when it moves; at gain above 1 the lengths are
+  exaggerated; traces are drawn at the processing size, so they are soft when shown
+  large.
+- **Performance** (its own tag): the flow passes, the readback of the field and the
+  particle step measured per frame on this machine, on both a desktop and a throttled
+  phone profile; the target is 30 frames a second at the phone's 480 px processing
+  width. A real phone cannot be measured here and will be reported as such.
+
+**Result: accepted, with one part that failed and is logged as such.**
+
+Built as `core/particles.js` (11 unit tests; no shader copy) and `app/particles.js`.
+
+| Check | Result |
+|---|---|
+| On `flow`, plain traces | Judge: band "horizontal streaks… rightward, moderately sure"; block "down and to the left, fairly sure"; disc "concentric arcs, so it is turning"; outside the regions "plain black" |
+| Length means speed | Judge: "strokes near the rim are long and bright; towards the centre they get shorter and fainter". The 3:1 ratio was not measured on the picture; the step being exactly velocity × time is a unit test |
+| Heading colours | Judge: band red, block green, a full hue wheel on the disc, which "resolves the disc as clockwise" |
+| **Direction from a still without colour** | **Failed.** Two judges could give the line of travel but not which way along it for the disc, and only from comparing moments for the others. A tinted tail (white head, blue tail) was tried and a third judge still could not tell: removed again. The help text now says so. Heading colours are the default |
+| The same at any frame rate | Unit test only (equal distance in equal media time at 30 and 60 steps a second). Not rendered on `sixty`, whose flat objects carry almost no flow |
+| `traffic` | Judge ranked particles first of three (with Raw and motion history) for direction, for speed, and as "the pleasantest (delicate, and reads like motion)" |
+| `trees` | Particles first "narrowly (refined, but too dark)". The floor on trace brightness was raised from 0.3 to 0.45 afterwards; not re-judged |
+| `river` | The expansion pattern of V5; the judge also found the traces "heavily obscure the picture" in the glow display |
+| Still background | 99.35% of it has no flow to carry a trace (V5); judges saw at most "a few faint isolated specks just outside the region borders" |
+
+**Performance**, this machine (Intel integrated GPU, headless Chrome), median per frame
+with one pixel read back, two interleaved rounds, `river` at 25 fps:
+
+| | 480 px | 640 px | 1280 px |
+|---|---|---|---|
+| Raw (for scale) | 3.1 ms | 3.0–4.0 | 4.0–4.5 |
+| Optical flow, colour | 3.8–6.5 | 4.0–4.6 | 4.7–5.5 |
+| Optical flow, particles | 5.2–5.6 | 5.8–7.2 | 8.2–9.8 |
+
+The particle step alone: 0.32 ms for 3,240 particles (480 px), 0.50 ms for 5,760
+(640 px), 1.7 ms for 20,000. All frames were kept at every size. **A real phone was
+not measured.**
+
+### V7. Schlieren mode — visual (new mode)
+**What it is.** Background-oriented schlieren: hot air bends light, so a textured
+background seen through it appears shifted by a fraction of a pixel. The mode
+measures that shift for every patch (the Lucas–Kanade solve of V5, one or two sizes,
+against a reference picture of the background) and draws it. The reference is a
+running average of the scene; "Hold reference" freezes it, so that everything that
+changes afterwards is shown in full.
+
+**What the picture means, fixed before building.** The shift is proportional to the
+change of air density across the line of sight, summed along it: the picture shows
+*where the air is unevenly hot*, not how fast it moves. With a held reference it is
+the whole deflection; with a running reference only the part that changes over time
+(a steady, smooth plume fades out of it). Particle traces in this mode follow the
+movement of the *pattern* of hot air from frame to frame: a measurement of how the
+eddies travel, which is slower than the air itself and absent where the flow is
+smooth. Nothing in the mode is simulated.
+
+**Expected effect, written before building.** Real flames cannot be filmed here, so
+these are set on a new synthetic scene, `plume`: a printed-style random background
+warped by a known field (a smooth column over a source plus eddies rising at
+150 px/s; peak shift 0.3 px), with sensor noise. `plume-weak` has a peak of 0.08 px,
+`plume-wall` a natural texture with a plain strip, `plume-drift` a camera that
+creeps by 0.4 px and trembles.
+- *Invisible in the source, visible in the mode:* a judge shown the original frames
+  of `plume` sees nothing rising; shown the schlieren strip, describes a column
+  above the source with moving structure. Raw at any threshold shows at most
+  speckle there (numeric guard: under 0.5% of pixels differ between two Raw frames
+  of the scene by more than 4/255 above its noise).
+- *The measurement is right, with a held reference:* over the plume, the measured
+  shift correlates with the true one above 0.8 and its size is within 25%; outside
+  the plume the picture is quiet: the noise floor is under a fifth of the plume's
+  typical shift.
+- *Weak plume (`plume-weak`):* still visible to the judge with smoothing and a larger
+  window; if not, that is reported as the sensitivity limit, with the number.
+- *Running reference:* the eddies show, the smooth column near the source does not;
+  the judge's description must match that, since it is the stated meaning.
+- *Plain background (`plume-wall`):* nothing is drawn on the plain strip, and the
+  setup view marks it as unusable; the plume shows where texture exists.
+- *Camera drift (`plume-drift`):* with the global-shift correction the still
+  background stays quiet (noise floor within 1.5 times that of `plume`); without it
+  the whole frame lights up.
+- *Traces:* over the eddies they head upwards within 20° of the truth, and their
+  speed is reported against the known 150 px/s whatever it turns out to be (the
+  literature expects an underestimate); none on the still background (under 2% of
+  trace brightness).
+- *Guidance:* the status line names a setup problem when there is one: a background
+  too plain to measure against, a camera that is moving, a reference not yet settled.
+- *Known limits for the help text:* needs a still camera and a textured background
+  well behind the hot air; shows nothing where the background is plain; a shift is
+  not a speed; lamp flicker, auto-exposure and focus hunting all read as signal;
+  video compression smooths away the smallest shifts.
+- **Not verifiable here, and said so in the result:** a real plume, a real phone
+  camera's noise and compression, and the frame rate on a real phone.
+- **Performance** (its own tag): measured per frame at the phone's 480 px processing
+  width and at 640 px.
+
+**Result: accepted on the synthetic scenes and on one real recording; traces accepted
+on the synthetic scene only; several things not verifiable here, listed at the end.**
+
+Built as `core/schlieren.js` (10 unit tests) and `app/modes/schlieren.js`. Parity
+`__motionDiffSchlierenParity()`: the mode's shift against the core's, largest
+difference 0.017 px, none over 0.02 px. WebGL with float targets only.
+
+Against the known field (`scripts/truth-check.mjs --schlieren 1`), reference held from
+before the plume is lit, window 9 px, smoothing 33 ms unless said:
+
+| Scene | Typical true shift | Correlation | Size measured / true | Noise beside the plume | Target |
+|---|---|---|---|---|---|
+| `plume` | 0.28 px | 0.98 | 0.91 | 0.011 px (4% of typical) | >0.8, within 25%, under 20% |
+| `plume-weak` (window 13 px, smoothing 67 ms, sensitivity 0.08 px) | 0.076 px | 0.93 | 0.82 | 0.006 px (7%) | visible |
+| `plume-wall`, textured part | 0.31 px | 0.91 | 0.82 | 0.047 px (15%) | drawn only where textured |
+| `plume-drift`, shift cancelled | 0.27 px | 0.985 | 0.92 | 0.016 px (1.45× `plume`) | within 1.5× |
+| `plume-drift`, not cancelled | 0.27 px | 0.86 | 0.91 | 0.18 px: the whole frame | lights up |
+
+The first version of the scene used 100 ms of smoothing and read 30% low; the default
+went to 33 ms (0.91) on that evidence.
+
+| Blind judge | Result |
+|---|---|
+| Source of `plume` | "Fine black-and-white random speckle… Nothing visibly moving, rising or changing" |
+| Raw on it | "Almost entirely black. A very faint, dim grey speckled vertical smudge… Easy to miss" |
+| Held reference | "A strong vertical column… a white lobe on the left paired with a black lobe on the right… tapering to a point at the bottom" |
+| Running reference | "Broken into separate oval blobs… the bottom (and the continuity of the middle) is shown by [held] and largely missing": the stated meaning |
+| `plume-weak` | "Stands out very clearly (full white and full black against mid-grey)" |
+| `plume-wall` | Nothing drawn on the plain part; the band "is cut off dead straight at the boundary, which matches the texture/flat edge in the source exactly"; the setup view hatches the flat part and "the smooth interiors of the blobs" |
+| `plume-drift` | Uncorrected: "background is bright cream to white, and its overall level jumps"; corrected: "surround dark and steady in all six moments" |
+| **Real footage, `candle-dots`** | Source: "fine-grained speckled surface… Nothing visibly moving or rising". Knife edge: "a thin, sharp white/black paired line starts at the bottom edge… rises leaning leftward, and widens into a streaky, wavy plume… The shape suggests a plume of hot air or smoke rising from a small source (candle, flame, soldering iron)". Raw: "at the limit of visibility" |
+| Traces on `plume` | A wedge of strokes over the eddies and nowhere else; the judge could not tell up from down in a still (no colour key was given) |
+| **Traces on `candle-dots`** | **"Effectively empty, stray red dots only."** |
+
+Traces against the known eddies of `plume` (`--target 1`): mean heading 269.6° against
+270°, every measured vector within 20°, speed 140 px/s against 150 (93%), measured over
+92% of the eddy region, 0.07% of the still background moving. On the real candle
+recording the eddy velocity is trusted over 2.6% of the frame and relaxing the solver
+does not make it coherent: filmed close up at 30 frames a second the plume moves too
+far between frames. **The traces view ships labelled experimental**, and following the
+plume along a space-time slice (which the literature finds better at ordinary frame
+rates) is on the roadmap.
+
+Real footage, second recording (`candle-screen`, a candle in front of a monitor
+showing a fine checkerboard): at 640 px **nothing is measured**, because the pattern
+blurs to flat grey; the status line says the background is too plain. At 1280 px and
+at 1920 px the plume from the flame is plain to see (my own reading, not a judge's),
+over a mottled, noisy background: a fine regular pattern on a screen is a poor
+background. The working size limit was raised from 640 to 1280 px because of it.
+
+Guidance: the status line was seen reporting `69% measurable · shifts over 0.08 px show
+· reference follows` on `candle-dots`; the "too plain", "camera moved" and "camera is
+moving" messages follow thresholds that are unit-tested but were not each provoked in
+the browser.
+
+**Performance**, same method and machine as V6:
+
+| | 480 px | 640 px | 1280 px |
+|---|---|---|---|
+| Schlieren, knife edge | 4.8–5.8 ms | 5.7–7.2 | 12.2–14.7 |
+| Schlieren, traces | 8.2–9.0 | 9.0–10.5 | 17.3–18.6 |
+
+Defects the judges found, left as they are: a grainy surround on real footage in the
+Strength view (noise has a size, so it shows); cores of strong plumes clipped to full
+white at the default sensitivity; a heavier background with a running reference than
+with a held one. Fixed: bright dashes along the picture's edges (nothing is drawn now
+where a patch overhangs the edge).
+
+**Not verified, plainly:**
+- A phone: its camera's noise and compression, the live workflow, the frame rate.
+- The numeric guard on Raw for `plume` was not computed; the judge's "easy to miss"
+  stands in for it.
+- Hold reference on real footage: neither recording has a usable flow-free start.
+- Weak real sources (a mug, a heater, a lighter's gas) and natural backgrounds in real
+  footage.
+- Whether shifts measured on real footage are the right size: there is no ground truth.
+
+### I2. Interface with the two new modes — judged from screenshots
+Ten states audited with `scripts/page/audit.js` at desktop and phone sizes (Optical
+flow and Schlieren on the Plate in both themes, with glow, with the setup check and
+with traces; both modes and their parameter sheets on the phone; the keys list): all
+pass on picture share, contrast, clipping, overlap and touch targets. No new chrome was
+added, so no fresh critique against the brief was run.
+
+### Robustness — accepted on a demonstration of the case that broke
+| Change | Before | After |
+|---|---|---|
+| A long status line | With schlieren's first, long note the page's single column grew wider than the window: the panel left the screen and the seek bar was off-screen in three audited states | `#app` declares its column as `minmax(0, 1fr)`; the same three states pass; the notes were shortened as well |
+
+### Deferred for having no visible effect (session 4)
+- **A head and tail of different colours on plain traces.** Built, judged, not visible
+  as a direction: removed.

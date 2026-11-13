@@ -135,6 +135,34 @@ Limits:
 
 Needs WebGL2 with float render targets.
 
+## Optical flow
+Between the current frame and the one a **Gap** back (67 ms by default), how far and which way each small patch of the picture moved, divided by the real time between them: a velocity in picture pixels per second. The method is Lucas–Kanade on brightness, solved from coarse to fine on a copy of the frame at most 320 px wide ([optical-flow.md](optical-flow.md)).
+
+Every vector comes with a confidence. It is withdrawn on flat surfaces (nothing to measure), where the shift found does not explain the change between the frames (the edge of a moving thing), and where "nothing moved" explains the frames as well: that last test is what keeps the still surroundings of a mover dark.
+
+- **Show**: *Particle traces* draws a few thousand short-lived traces that follow the flow, like a wind map ([particles.md](particles.md) says exactly what they mean); *Colour* paints heading as hue and speed as brightness.
+- **Gap**: a short gap follows fast motion, a long one finds slow motion. Beyond its reach the answer is wrong, not weak.
+- **Speed range**: the speed drawn at full brightness, as a share of the picture's width per second. Lower it for slow scenes.
+- **Smoothing**: how long the flow is averaged over.
+- **Traces, Trace length, Trace speed, Trace colour**: how many, how long they stay, whether their steps are true to scale, and heading colours or plain.
+
+Limits: nothing on flat surfaces; along a straight edge only motion across it is seen; a moving camera makes everything flow (which shows what the camera did).
+
+## Schlieren
+Makes hot air and gas visible by measuring how much they shift the background behind them, a fraction of a pixel ([schlieren.md](schlieren.md) covers the setup, and it matters: a still camera and a detailed background well behind the hot air).
+
+The shift is measured against a reference picture of the scene. The picture shows where the air is unevenly hot. It is not a speed.
+
+- **Show**: *Knife edge* (light where the background is pushed one way, dark the other: the classic schlieren look), *Strength*, *Direction*, *Traces* (experimental: follows the travel of the eddies), *Setup check* (hatches in red whatever cannot be measured).
+- **Hold reference**: off, the reference follows the scene and only changing hot air shows; on, it is frozen and everything since shows, including a steady column.
+- **Sensitivity**: the shift drawn at full strength, in pixels.
+- **Window**: the patch each shift is measured over. Larger sees weaker plumes, more coarsely.
+- **Smoothing**, **Reference time**: averaging of the current frame and of the reference.
+- **Knife shows**: sideways or up-down shifts.
+- **Cancel camera shift**: subtracts the shift of the whole picture.
+
+The status line reports the setup: how much of the picture can be measured, the smallest shift that shows, and what is wrong when something is.
+
 ## Data output
 
 Every mode also gives its result as data, not only as a picture: one value set per pixel, shown by the "Data" display and readable in code.
@@ -146,5 +174,7 @@ Every mode also gives its result as data, not only as a picture: one value set p
 | Motion mask | mask | 1 where moving; the strength of the difference alongside |
 | Motion history | vector | How recently the pixel moved, and its heading as a vector |
 | Background model | mask | 1 where foreground; the distance from the model alongside |
+| Optical flow | vector | Speed as a share of the speed range; velocity in picture pixels per second |
+| Schlieren | vector | Size of the shift as a share of the sensitivity; the shift in picture pixels |
 
 The sonification (the Sound section of the panel) is driven by the same data: it pools "how much motion, where" into a coarse grid and plays one voice per cell, panned by position and pitched by height.

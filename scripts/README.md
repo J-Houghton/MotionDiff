@@ -28,6 +28,11 @@ Fills `ref-clips/` (git-ignored) from `scripts/reference-clips.json`: clips with
 | `face` | A face held nearly still on a locked camera, for magnify (25 fps). |
 | `highway` | A real 60 fps source: fast vehicles, near-static camera. |
 
+| `flow` | Known flow, synthetic: a textured band sliding right at 90 px/s, a block heading down-left at 60 px/s, a disc turning at 1 rad/s. |
+| `plume`, `plume-weak`, `plume-wall`, `plume-drift` | Schlieren with a known answer, synthetic: a background warped by a simulated plume (lit at 1 s; typical shift 0.28 px, or 0.08 px for `-weak`), against print, against a rough surface with a plain strip, and from a camera that creeps and trembles. |
+| `candle-dots` | Real schlieren footage: a candle plume against printed random dots (MIT, JPaonaskar/Background-Oriented-Schlieren). |
+| `candle-screen` | Real schlieren footage: a candle against a monitor showing a fine checkerboard; needs a processing width of 1280 px or more (MIT, FinFetChannel/SyntheticSchlieren). |
+
 Clips are test material only and are not redistributed with the repository.
 
 The synthetic scenes are defined in `scripts/page/scene.js`, which also gives the
@@ -52,6 +57,9 @@ A scenes file:
     "display": "diff", "params": { "algorithm": "posy", "frameOffset": 10, "trailLength": 15 } }
 ] }
 ```
+`"switch": { "at": 0.9, "params": { ... } }` changes settings from that moment on
+(used to hold the schlieren reference just before the plume is lit), and
+`"readTarget": "<name>"` saves one of a mode's own float targets beside the data.
 `at` is where the strip starts (seconds), `every` how many source frames apart its
 frames are, `warmup` (default 1.5 s) how much video is run through first so
 history and trails are populated. `params` are `pipeline.params`.
@@ -74,7 +82,7 @@ change), the share of clipped pixels, and each strip's mean colour (to tell a hu
 or brightness shift from a change of shape).
 
 The scenes used for this session's verdicts are in `scripts/scenes/` (`age-colour`,
-`mask`, `history`, `background`): re-render them after touching those modes.
+`mask`, `history`, `background`, `flow`, `schlieren`): re-render them after touching those modes.
 
 ## Checks against known truth
 ```bash
@@ -87,6 +95,16 @@ of each outline is filled. `--box x,y,w,h` adds the share marked inside a box, f
 place where something used to stand. For a vector field (motion history) it reports
 instead the mean heading over each object's trail against the known heading, and the
 age along the path behind it (`--history` is the history length in seconds).
+
+For optical flow, `--flow 1` compares the velocity in the data output with the known
+motion of the `flow` scene (heading and speed per mover, and how much of the still
+background reads under 5 px/s). For schlieren, `--schlieren 1` compares the measured
+shift with the known field of a `plume` scene (correlation, size, and how quiet the
+picture is beside the plume); add `--target 1` to check the saved eddy velocity
+instead (heading and speed).
+
+`node scripts/make-pattern.mjs` regenerates `public/schlieren-pattern.svg`, the
+printable background for schlieren.
 
 ## Interface screenshots and one-off checks
 ```bash
