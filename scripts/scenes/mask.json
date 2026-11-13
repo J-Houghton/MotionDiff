@@ -1,0 +1,11 @@
+{ "scenes": [
+  {"name":"truth-raw","clip":"truth","at":2,"frames":6,"every":3,"display":"diff","readData":true,"params":{"algorithm":"raw","frameOffset":5,"threshold":20,"trailLength":0,"channelSpread":0,"blurEnabled":false}},
+  {"name":"truth-mask","clip":"truth","at":2,"frames":6,"every":3,"display":"diff","readData":true,"params":{"algorithm":"mask","frameOffset":5,"secondGap":30,"threshold":20,"trailLength":0,"maskBlur":true,"maskClean":true,"maskShow":"cutout"}},
+  {"name":"noisy-raw","clip":"truth-noisy","at":2,"frames":6,"every":3,"display":"diff","readData":true,"params":{"algorithm":"raw","frameOffset":5,"threshold":20,"trailLength":0,"channelSpread":0,"blurEnabled":false}},
+  {"name":"noisy-mask","clip":"truth-noisy","at":2,"frames":6,"every":3,"display":"diff","readData":true,"params":{"algorithm":"mask","frameOffset":5,"secondGap":30,"threshold":20,"trailLength":0,"maskBlur":true,"maskClean":true,"maskShow":"cutout"}},
+  {"name":"highway-raw","clip":"highway","at":3,"frames":6,"every":6,"display":"diff","params":{"algorithm":"raw","frameOffset":5,"threshold":20,"trailLength":0,"channelSpread":0,"blurEnabled":false}},
+  {"name":"highway-mask","clip":"highway","at":3,"frames":6,"every":6,"display":"diff","params":{"algorithm":"mask","frameOffset":5,"secondGap":30,"threshold":20,"trailLength":0,"maskBlur":true,"maskClean":true,"maskShow":"cutout"}},
+  {"name":"truth-posy","clip":"truth","at":2,"frames":6,"every":3,"display":"diff","params":{"algorithm":"posy","frameOffset":5,"threshold":20,"trailLength":0,"channelSpread":0,"blurEnabled":false,"ageColorEnabled":false}},
+  {"name":"noisy-posy","clip":"truth-noisy","at":2,"frames":6,"every":3,"display":"diff","params":{"algorithm":"posy","frameOffset":5,"threshold":20,"trailLength":0,"channelSpread":0,"blurEnabled":false,"ageColorEnabled":false}},
+  {"name":"highway-posy","clip":"highway","at":3,"frames":6,"every":6,"display":"diff","params":{"algorithm":"posy","frameOffset":5,"threshold":20,"trailLength":0,"channelSpread":0,"blurEnabled":false,"ageColorEnabled":false}}
+] }

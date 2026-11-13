@@ -73,6 +73,14 @@ static areas (mean change between consecutive frames where the source did not
 change), the share of clipped pixels, and each strip's mean colour (to tell a hue
 or brightness shift from a change of shape).
 
+## Checks against known truth
+```bash
+node scripts/truth-check.mjs --dir filmstrips --tag mask --scene truth-mask --gap 5
+```
+For a scene on a synthetic clip rendered with `"readData": true`: reads the mode's
+data output for the last frame and reports where its marks lie relative to the known
+object outlines (current position, the position one gap ago, elsewhere).
+
 ## Interface screenshots and one-off checks
 ```bash
 npm run filmstrip shot -- --out shot.png --w 390 --h 844 --mobile --dpr 2

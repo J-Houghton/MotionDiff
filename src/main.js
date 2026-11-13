@@ -45,5 +45,6 @@ if (import.meta.env.DEV) {
     window.__motionDiffDiffParity = () => probes.debugDiffParity(session.pipeline);
     window.__motionDiffTrailParity = () => probes.debugTrailParity(session.pipeline);
     window.__motionDiffEnergyParity = (cols, rows) => probes.debugEnergyParity(session.pipeline, cols, rows);
+    window.__motionDiffMaskParity = () => probes.debugMaskParity(session.pipeline);
   });
 }

@@ -78,3 +78,51 @@ Filmstrips: `filmstrips/ring-*-mixed.png` (the old ring look, from `0c5f36c`),
 Also in this change (tooling, no visual effect): the filmstrip tool steps synthetic
 scenes directly (`scripts/page/scene.js`), because browser-recorded WebM cannot be
 seeked frame-accurately; the numeric guard reports mean colour.
+
+### V2. Motion mask mode — visual (new mode)
+**What it is.** Causal three-frame differencing: a pixel is moving when the current
+frame differs from an earlier frame (the gap) *and* from a second, older one (the
+second gap) by more than the threshold: `min(|cur − old1|, |cur − old2|) ≥ T`. The
+frames are box-blurred before differencing and the mask is cleaned with a 3×3
+majority vote. The picture is either the moving object cut out in its own colours
+on black, or a solid mask; the data output is the mask.
+
+**Expected effect, written before building:**
+- *Against Raw at the same gap and threshold, on `truth`:* Raw draws every mover
+  twice, at its current position and at the position it had one gap ago. The mask
+  draws it once, at its current position. Measured against the known positions:
+  nearly all mask pixels lie inside the objects' current outlines and almost none
+  inside the outlines of one gap ago (outside the current ones). A uniform object
+  shows as its leading part, not filled: differencing cannot see inside a flat
+  colour.
+- *On `truth-noisy` at the same threshold:* Raw is covered in speckle; the mask has
+  visibly less (two independent differences must both exceed the threshold, and
+  the blur and the vote remove what is left), while the objects are still marked.
+- *On a real clip (`highway`):* vehicles appear once, in their own colours, where
+  Raw shows a doubled outline.
+- *Known limits to state in the help text:* an object must move by more than its own
+  width between the two gaps or part of its ghost survives; a stopped object
+  disappears; the cut-out of a uniform object is only its leading edge.
+- No regression: Posy, Raw and Magnify are untouched (parity probes unchanged).
+
+**Result: accepted.**
+
+Built as `app/modes/mask.js` on `core/mask.js` (13 unit tests); the shader matches
+the core exactly (`__motionDiffMaskParity()`: 0 mask mismatches, picture identical,
+in all four blur / clean-up combinations). WebGL only; the fallback reports that.
+
+| Check | Clip | Result |
+|---|---|---|
+| Current position only | truth | Known positions (`scripts/truth-check.mjs`): **100%** of mask pixels inside the objects' current outlines, **0%** in the outlines of one gap ago, 0 elsewhere. Raw at the same gap and threshold: 56% current, 44% ghost |
+| Fewer speckles than Raw | truth-noisy | Mask: **0** marked pixels outside the objects. Raw: 15.4% of the still background marked (88% of all its marks) |
+| Blind judge, three unlabeled methods per clip | truth, truth-noisy, highway | Grouped all nine images correctly. Mask: "drawn once, at the current position only... no copy behind"; Raw and Posy: "two copies". Noisy: mask background "pure black", the others "fine grain across the whole frame" |
+| Shows something Posy and Raw don't | all | Named by the judge: current position only; the object's true colour; noise-free background; solid, bright vehicles on the highway |
+| Defects the judge found | highway | Blobby patches in the tree band and nibbled lane markings: that camera is not quite still, so the scenery itself is "moving", and the blur and vote turn its fine texture into blobs. No flicker on the synthetic clips |
+
+Tuning during the check: the default second gap went from 20 to 30 (1 s). At 20 the
+`truth` square happened to move exactly its own width between the two gaps, the
+borderline case, and a hairline of ghost survived (4.6% of marks).
+
+Not built: a per-frame automatic threshold from a noise model. Auto-configure (A)
+already measures the noise floor and sets the threshold for this mode too; a
+per-frame estimate needs a statistics pass on the GPU and is on the roadmap.

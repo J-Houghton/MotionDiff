@@ -1515,6 +1515,8 @@ export class WebGLRenderer {
    * pixel into the returned framebuffer (R = magnitude 0..1, G/B mode-specific)
    * before the frame ends. Built-in modes instead register a source that is
    * rendered lazily (see _renderMagnitude).
+   * Ask for it (and for any target()) before binding textures for a draw:
+   * the first call creates the texture, and creating binds.
    *
    * @returns {WebGLFramebuffer}
    */

@@ -8,6 +8,8 @@
 import { boxBlur } from '../core/blur.js';
 import { posyBlend, rawDiff } from '../core/diff.js';
 import { diffMagnitude, poolMagnitude } from '../core/magnitude.js';
+import { majority3x3, thresholdMask, threeFrameDifference } from '../core/mask.js';
+import { renderMask } from './modes/mask.js';
 import { TRAIL_HOLD, TRAIL_REFRESH, createTrailState, trailStep } from '../core/trails.js';
 
 /**
@@ -341,4 +343,108 @@ export function debugEnergyParity(pipeline, cols = 8, rows = 4) {
     signed,
     pass: wedge.maxDiff < 0.05 && signed.maxDiff < 0.05,
   };
+}
+
+/**
+ * Dev-only parity probe for the motion mask shaders (app/modes/mask.js)
+ * against core/mask.js and core/blur.js: three pseudo-random frames, with
+ * and without the pre-blur and the clean-up vote. The mask and the cut-out
+ * picture are expected to match exactly; the strength is stored at the data
+ * target's precision.
+ *
+ * It resizes the renderer and clears the pipeline — run it on an idle page.
+ *
+ * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
+ * @returns {{cases: {name: string, maskMismatches: number, pictureDiff: number, strengthDiff: number, moving: number}[], pass: boolean}|null}
+ */
+export function debugMaskParity(pipeline) {
+  const gl = pipeline?._glRenderer;
+  if (!gl) return null;
+
+  const width = 32;
+  const height = 16;
+  let seed = 777;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  // Smooth-ish frames with patches of change, so the blur and the vote have
+  // structure to act on and the threshold has pixels on both sides.
+  const base = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0; i < base.length; i += 4) {
+    const x = (i / 4) % width;
+    const y = Math.floor(i / 4 / width);
+    for (let c = 0; c < 3; c++) base[i + c] = 60 + ((x * 5 + y * 9 + c * 30) % 120);
+    base[i + 3] = 255;
+  }
+  const vary = (from, patchAt) => {
+    const frame = new Uint8ClampedArray(from);
+    for (let i = 0; i < frame.length; i += 4) {
+      const x = (i / 4) % width;
+      const y = Math.floor(i / 4 / width);
+      const inPatch = x >= patchAt && x < patchAt + 7 && y >= 3 && y < 12;
+      for (let c = 0; c < 3; c++) {
+        const change = inPatch ? 90 : Math.round((random() - 0.5) * (random() < 0.15 ? 120 : 24));
+        frame[i + c] = Math.min(255, Math.max(0, frame[i + c] + change));
+      }
+    }
+    return frame;
+  };
+  const old2 = vary(base, 2);
+  const old1 = vary(base, 9);
+  const cur = vary(base, 16);
+
+  const restoreWidth = gl.width;
+  const restoreHeight = gl.height;
+  const restoreFrames = gl.ringFrames;
+  gl.setSize(width, height, 3);
+  gl.uploadPixels(new ImageData(old2, width, height));
+  gl.storeCurrent(0);
+  gl.uploadPixels(new ImageData(old1, width, height));
+  gl.storeCurrent(1);
+  gl.uploadPixels(new ImageData(cur, width, height));
+
+  const THRESHOLD = 12;
+  const CASES = [
+    { name: 'plain', blur: false, clean: false },
+    { name: 'blur', blur: true, clean: false },
+    { name: 'clean', blur: false, clean: true },
+    { name: 'blur + clean', blur: true, clean: true },
+  ];
+
+  const cases = CASES.map(({ name, blur, clean }) => {
+    const blurred = [cur, old1, old2].map((frame) => {
+      if (!blur) return frame;
+      const copy = new Uint8ClampedArray(frame);
+      boxBlur(copy, width, height);
+      return copy;
+    });
+    const difference = threeFrameDifference(blurred[0], blurred[1], blurred[2], new Uint16Array(width * height));
+    let mask = thresholdMask(difference, THRESHOLD, new Uint8Array(width * height));
+    if (clean) mask = majority3x3(mask, width, height, new Uint8Array(width * height));
+
+    renderMask(gl, { layers: [1, 0], threshold: THRESHOLD, blur, clean, show: 'cutout' });
+    const picture = gl.readDiffPixels();
+    const data = gl.readDataField();
+
+    let maskMismatches = 0;
+    let pictureDiff = 0;
+    let strengthDiff = 0;
+    let moving = 0;
+    for (let p = 0; p < mask.length; p++) {
+      moving += mask[p];
+      if (Math.round(data.values[p * 4]) !== mask[p]) maskMismatches++;
+      strengthDiff = Math.max(strengthDiff, Math.abs(data.values[p * 4 + 1] - difference[p] / 765) * 255);
+      for (let c = 0; c < 3; c++) pictureDiff = Math.max(pictureDiff, Math.abs(picture[p * 4 + c] - cur[p * 4 + c] * mask[p]));
+    }
+    return {
+      name, maskMismatches, pictureDiff, strengthDiff: +strengthDiff.toFixed(2), moving,
+      pass: maskMismatches === 0 && pictureDiff === 0 && strengthDiff <= 2,
+    };
+  });
+
+  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
+  pipeline.clearState();
+
+  return { cases, pass: cases.every((c) => c.pass) };
 }
