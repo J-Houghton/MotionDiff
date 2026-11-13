@@ -11,7 +11,7 @@ import {
   storeInterval,
 } from '../core/timebase.js';
 import { posyBlend } from '../core/diff.js';
-import { cellEnergies } from '../core/energy.js';
+import { diffMagnitude, poolMagnitude } from '../core/magnitude.js';
 
 const DEFAULT_PROCESS_WIDTH = 640;
 
@@ -49,8 +49,8 @@ export class Pipeline {
     // worker owns both the pixels and its own FrameRing.
     this._ring = new FrameRing(1);
     this._ringLayers = [0, 0, 0];
-    // Whether the last processed frame produced a diff (energy grid source)
-    this._hasDiff = false;
+    // Whether the last processed frame produced a motion magnitude
+    this._hasMagnitude = false;
 
     // ── Worker path (fallback) ──
     this._worker = null;
@@ -149,6 +149,17 @@ export class Pipeline {
 
       this._workerBusy = false;
 
+      // The motion magnitude grid comes with every kind of result. A result
+      // without one means that frame had no measurement: don't keep
+      // sounding the previous frame's.
+      if (msg.energyBuffer) {
+        this._energyGrid = new Float32Array(msg.energyBuffer);
+        this._energyGridCols = msg.energyCols;
+        this._energyGridRows = msg.energyRows;
+      } else {
+        this._energyGrid = null;
+      }
+
       if (msg.magnifiedBuffer) {
         const magArr = new Uint8ClampedArray(msg.magnifiedBuffer);
         const magnified = new ImageData(magArr, msg.magnifiedWidth, msg.magnifiedHeight);
@@ -172,12 +183,6 @@ export class Pipeline {
         accumulated = new ImageData(accArr, this.width, this.height);
       }
 
-      if (msg.energyBuffer) {
-        this._energyGrid = new Float32Array(msg.energyBuffer);
-        this._energyGridCols = msg.energyCols;
-        this._energyGridRows = msg.energyRows;
-      }
-
       if (this.onResult) {
         this.onResult({ currentFrame, accumulated });
       }
@@ -198,7 +203,7 @@ export class Pipeline {
     this._lastTime = NaN;
     this._lastStoredTime = NaN;
     this._seeked = false;
-    this._hasDiff = false;
+    this._hasMagnitude = false;
     this._energyGrid = null;
 
     if (this._useWebGL && this._glRenderer) {
@@ -294,8 +299,9 @@ export class Pipeline {
   }
 
   /**
-   * Latest motion-energy grid for whichever render path is active, or null
-   * before the first processed frame. Asking for a size is also what turns the
+   * Latest motion-magnitude grid for whichever render path and mode is
+   * active, or null when the last frame carries no measurement (before the
+   * first comparison, right after a seek). Asking for a size is also what turns the
    * grid on: the worker path computes at the requested size from the next frame
    * onward, and cols/rows below 1 switch the readback off entirely.
    *
@@ -316,7 +322,7 @@ export class Pipeline {
     if (nextCols < 1 || nextRows < 1) return null;
 
     if (this._useWebGL) {
-      if (!this._glRenderer || !this._hasDiff) return null;
+      if (!this._glRenderer || !this._hasMagnitude) return null;
       return this._glRenderer.readEnergyGrid(nextCols, nextRows);
     }
 
@@ -543,7 +549,7 @@ export class Pipeline {
     if (ageR < 0 || ageG < 0 || ageB < 0) {
       // Nothing to compare against yet — show blank
       gl.renderBlank(algorithm, ageColorEnabled);
-      this._hasDiff = false;
+      this._hasMagnitude = false;
     } else {
       const layers = this._ringLayers;
       layers[0] = ring.slotAt(ageR);
@@ -569,7 +575,7 @@ export class Pipeline {
 
       // Composite to canvas
       gl.renderComposite(this._currentMode || 'diff', algorithm, ageColorEnabled);
-      this._hasDiff = true;
+      this._hasMagnitude = true;
     }
 
     this._storeCurrentFrame(time, step);
@@ -603,7 +609,7 @@ export class Pipeline {
 
     // Keep the lookback ring warm so switching back to Posy/Raw behaves.
     this._storeCurrentFrame(time, step);
-    this._hasDiff = false;
+    this._hasMagnitude = false;
 
     if (!gl.magnifySupported) {
       // The UI disables the magnify option when unsupported; if we still
@@ -625,6 +631,7 @@ export class Pipeline {
     if (!ok) {
       gl.renderBlank(this.params.algorithm, false);
     }
+    this._hasMagnitude = ok;
   }
 
   // ── Magnify: Worker path (fallback) ─────────────────────────
@@ -673,6 +680,8 @@ export class Pipeline {
       dtMs,
       width: frame.width,
       height: frame.height,
+      energyCols: this._energyCols,
+      energyRows: this._energyRows,
     }, [currentFrameBuffer]);
   }
 
@@ -703,11 +712,62 @@ export class Pipeline {
 }
 
 /**
- * Dev-only parity probe for SPEC-sonification A6.
+ * Synthetic frame pairs for the magnitude parity probe.
  *
- * Feeds the same two synthetic frames through the CPU core math and the WebGL
- * readback and returns both grids so their cells can be compared. Only ever
- * called behind `import.meta.env.DEV`, so production builds tree-shake it away.
+ * - `wedge`: only the second frame carries a brightness wedge, so every cell
+ *   lands on a different magnitude and every deviation has the same sign.
+ * - `signed`: a bright square moves 6 px inside one cell (a positive band
+ *   where it arrives, a negative band where it left) and a checkerboard
+ *   inverts (alternate pixels deviate up and down). Averaging the signed
+ *   Posy values over a cell cancels both to ~0; only a per-pixel unsigned
+ *   magnitude sees them.
+ */
+function buildParityPatterns(width, height) {
+  const base = 96;
+  const make = (fn) => {
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        data[i] = data[i + 1] = data[i + 2] = fn(x, y);
+        data[i + 3] = 255;
+      }
+    }
+    return data;
+  };
+  const square = (x0) => (x, y) => {
+    if (x >= 64 && y >= 32) return 0; // checkerboard region, filled below
+    return x >= x0 && x < x0 + 6 && y >= 20 && y < 28 ? 216 : base;
+  };
+  const checker = (phase) => (x, y) => ((x + y + phase) % 2 === 0 ? 136 : 56);
+  const signed = (x0, phase) => (x, y) => (x >= 64 && y >= 32 ? checker(phase)(x, y) : square(x0)(x, y));
+
+  return {
+    wedge: {
+      prev: make(() => base),
+      // Motion grows to the right and is strongest at the top.
+      next: make((x, y) => base + Math.round((x / (width - 1)) * 120 * (1 - y / (height - 1)))),
+    },
+    signed: {
+      prev: make(signed(34, 0)),
+      next: make(signed(40, 1)),
+    },
+  };
+}
+
+/**
+ * Dev-only parity probe for the shared motion magnitude (originally
+ * SPEC-sonification A6).
+ *
+ * Feeds synthetic frame pairs through the CPU core math
+ * (posyBlend → diffMagnitude → poolMagnitude) and through the WebGL diff,
+ * magnitude and pooling programs, and returns both grids per pattern. Only
+ * ever called behind `import.meta.env.DEV`, so production builds tree-shake
+ * it away.
+ *
+ * For the signed pattern it also reports `signedMean`: what pooling the
+ * signed diff first would have measured, to show the cancellation the
+ * unsigned magnitude avoids.
  *
  * It resizes the renderer to the synthetic frame size and clears the pipeline
  * afterwards — run it on an idle page, not mid-playback.
@@ -715,7 +775,9 @@ export class Pipeline {
  * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
  * @param {number} [cols]
  * @param {number} [rows]
- * @returns {{cols: number, rows: number, core: number[], webgl: number[]}|null}
+ * @returns {object|null} { cols, rows, core, webgl, maxDiff } for the wedge
+ *   pattern, the same fields plus signedMean under `signed`, and `pass`
+ *   (every cell of both patterns within 0.05)
  */
 export function debugEnergyParity(pipeline, cols = 8, rows = 4) {
   const gl = pipeline?._glRenderer;
@@ -723,47 +785,60 @@ export function debugEnergyParity(pipeline, cols = 8, rows = 4) {
 
   const width = 128;
   const height = 64;
-  const prev = new Uint8ClampedArray(width * height * 4);
-  const next = new Uint8ClampedArray(width * height * 4);
-  const base = 96;
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-      prev[i] = prev[i + 1] = prev[i + 2] = base;
-      prev[i + 3] = 255;
-      // Only the second frame carries the wedge: motion grows to the right and
-      // is strongest at the top, so every cell lands on a different energy.
-      const wedge = Math.round((x / (width - 1)) * 120 * (1 - y / (height - 1)));
-      next[i] = next[i + 1] = next[i + 2] = base + wedge;
-      next[i + 3] = 255;
-    }
-  }
-
-  const diff = new Uint8ClampedArray(width * height * 4);
-  posyBlend(next, prev, diff, 0);
-  const core = cellEnergies(diff, width, height, cols, rows, true);
+  const patterns = buildParityPatterns(width, height);
 
   const restoreWidth = gl.width;
   const restoreHeight = gl.height;
   const restoreFrames = gl.ringFrames;
   gl.setSize(width, height, 2);
-  // Previous frame into ring layer 0, then the frame under test as current.
-  gl.uploadPixels(new ImageData(prev, width, height));
-  gl.storeCurrent(0);
-  gl.uploadPixels(new ImageData(next, width, height));
-  gl.renderDiff({
-    threshold: 0,
-    algorithm: 'posy',
-    rgbTintR: '#ff0000',
-    rgbTintG: '#00ff00',
-    rgbTintB: '#0000ff',
-    layers: [0, 0, 0],
-  });
-  const webgl = Array.from(gl.readEnergyGrid(cols, rows));
+
+  const run = ({ prev, next }) => {
+    const diff = new Uint8ClampedArray(width * height * 4);
+    posyBlend(next, prev, diff, 0);
+    const magnitude = diffMagnitude(diff, true, new Float32Array(width * height));
+    const core = Array.from(poolMagnitude(magnitude, width, height, cols, rows));
+
+    // Previous frame into ring layer 0, then the frame under test as current.
+    gl.uploadPixels(new ImageData(prev, width, height));
+    gl.storeCurrent(0);
+    gl.uploadPixels(new ImageData(next, width, height));
+    gl.renderDiff({
+      threshold: 0,
+      algorithm: 'posy',
+      rgbTintR: '#ff0000',
+      rgbTintG: '#00ff00',
+      rgbTintB: '#0000ff',
+      layers: [0, 0, 0],
+    });
+    const grid = gl.readEnergyGrid(cols, rows);
+    const webgl = grid ? Array.from(grid) : [];
+
+    // Pool the signed values first, then take the deviation (the wrong order).
+    const signedValues = new Float32Array(width * height);
+    for (let p = 0; p < signedValues.length; p++) signedValues[p] = diff[p * 4] / 255;
+    const signedMean = Array.from(poolMagnitude(signedValues, width, height, cols, rows))
+      .map((mean) => Math.abs(mean * 255 - 128) / 127);
+
+    let maxDiff = webgl.length === core.length ? 0 : Infinity;
+    for (let i = 0; i < core.length && i < webgl.length; i++) {
+      maxDiff = Math.max(maxDiff, Math.abs(core[i] - webgl[i]));
+    }
+    return { core, webgl, signedMean, maxDiff };
+  };
+
+  const wedge = run(patterns.wedge);
+  const signed = run(patterns.signed);
 
   if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
   pipeline.clearState();
 
-  return { cols, rows, core: Array.from(core), webgl };
+  return {
+    cols,
+    rows,
+    core: wedge.core,
+    webgl: wedge.webgl,
+    maxDiff: wedge.maxDiff,
+    signed,
+    pass: wedge.maxDiff < 0.05 && signed.maxDiff < 0.05,
+  };
 }

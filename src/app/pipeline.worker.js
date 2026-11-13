@@ -2,7 +2,7 @@ import { posyBlend, rawDiff } from '../core/diff.js';
 import { boxBlur } from '../core/blur.js';
 import { accumulate } from '../core/trails.js';
 import { emaAlpha, seedStates, magnifyFrame } from '../core/magnify.js';
-import { cellEnergies } from '../core/energy.js';
+import { bandMagnitude, diffMagnitude, poolMagnitude } from '../core/magnitude.js';
 import { CircularBuffer, FrameRing, ringCapacity } from '../core/buffer.js';
 import { lookbackTime, shouldStore, storeInterval } from '../core/timebase.js';
 
@@ -68,6 +68,21 @@ let magSlow = null;
 function magClear() {
   magFast = null;
   magSlow = null;
+}
+
+// ── Shared motion magnitude (see core/magnitude.js) ──
+// Each mode fills this per-pixel buffer; the grid is pooled from it the
+// same way whatever the mode. Reused across frames, sized on demand.
+let magnitudeScratch = new Float32Array(0);
+
+function magnitudeBuffer(pixelCount) {
+  if (magnitudeScratch.length !== pixelCount) magnitudeScratch = new Float32Array(pixelCount);
+  return magnitudeScratch;
+}
+
+/** Pool a filled magnitude buffer into a transferable grid, or null when nobody is listening. */
+function pooledEnergy(magnitude, width, height, cols, rows) {
+  return poolMagnitude(magnitude, width, height, cols, rows).buffer;
 }
 
 function hexToRgb(hex, fallback) {
@@ -201,6 +216,13 @@ self.onmessage = function (e) {
       curData
     );
 
+    // Magnify's motion magnitude is the strength of the amplified band.
+    let energyBuffer = null;
+    if (energyCols > 0 && energyRows > 0) {
+      const magnitude = bandMagnitude(magFast, magSlow, params.magAmp, magnitudeBuffer(width * height));
+      energyBuffer = pooledEnergy(magnitude, width, height, energyCols, energyRows);
+    }
+
     const magnifiedBuffer = magnified.buffer;
     self.postMessage(
       {
@@ -208,8 +230,11 @@ self.onmessage = function (e) {
         magnifiedBuffer,
         magnifiedWidth: width,
         magnifiedHeight: height,
+        energyBuffer,
+        energyCols,
+        energyRows,
       },
-      [magnifiedBuffer]
+      energyBuffer ? [magnifiedBuffer, energyBuffer] : [magnifiedBuffer]
     );
     return;
   }
@@ -267,13 +292,12 @@ self.onmessage = function (e) {
     boxBlur(diffData, width, height);
   }
 
-  // Sonification energies: post-threshold, pre-composite — the same stage the
-  // WebGL path reads back from. Skipped entirely when no grid is requested.
+  // Motion magnitude: post threshold and blur, pre composite — the same
+  // stage the WebGL path measures. Skipped entirely when no grid is requested.
   let energyBuffer = null;
   if (energyCols > 0 && energyRows > 0) {
-    energyBuffer = cellEnergies(
-      diffData, width, height, energyCols, energyRows, algorithm === 'posy'
-    ).buffer;
+    const magnitude = diffMagnitude(diffData, algorithm === 'posy', magnitudeBuffer(width * height));
+    energyBuffer = pooledEnergy(magnitude, width, height, energyCols, energyRows);
   }
 
   // The same frame rendered again replaces its trail entry.
