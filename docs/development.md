@@ -87,7 +87,7 @@ main.js imports app/ and ui/, and core/ for pure helpers
 
 **Threshold** is the mean absolute channel difference between two frames, 0..255, in every mode. (Posy stores half-differences, so `posyBlend` doubles before comparing.)
 
-**Time base** (`core/timebase.js`). Frames are stamped with media time (`requestVideoFrameCallback`'s `mediaTime`, else `video.currentTime`) and old frames are found by time, never by counting processed frames. Gap, spread, trail and history lengths are all in 1/30 s of media time. Each frame is classified against the previous stamp (`classifyStep`): a `jump` clears history, a `rewind` drops only frames at or after the new position, a `repeat` (the same frame rendered again while paused) stores nothing new. Do not add a path that pushes a frame without a stamp, and do not count processed frames for anything a user sets.
+**Time base** (`core/timebase.js`). Frames are stamped with media time (`requestVideoFrameCallback`'s `mediaTime`, else `video.currentTime`) and old frames are found by time, never by counting processed frames. Gap, spread, trail and history lengths are all in 1/30 s of media time. Each frame is classified against the previous stamp (`classifyStep`): a `jump` clears history, a `rewind` drops only frames at or after the new position, a `repeat` (the same frame rendered again while paused) stores nothing new. Do not add a path that pushes a frame without a stamp, and do not count processed frames for anything a user sets. Live sources (camera, screen) are the exception to "media time": browsers disagree on what a camera frame's `mediaTime` is, so `Session` stamps live frames with its own real-time clock.
 
 **Frame history** (`core/buffer.js`). `FrameRing` tracks slots and stamps, not pixels. On WebGL the video element is uploaded straight to a texture and past frames live in a `TEXTURE_2D_ARRAY` (slot = layer); nothing is read back or kept on the JS heap. On the fallback the worker owns the ring and the pixel buffers. The ring is sized from a 192 MiB budget and capped at 120 frames: 120 at 640×360, 54 at 1280×720, 24 at 1920×1080. When it is too short for the lookback, `storeInterval` thins what is kept. Phones get a 64 MiB budget and a 480 px processing width.
 
@@ -165,6 +165,8 @@ Clarifications made along the way, with their reasons:
 - Creating a texture binds it. A mode asks for all its `renderer.target()`s and the `dataFramebuffer()` before binding textures for a draw, or the first frame draws from the wrong texture.
 - Do not hold a GLSL `bool` computed from a variable that is reassigned later in the shader: one GPU compiler evaluated it after the reassignment. Compute a float instead.
 - `gl.finish()` does not wait for the GPU in Chrome. To time a frame, read one pixel back after it.
+- A camera reports a placeholder picture size (0×0, or 2×2 on phones) until its first real frame. `Session` waits for a real size before sizing the pipeline, and follows the video element's `resize` event afterwards (a rotated phone, a resized shared window).
+- Not every browser keeps delivering frame callbacks for a video nobody can see, or advances the decoded-frame counter on a camera stream. The frame loop falls back to the display clock when both stand still; do not make processing depend on either alone.
 - Video decoders start slowly: give playback two or three seconds before counting frames. Browser-recorded WebM cannot be seeked frame-accurately, which is why the filmstrip tool draws its synthetic scenes itself.
 
 ## Deployment
