@@ -26,16 +26,20 @@
  *             into the frame ring, in 1/30 s. Defaults to the gap and the
  *             gap plus two spreads.
  *   render(frame)  draw one frame on the GPU. `frame` is the context built
- *             in Pipeline.process: { gl, ring, time, step, dtMs,
- *             trailAgeStep, params, display, layers }. Return false when
+ *             in Pipeline.process: { gl, ring, time, step, dtMs, stepMs,
+ *             trailAgeStep, params, display, layers }. dtMs is the media
+ *             time since the previous frame (0 for a frame rendered again);
+ *             stepMs is the same but keeps its value on a repeat, for
+ *             feedback state that is recomputed rather than advanced. Return false when
  *             there was nothing to measure this frame.
  */
 import posy from './posy.js';
 import raw from './raw.js';
 import magnify from './magnify.js';
 import mask from './mask.js';
+import history from './history.js';
 
-export const MODES = [posy, raw, magnify, mask];
+export const MODES = [posy, raw, magnify, mask, history];
 
 const BY_ID = new Map(MODES.map((mode) => [mode.id, mode]));
 

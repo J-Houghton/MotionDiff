@@ -83,7 +83,7 @@ export class Pipeline {
     this._currentMode = 'diff';
     // Per-frame context handed to the active mode's render(); reused.
     this._frame = {
-      gl: null, ring: null, time: 0, step: 'first', dtMs: 0, trailAgeStep: 0,
+      gl: null, ring: null, time: 0, step: 'first', dtMs: 0, stepMs: 0, trailAgeStep: 0,
       params: this.params, display: 'diff', layers: [0, 0, 0],
     };
     // Why the active mode cannot run here, if it cannot (reported once)
@@ -604,6 +604,7 @@ export class Pipeline {
       frame.step = step;
       frame.dtMs = dtMs;
       frame.trailAgeStep = trailAgeStep;
+      frame.stepMs = this._lastDtMs;
       frame.params = this.params;
       frame.display = this._currentMode;
       this._hasMagnitude = mode.render(frame) !== false;

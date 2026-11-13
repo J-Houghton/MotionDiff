@@ -655,6 +655,7 @@ export class WebGLRenderer {
     // ('posy' | 'raw' | 'band'), or null when that frame carries no motion
     // measurement. Set by each mode's render path, consumed lazily.
     this._magnitudeSource = null;
+    this._epoch = 0;
     this._magnitudeAmp = 0;
     this._magnitudeTex = null;
     this._magnitudeFB = null;
@@ -1456,6 +1457,19 @@ export class WebGLRenderer {
   get diffFramebuffer() { return this._diffFB; }
 
   /**
+   * Where a mode draws a finished picture (Raw or Posy space) when it does
+   * not want the shared trail: renderComposite shows this texture.
+   */
+  get pictureFramebuffer() { return this._accumFB; }
+
+  /**
+   * Counts every time history is thrown away (a seek, a new source, a mode
+   * change, a resize). A mode that keeps feedback state of its own starts
+   * over when this differs from the value it saw last.
+   */
+  get epoch() { return this._epoch; }
+
+  /**
    * A program compiled once per renderer and cached under `key`.
    * @param {string} key
    * @param {string} fragSrc - GLSL ES 3.00 fragment shader; gets `in vec2 vUV`
@@ -1583,6 +1597,7 @@ export class WebGLRenderer {
    * states re-seed on the same occasions.
    */
   clearTrails() {
+    this._epoch++;
     this._trailEmpty = true;
     this._trailHasFrame = false;
     this._magNeedsSeed = true;

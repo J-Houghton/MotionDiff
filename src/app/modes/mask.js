@@ -14,6 +14,7 @@
  */
 import { lookbackTime } from '../../core/timebase.js';
 import { TRAIL_HOLD, TRAIL_REFRESH } from '../../core/trails.js';
+import { MASK_VOTES } from '../../core/mask.js';
 import { GAP, THRESHOLD, TRAIL, asMs } from './params.js';
 
 // Pass 1. Mirrors boxBlur (core/blur.js) on each frame, then
@@ -78,7 +79,7 @@ precision highp float;
 
 uniform sampler2D uMask;    // pass 1
 uniform sampler2D uCurrent;
-uniform int uClean;         // 1 = 3x3 majority vote
+uniform int uClean;         // 0 = as it is, else the votes a pixel needs of its 3x3 cells
 uniform int uOutput;        // 0 = cut-out of the current frame, 1 = solid mask, 2 = data
 
 out vec4 fragColor;
@@ -88,7 +89,7 @@ void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   vec4 here = texelFetch(uMask, p, 0);
   float moving = here.r > 0.5 ? 1.0 : 0.0;
-  if (uClean == 1) {
+  if (uClean > 0) {
     float votes = 0.0;
     for (int dy = -1; dy <= 1; dy++) {
       for (int dx = -1; dx <= 1; dx++) {
@@ -97,7 +98,7 @@ void main() {
         votes += texelFetch(uMask, q, 0).r > 0.5 ? 1.0 : 0.0;
       }
     }
-    moving = votes >= 5.0 ? 1.0 : 0.0;
+    moving = votes >= float(uClean) ? 1.0 : 0.0;
   }
   if (uOutput == 2) fragColor = vec4(moving, here.g, 0.0, 1.0);
   else if (uOutput == 1) fragColor = vec4(vec3(moving), 1.0);
@@ -105,25 +106,21 @@ void main() {
 }`;
 
 /**
- * The mask passes for the frame in the renderer's current texture: fills the
- * diff target with the picture and the data target with the mask.
+ * Pass 1 for the frame in the renderer's current texture.
  *
  * @param {object} renderer - WebGLRenderer
  * @param {object} opts
  * @param {number[]} opts.layers - Ring layers of the two older frames
  * @param {number} opts.threshold - Mean channel difference, 0..255
  * @param {boolean} opts.blur
- * @param {boolean} opts.clean
- * @param {'cutout'|'solid'} opts.show
+ * @returns {object} The target holding R = raw decision, G = strength
  */
-export function renderMask(renderer, opts) {
+export function maskDifference(renderer, opts) {
   const gl = renderer.gl;
   const { width, height } = renderer;
-
-  // Targets first: creating one binds its texture, which would disturb the
-  // units set up for a draw.
+  // Targets before binds: creating one binds its texture, which would
+  // disturb the units set up for a draw.
   const raw = renderer.target('mask:raw', width, height);
-  const data = renderer.dataFramebuffer(width, height);
   const difference = renderer.program('mask:difference', DIFFERENCE_FRAG, { uCurrent: 0, uRing: 1 });
   gl.useProgram(difference.prog);
   renderer.bind(0, renderer.currentTexture);
@@ -132,22 +129,71 @@ export function renderMask(renderer, opts) {
   gl.uniform1f(difference.u.uThreshold, opts.threshold);
   gl.uniform1i(difference.u.uBlur, opts.blur ? 1 : 0);
   renderer.draw(raw.fb, width, height);
+  return raw;
+}
 
+/**
+ * Pass 2: draw a decision texture (R = 0 or 1, G = strength; pass 1's
+ * output or another mode's) into a framebuffer, with or without the vote.
+ *
+ * @param {object} renderer
+ * @param {WebGLTexture} decision
+ * @param {WebGLFramebuffer} framebuffer
+ * @param {object} opts
+ * @param {boolean|number} opts.clean - 3x3 vote: true for a majority
+ *   (MASK_VOTES), or the number of votes a pixel needs
+ * @param {'cutout'|'solid'|'data'} opts.output - The current frame cut out
+ *   by the mask, the mask in white, or R = mask and G = strength
+ */
+export function maskDraw(renderer, decision, framebuffer, opts) {
+  const gl = renderer.gl;
   const output = renderer.program('mask:output', OUTPUT_FRAG, { uMask: 0, uCurrent: 1 });
   gl.useProgram(output.prog);
-  renderer.bind(0, raw.tex);
+  renderer.bind(0, decision);
   renderer.bind(1, renderer.currentTexture);
-  gl.uniform1i(output.u.uClean, opts.clean ? 1 : 0);
-  // The picture, where the trail and compositing passes expect a diff.
-  gl.uniform1i(output.u.uOutput, opts.show === 'solid' ? 1 : 0);
-  renderer.draw(renderer.diffFramebuffer, width, height);
-  // The mask as data: R = moving (0 or 1), G = strength.
-  gl.uniform1i(output.u.uOutput, 2);
-  renderer.draw(data, width, height);
+  gl.uniform1i(output.u.uClean, opts.clean === true ? MASK_VOTES : opts.clean || 0);
+  gl.uniform1i(output.u.uOutput, opts.output === 'data' ? 2 : opts.output === 'solid' ? 1 : 0);
+  renderer.draw(framebuffer, renderer.width, renderer.height);
 }
+
+/**
+ * Both passes: fills the diff target with the picture and the data target
+ * with the mask.
+ * @param {object} renderer
+ * @param {object} opts - maskDifference's, plus clean and show ('cutout' | 'solid')
+ */
+export function renderMask(renderer, opts) {
+  const data = renderer.dataFramebuffer(renderer.width, renderer.height);
+  const raw = maskDifference(renderer, opts);
+  // The picture, where the trail and compositing passes expect a diff.
+  maskDraw(renderer, raw.tex, renderer.diffFramebuffer, { clean: opts.clean, output: opts.show });
+  // The mask as data: R = moving (0 or 1), G = strength.
+  maskDraw(renderer, raw.tex, data, { clean: opts.clean, output: 'data' });
+}
+
+/** Controls shared by the modes built on the mask. */
+export const SECOND_GAP = { key: 'secondGap', label: 'Second gap', type: 'range', min: 2, max: 120, step: 1, default: 30, format: asMs };
+export const MASK_BLUR = { key: 'maskBlur', label: 'Blur first', type: 'toggle', default: true };
+export const MASK_CLEAN = { key: 'maskClean', label: 'Clean up', type: 'toggle', default: true };
 
 /** The second gap is always behind the first. */
 const secondGap = (params) => Math.max(params.secondGap, params.frameOffset + 1);
+
+/** How far the mask reads back into the frame ring, for a mode's `lookback`. */
+export const maskLookback = (params) => [params.frameOffset, secondGap(params)];
+
+/**
+ * The ring layers of the two older frames for this frame, or null while
+ * there is no history. While the ring is still filling both may be the same.
+ * @param {object} frame - The per-frame context from Pipeline.process
+ * @returns {number[]|null}
+ */
+export function maskLayers(frame) {
+  const { ring, time, params } = frame;
+  const near = ring.nearest(lookbackTime(time, params.frameOffset, 0, 0), time);
+  const far = ring.nearest(lookbackTime(time, secondGap(params), 0, 0), time);
+  return near < 0 || far < 0 ? null : [ring.slotAt(near), ring.slotAt(far)];
+}
 
 export default {
   id: 'mask',
@@ -164,27 +210,24 @@ export default {
   worker: false,
   params: [
     GAP,
-    { key: 'secondGap', label: 'Second gap', type: 'range', min: 2, max: 120, step: 1, default: 30, format: asMs },
+    SECOND_GAP,
     THRESHOLD,
-    { key: 'maskBlur', label: 'Blur first', type: 'toggle', default: true },
-    { key: 'maskClean', label: 'Clean up', type: 'toggle', default: true },
+    MASK_BLUR,
+    MASK_CLEAN,
     { key: 'maskShow', label: 'Show', type: 'select', default: 'cutout', options: { 'Cut-out': 'cutout', 'Solid mask': 'solid' } },
     TRAIL,
   ],
-  lookback: (params) => [params.frameOffset, secondGap(params)],
+  lookback: maskLookback,
   render(frame) {
-    const { gl: renderer, ring, time, params } = frame;
-    // The stored frames nearest each gap, older than this one. While the
-    // ring is still filling both may be the same frame.
-    const near = ring.nearest(lookbackTime(time, params.frameOffset, 0, 0), time);
-    const far = ring.nearest(lookbackTime(time, secondGap(params), 0, 0), time);
-    if (near < 0 || far < 0) {
+    const { gl: renderer, params } = frame;
+    const layers = maskLayers(frame);
+    if (!layers) {
       renderer.renderBlank('raw', false);
       return false;
     }
 
     renderMask(renderer, {
-      layers: [ring.slotAt(near), ring.slotAt(far)],
+      layers,
       threshold: params.threshold,
       blur: params.maskBlur,
       clean: params.maskClean,

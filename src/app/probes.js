@@ -8,8 +8,10 @@
 import { boxBlur } from '../core/blur.js';
 import { posyBlend, rawDiff } from '../core/diff.js';
 import { diffMagnitude, poolMagnitude } from '../core/magnitude.js';
-import { majority3x3, thresholdMask, threeFrameDifference } from '../core/mask.js';
-import { renderMask } from './modes/mask.js';
+import { MASK_VOTES_STRICT, majority3x3, thresholdMask, threeFrameDifference } from '../core/mask.js';
+import { HISTORY_MAX_DELTA, historyGradient, historyStep, poolDirection } from '../core/history.js';
+import { maskDifference, maskDraw, renderMask } from './modes/mask.js';
+import { HISTORY_CELL, HISTORY_SPREAD, renderHistory } from './modes/history.js';
 import { TRAIL_HOLD, TRAIL_REFRESH, createTrailState, trailStep } from '../core/trails.js';
 
 /**
@@ -447,4 +449,109 @@ export function debugMaskParity(pipeline) {
   pipeline.clearState();
 
   return { cases, pass: cases.every((c) => c.pass) };
+}
+
+/**
+ * Dev-only parity probe for the motion history shaders (app/modes/history.js)
+ * against core/history.js: a block moving across a textured frame for several
+ * steps, one of them rendered twice, through mask → age → slope → pooled
+ * direction on both sides. Compares the data output: how recent (R) and the
+ * pooled heading (G, B).
+ *
+ * It resizes the renderer and clears the pipeline — run it on an idle page.
+ *
+ * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
+ * @returns {{recencyDiff: number, directionDiff: number, live: number, withDirection: number, pass: boolean}|null}
+ */
+export function debugHistoryParity(pipeline) {
+  const gl = pipeline?._glRenderer;
+  if (!gl) return null;
+  if (!gl.floatTargets) return { skipped: 'no float render targets', pass: true };
+
+  const width = 64;
+  const height = 40;
+  const THRESHOLD = 12;
+  // Steps that half floats hold exactly, so both sides age identically.
+  const AGE_STEP = 1 / 16;
+  const frameAt = (k) => {
+    const frame = new Uint8ClampedArray(width * height * 4);
+    for (let i = 0; i < frame.length; i += 4) {
+      const x = (i / 4) % width;
+      const y = Math.floor(i / 4 / width);
+      // A textured block heading down-right, 3 px across and 1 px down per frame.
+      const inBlock = x >= 4 + k * 3 && x < 16 + k * 3 && y >= 6 + k && y < 20 + k;
+      for (let c = 0; c < 3; c++) frame[i + c] = inBlock ? 150 + ((x * 7 + y * 13 + c * 40) % 100) : 40 + ((x + y * 3 + c * 9) % 24);
+      frame[i + 3] = 255;
+    }
+    return frame;
+  };
+  const frames = Array.from({ length: 11 }, (_, k) => frameAt(k));
+
+  const restoreWidth = gl.width;
+  const restoreHeight = gl.height;
+  const restoreFrames = gl.ringFrames;
+  gl.setSize(width, height, 3);
+  gl.clearTrails();
+  const maskTarget = gl.target('history:mask', width, height);
+
+  let age = new Float32Array(width * height).fill(1);
+  const cols = Math.ceil(width / HISTORY_CELL);
+  const rows = Math.ceil(height / HISTORY_CELL);
+  let data = null;
+  for (let k = 2; k < frames.length; k++) {
+    const blurred = [frames[k], frames[k - 1], frames[k - 2]].map((frame) => {
+      const copy = new Uint8ClampedArray(frame);
+      boxBlur(copy, width, height);
+      return copy;
+    });
+    const difference = threeFrameDifference(blurred[0], blurred[1], blurred[2], new Uint16Array(width * height));
+    const mask = majority3x3(thresholdMask(difference, THRESHOLD, new Uint8Array(width * height)), width, height, new Uint8Array(width * height), MASK_VOTES_STRICT);
+    age = historyStep(age, mask, AGE_STEP, new Float32Array(width * height));
+
+    gl.uploadPixels(new ImageData(frames[k - 2], width, height));
+    gl.storeCurrent(0);
+    gl.uploadPixels(new ImageData(frames[k - 1], width, height));
+    gl.storeCurrent(1);
+    gl.uploadPixels(new ImageData(frames[k], width, height));
+    const draw = (repeat) => {
+      const raw = maskDifference(gl, { layers: [1, 0], threshold: THRESHOLD, blur: true });
+      maskDraw(gl, raw.tex, maskTarget.fb, { clean: MASK_VOTES_STRICT, output: 'data' });
+      renderHistory(gl, { mask: maskTarget.tex, ageStep: AGE_STEP, repeat, view: 'direction' });
+    };
+    draw(false);
+    if (k === 5) draw(true); // a parameter change while paused must not age it twice
+    data = gl.readDataField();
+  }
+
+  const gradient = historyGradient(age, width, height, HISTORY_MAX_DELTA, new Float32Array(width * height * 3));
+  const pooled = poolDirection(gradient, width, height, HISTORY_CELL, HISTORY_SPREAD, new Float32Array(cols * rows * 3));
+
+  let recencyDiff = 0;
+  let directionDiff = 0;
+  let live = 0;
+  let withDirection = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const p = y * width + x;
+      const isLive = age[p] < 1;
+      const cell = (Math.floor(y / HISTORY_CELL) * cols + Math.floor(x / HISTORY_CELL)) * 3;
+      const expected = [isLive ? 1 - age[p] : 0, isLive ? pooled[cell] : 0, isLive ? pooled[cell + 1] : 0];
+      if (isLive) live++;
+      if (isLive && Math.hypot(pooled[cell], pooled[cell + 1]) > 0.2) withDirection++;
+      recencyDiff = Math.max(recencyDiff, Math.abs(data.values[p * 4] - expected[0]));
+      directionDiff = Math.max(directionDiff, Math.abs(data.values[p * 4 + 1] - expected[1]), Math.abs(data.values[p * 4 + 2] - expected[2]));
+    }
+  }
+
+  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
+  pipeline.clearState();
+
+  return {
+    recencyDiff: +recencyDiff.toFixed(4),
+    directionDiff: +directionDiff.toFixed(4),
+    live,
+    withDirection,
+    // The probe proves nothing unless there is a trail with headings in it.
+    pass: recencyDiff <= 0.002 && directionDiff <= 0.02 && live > 200 && withDirection > 100,
+  };
 }

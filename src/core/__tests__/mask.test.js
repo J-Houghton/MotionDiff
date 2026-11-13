@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { threeFrameDifference, thresholdMask, majority3x3 } from '../mask.js';
+import { MASK_VOTES_STRICT, threeFrameDifference, thresholdMask, majority3x3 } from '../mask.js';
 import { boxBlur } from '../blur.js';
 
 function makePixels(...pixels) {
@@ -99,6 +99,18 @@ describe('majority3x3', () => {
   it('keeps the body of a block and fills a one-pixel hole', () => {
     expect(run(['11111', '11011', '11111'])[1]).toBe('11111');
     expect(run(['00000', '01110', '01110', '01110', '00000'])[2]).toBe('01110');
+  });
+
+  it('the strict vote also removes a two-pixel line but keeps the inside of a band', () => {
+    const strict = (rows) => {
+      const height = rows.length;
+      const width = rows[0].length;
+      const out = majority3x3(Uint8Array.from(rows.join('').split('').map(Number)), width, height, new Uint8Array(width * height), MASK_VOTES_STRICT);
+      return Array.from({ length: height }, (_, y) => Array.from(out.slice(y * width, (y + 1) * width)).join(''));
+    };
+    expect(run(['000000', '111111', '111111', '000000'])[1]).toBe('011110');   // a majority keeps it
+    expect(strict(['000000', '111111', '111111', '000000'])[1]).toBe('000000'); // seven of nine does not
+    expect(strict(['00000', '11111', '11111', '11111', '11111', '00000'])[2]).toBe('01110');
   });
 
   it('counts cells outside the image as not set', () => {

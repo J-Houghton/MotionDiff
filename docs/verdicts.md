@@ -126,3 +126,88 @@ borderline case, and a hairline of ghost survived (4.6% of marks).
 Not built: a per-frame automatic threshold from a noise model. Auto-configure (A)
 already measures the noise floor and sets the threshold for this mode too; a
 per-frame estimate needs a statistics pass on the GPU and is on the roadmap.
+
+### V3. Motion history mode — visual (new mode)
+**What it is.** One feedback buffer holds, per pixel, the time since the motion mask
+(V2) last fired there, as a share of the history length. Two views: *age* (a colour
+gradient from new to old along each mover's path) and *direction* (hue from the
+direction of travel, found from the slope of the age field, averaged over a
+neighbourhood because the slope at a single pixel follows the shape of the object's
+edge, not its heading).
+
+**Expected effect, written before building:**
+- *Age view on `truth`:* behind each object a band along its path, new colour at the
+  object, old colour at the tail, changing steadily in between, ending where the
+  history length says. Static background black. Measured on the data output: age
+  sampled along the known path rises monotonically with distance behind the object.
+- *Direction view on `truth`:* the square's trail is one hue and the disc's another;
+  the hue matches the known heading (0° and 30°) within about 20°, measured as the
+  mean direction over each trail. In the second half of the clip the disc heading
+  left (180°) has the opposite hue to the square.
+- *Against Posy and Raw with trails:* those show that something passed; this shows
+  which way and how long ago, also for a single still frame.
+- *On a real clip (`highway`):* traffic in the two directions gets two different
+  hues.
+- *Known limits for the help text:* direction is the heading of the object's
+  outline, so it is only reliable averaged over a patch; things that move back and
+  forth (foliage) give mixed hues; a flat-coloured object's own footprint is uneven
+  because only its edges register.
+- No regression: other modes untouched.
+
+**Result: accepted.**
+
+Built as `app/modes/history.js` on `core/history.js` (11 unit tests); shader parity
+`__motionDiffHistoryParity()`: age exact, pooled heading within 0.0005. WebGL with
+float render targets only; elsewhere the mode reports that it cannot run.
+
+| Check | Clip | Result |
+|---|---|---|
+| Direction within about 20° | truth | Known headings 0°, 30°, 180°: measured **0°, 31.7°, 177°** (mean over each trail, `scripts/truth-check.mjs`) |
+| Age rises steadily along the path | truth | Square, disc and second disc: age (median across the trail) rises at every sample from the object to the tail, 0.33 → 1.0 |
+| Blind judge, age view | truth, traffic | "Orange end is now, purple is the middle, blue is oldest. Age is the easiest to read of the four"; bands "change steadily from head to tail, with no stripes along the length" |
+| Blind judge, direction view | truth, traffic | Opposite movers: "square red, disc cyan"; traffic: told the carriageways apart "immediately. The near side is green to yellow-green... The far side is magenta/pink" |
+| Shows something Posy and Raw don't | all | Named by the judge: "the only one giving direction per object in a single cell"; with Posy and Raw trails heading is "by inference" and age "barely readable" |
+| Grouping | all | All ten images assigned to the right four methods |
+
+Changes made during the check:
+- The pre-blur leaves a hairline on a flat object's trailing edge. In the mask that
+  is harmless; integrated over time it reset the history in stripes. History now
+  uses a stricter clean-up vote (seven of nine, `MASK_VOTES_STRICT`).
+- The averaging patch for direction grew from 24 px to 56 px (and became a cheaper
+  two-step sum): at 24 px the 44 px disc trail showed two hues, one per side.
+- The reference clip for direction became `traffic` (fixed camera). On `highway` the
+  camera pans, so everything has a heading and the picture is confetti.
+
+Defects the judge found, all left as they are and listed in the mode's help:
+- Hue drifts across a band wider than the patch.
+- A hatched patch at the very tail of the disc's trail: leftover specks of the
+  hairline that survive the stricter vote on a curved edge.
+- Where the square restarts after standing still, its band has a seam: for a second
+  the place it stood counts as moving (the mask's second gap still sees it there).
+
+### V4. Background model mode — visual (new mode)
+**What it is.** Per pixel, a running mean and variance of what is usually there. A
+pixel is foreground when it differs from the mean by more than the threshold and
+more than 2.5 standard deviations. The model learns with a time constant set by
+"Absorb after", but not where the motion mask (V2) fired within the last half
+second: moving things neither blur into the background nor inflate its variance.
+
+**Expected effect, written before building:**
+- *Filled silhouette, on `truth` while the square moves:* the whole square is marked
+  (most of its outline covered), where Raw marks two strips at its edges and the
+  motion mask one.
+- *Stopped object, on `truth` (the square stops at 3.5 s), with "Absorb after" 2 s:*
+  still fully marked half a second after stopping; gone by 3 s after. Raw and the
+  motion mask lose it the moment it stops.
+- *No permanent ghost:* when the square moves on at 8.5 s, the place it stood shows
+  as foreground at first (the model had learnt the square there) and is gone again
+  by 3 s later.
+- *On real footage (`traffic`):* cars as filled shapes in their own colours.
+- *Known limits for the help text:* whatever is in the picture when the model starts
+  is taken for background and leaves a ghost for one absorb time when it moves; a
+  slow, flat-coloured object is partly absorbed and leaves a fading trail; a change
+  of lighting or exposure marks everything until it is absorbed; a moving camera
+  marks everything.
+- No regression: other modes untouched.
+
+**Result:** pending.

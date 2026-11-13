@@ -64,31 +64,43 @@ export function thresholdMask(difference, threshold, out) {
   return out;
 }
 
+/** Votes needed by majority3x3: a simple majority of the nine cells. */
+export const MASK_VOTES = 5;
 /**
- * 3x3 majority vote: a pixel is set when at least five of the nine cells
- * around it (itself included) are set. Cells outside the image count as not
- * set. Removes lone speckles and one-pixel lines, fills one-pixel holes.
+ * A stricter vote for consumers that integrate the mask over time (motion
+ * history): seven of nine also removes two-pixel lines, such as the hairline
+ * the pre-blur leaves on a flat object's trailing edge. That hairline skips
+ * pixels as it moves and would reset the history in stripes.
+ */
+export const MASK_VOTES_STRICT = 7;
+
+/**
+ * 3x3 vote: a pixel is set when at least `votes` of the nine cells around it
+ * (itself included) are set. Cells outside the image count as not set. With
+ * five (a majority) it removes lone speckles and one-pixel lines and fills
+ * one-pixel holes.
  *
  * @param {Uint8Array} mask - width*height values, 0 or 1
  * @param {number} width
  * @param {number} height
  * @param {Uint8Array} out - Must not be `mask`
+ * @param {number} [votes] - 1..9
  * @returns {Uint8Array} out
  */
-export function majority3x3(mask, width, height, out) {
+export function majority3x3(mask, width, height, out, votes = MASK_VOTES) {
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      let votes = 0;
+      let count = 0;
       for (let dy = -1; dy <= 1; dy++) {
         const ny = y + dy;
         if (ny < 0 || ny >= height) continue;
         for (let dx = -1; dx <= 1; dx++) {
           const nx = x + dx;
           if (nx < 0 || nx >= width) continue;
-          votes += mask[ny * width + nx];
+          count += mask[ny * width + nx];
         }
       }
-      out[y * width + x] = votes >= 5 ? 1 : 0;
+      out[y * width + x] = count >= votes ? 1 : 0;
     }
   }
   return out;
