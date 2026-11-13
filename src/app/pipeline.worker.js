@@ -4,6 +4,7 @@ import { accumulate } from '../core/trails.js';
 import { emaAlpha, seedStates, magnifyFrame } from '../core/magnify.js';
 import { cellEnergies } from '../core/energy.js';
 import { CircularBuffer, FrameRing, ringCapacity } from '../core/buffer.js';
+import { lookbackTime, shouldStore, storeInterval } from '../core/timebase.js';
 
 const TRAIL_CAP = 20;
 const trails = new CircularBuffer(TRAIL_CAP);
@@ -16,6 +17,8 @@ let ring = null;
 let ringFrames = [];
 let ringWidth = 0;
 let ringHeight = 0;
+// Stamp of the newest frame kept as history
+let lastStoredTime = NaN;
 
 function ensureRing(width, height) {
   if (ring && ringWidth === width && ringHeight === height) return;
@@ -23,11 +26,39 @@ function ensureRing(width, height) {
   ringFrames = new Array(ring.capacity);
   ringWidth = width;
   ringHeight = height;
+  lastStoredTime = NaN;
 }
 
 function ringClear() {
   if (ring) ring.clear();
   ringFrames = ring ? new Array(ring.capacity) : [];
+  lastStoredTime = NaN;
+}
+
+/**
+ * Drop whatever history a break in the timeline made unusable. The main
+ * thread classifies the step (core/timebase.js classifyStep); the worker
+ * owns the state it applies to.
+ */
+function applyStep(step, time) {
+  if (step === 'advance' || step === 'repeat') return;
+
+  if (step === 'rewind' && ring) {
+    // Frames stamped at or after the new position are in its future.
+    if (ring.dropFrom(time) > 0) {
+      // Release the pixel buffers of the dropped frames.
+      const live = new Set();
+      for (let age = 0; age < ring.size; age++) live.add(ring.slotAt(age));
+      for (let slot = 0; slot < ring.capacity; slot++) {
+        if (!live.has(slot)) ringFrames[slot] = undefined;
+      }
+    }
+    lastStoredTime = ring.newestTime;
+  } else {
+    ringClear();
+  }
+  trails.clear();
+  magClear();
 }
 
 // ── Magnify EMA state (Float32, normalized 0..1, RGBA layout) ──
@@ -113,6 +144,7 @@ self.onmessage = function (e) {
   const {
     currentFrameBuffer,
     time,
+    step,
     params,
     width,
     height,
@@ -136,6 +168,8 @@ self.onmessage = function (e) {
   } = params;
 
   const curData = new Uint8ClampedArray(currentFrameBuffer);
+
+  applyStep(step, time);
 
   if (params.algorithm === 'magnify') {
     // Blur applies pre-EMA only; the band is added onto the unblurred frame.
@@ -192,16 +226,20 @@ self.onmessage = function (e) {
 
   // The ring holds frames older than this one; each channel's gap clamps to
   // the oldest frame while the ring is still filling.
-  const ageR = ring.nearest(time - k, time);
-  const ageG = ring.nearest(time - (k + spread), time);
-  const ageB = ring.nearest(time - (k + spread * 2), time);
+  const ageR = ring.nearest(lookbackTime(time, k, spread, 0), time);
+  const ageG = ring.nearest(lookbackTime(time, k, spread, 1), time);
+  const ageB = ring.nearest(lookbackTime(time, k, spread, 2), time);
   const oldR = ageR < 0 ? null : ringFrames[ring.slotAt(ageR)];
   const oldG = ageG < 0 ? null : ringFrames[ring.slotAt(ageG)];
   const oldB = ageB < 0 ? null : ringFrames[ring.slotAt(ageB)];
 
-  // Keep this frame as history. The buffer was transferred in, so storing
-  // it copies nothing.
-  ringFrames[ring.push(time)] = curData;
+  // Keep this frame as history (the buffer was transferred in, so storing
+  // it copies nothing) unless it is a re-render of the frame before, or
+  // history is being thinned to fit a long lookback into the ring.
+  if (step !== 'repeat' && shouldStore(lastStoredTime, time, storeInterval(k, spread, ring.capacity))) {
+    ringFrames[ring.push(time)] = curData;
+    lastStoredTime = time;
+  }
 
   if (!oldR || !oldG || !oldB) {
     self.postMessage({ type: 'result', accumulatedBuffer: null });
@@ -238,7 +276,9 @@ self.onmessage = function (e) {
     ).buffer;
   }
 
-  trails.push(diffData);
+  // The same frame rendered again replaces its trail entry.
+  if (step === 'repeat') trails.replaceNewest(diffData);
+  else trails.push(diffData);
 
   const T = Math.min(trailLength, trails.size);
   const frames = [];

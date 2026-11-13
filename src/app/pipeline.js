@@ -3,6 +3,13 @@ import { WebGLRenderer } from './renderer.webgl.js';
 import { buildSourceProfile } from './source-profile.js';
 import { FrameRing, ringCapacity } from '../core/buffer.js';
 import { emaAlpha } from '../core/magnify.js';
+import {
+  classifyStep,
+  frameDeltaMs,
+  lookbackTime,
+  shouldStore,
+  storeInterval,
+} from '../core/timebase.js';
 import { posyBlend } from '../core/diff.js';
 import { cellEnergies } from '../core/energy.js';
 
@@ -23,9 +30,15 @@ export class Pipeline {
     this._processWidth = DEFAULT_PROCESS_WIDTH;
     this._lastFrameTime = 0;
 
+    // ── Media-time base (see core/timebase.js) ──
+    // Stamp of the last processed frame, seconds of media time
+    this._lastTime = NaN;
+    // Stamp of the newest frame kept as history
+    this._lastStoredTime = NaN;
+    // A seek completed since the last processed frame
+    this._seeked = false;
+
     // ── Magnify mode ──
-    // Timestamp of the last processed magnify frame (real dt for emaAlpha)
-    this._magLastTime = 0;
     // Downsampled capture canvas for the worker magnify path
     this._magCapCanvas = null;
     this._magCapCtx = null;
@@ -35,7 +48,6 @@ export class Pipeline {
     // FrameRing tracks which layer holds which frame. Worker fallback: the
     // worker owns both the pixels and its own FrameRing.
     this._ring = new FrameRing(1);
-    this._frameIndex = 0;
     this._ringLayers = [0, 0, 0];
     // Whether the last processed frame produced a diff (energy grid source)
     this._hasDiff = false;
@@ -106,9 +118,10 @@ export class Pipeline {
     this._capCanvas = document.createElement('canvas');
     this._capCtx = this._capCanvas.getContext('2d', { willReadFrequently: true });
 
-    // Seeks must re-seed the magnify EMA states (avoids a flash while
-    // the band-pass re-converges on unrelated content).
-    videoEl.addEventListener('seeked', () => this.resetMagnifyState());
+    // A seek is only noted here. Whether it invalidates history is decided
+    // from the next frame's timestamp: a one-frame step keeps it, a jump or
+    // a rewind does not.
+    videoEl.addEventListener('seeked', () => { this._seeked = true; });
 
     // Try WebGL2 first
     try {
@@ -178,12 +191,13 @@ export class Pipeline {
   stop() {
     this._workerBusy = false;
     this._lastFrameTime = 0;
-    this._magLastTime = 0;
   }
 
   clearState() {
     this._ring.clear();
-    this._frameIndex = 0;
+    this._lastTime = NaN;
+    this._lastStoredTime = NaN;
+    this._seeked = false;
     this._hasDiff = false;
     this._energyGrid = null;
 
@@ -196,16 +210,14 @@ export class Pipeline {
     }
     this._workerBusy = false;
     this._lastFrameTime = 0;
-    this._magLastTime = 0;
   }
 
   /**
    * Re-seed the magnify EMA states from the next frame. Called on source
-   * change, seek, resize, and when switching into magnify mode — the same
-   * situations that clear trails.
+   * change, resize, a break in the timeline (jump, rewind, loop), and when
+   * switching into magnify mode — the same situations that clear trails.
    */
   resetMagnifyState() {
-    this._magLastTime = 0;
     if (this._useWebGL && this._glRenderer) {
       this._glRenderer.resetMagnifyState?.();
     }
@@ -436,38 +448,71 @@ export class Pipeline {
   /**
    * Main processing entry point.
    * Routes to either WebGL or Worker path.
+   *
+   * @param {HTMLVideoElement} video
+   * @param {{mediaTime?: number}} [frameMeta] - requestVideoFrameCallback
+   *   metadata for the frame being presented, when the caller has it
    */
-  process(video) {
+  process(video, frameMeta) {
+    // The worker takes one frame at a time. Skip before stamping so the
+    // next frame it does take is classified against the last one it saw.
+    if (!this._useWebGL && this._workerBusy) return;
+
+    const prevTime = this._lastTime;
+    const time = this._frameTime(video, frameMeta);
+    const step = classifyStep(prevTime, time, this._seeked);
+    this._seeked = false;
+    this._lastTime = time;
+    const dtMs = frameDeltaMs(step, prevTime, time);
+
     if (this._useWebGL) {
+      this._applyStepWebGL(step, time);
       if (this.params.algorithm === 'magnify') {
-        this._processMagnifyWebGL(video);
+        this._processMagnifyWebGL(video, time, step, dtMs);
       } else {
-        this._processWebGL(video);
+        this._processWebGL(video, time, step);
       }
+    } else if (this.params.algorithm === 'magnify') {
+      this._processMagnifyWorker(video, time, step, dtMs);
     } else {
-      if (this.params.algorithm === 'magnify') {
-        this._processMagnifyWorker(video);
-      } else {
-        this._processWorker(video);
-      }
+      this._processWorker(video, time, step);
     }
   }
 
   /**
-   * Real frame interval for the magnify EMAs, measured between processed
-   * frames. Falls back to 30 fps on the first frame after a reset.
+   * Media time of the frame the video element is showing.
+   *
+   * requestVideoFrameCallback's mediaTime is exact. Without it, a paused
+   * video that has not been seeked is still showing the frame processed
+   * last, whatever currentTime has drifted to; otherwise currentTime is the
+   * best available clock.
    */
-  _magFrameDt(now) {
-    const dtMs = this._magLastTime > 0
-      ? Math.min(Math.max(now - this._magLastTime, 0.1), 1000)
-      : 1000 / 30;
-    this._magLastTime = now;
-    return dtMs;
+  _frameTime(video, frameMeta) {
+    const mediaTime = frameMeta?.mediaTime;
+    if (Number.isFinite(mediaTime)) return mediaTime;
+    if (video.paused && !this._seeked && Number.isFinite(this._lastTime)) return this._lastTime;
+    return video.currentTime;
   }
 
   // ── WebGL Path ──────────────────────────────────────────────
 
-  _processWebGL(video) {
+  /** Drop whatever history the step made unusable. */
+  _applyStepWebGL(step, time) {
+    if (step === 'advance' || step === 'repeat') return;
+
+    if (step === 'rewind') {
+      // Frames stamped at or after the new position are in its future.
+      this._ring.dropFrom(time);
+      this._lastStoredTime = this._ring.newestTime;
+    } else {
+      this._ring.clear();
+      this._lastStoredTime = NaN;
+    }
+    // clearTrails also re-seeds the magnify EMA states.
+    this._glRenderer.clearTrails();
+  }
+
+  _processWebGL(video, time, step) {
     const gl = this._glRenderer;
     // Video element → GPU texture; no readback, nothing kept on the JS heap.
     if (!gl.captureVideo(video)) return;
@@ -487,13 +532,13 @@ export class Pipeline {
       ageColorOld,
     } = this.params;
 
-    // The ring holds frames older than this one; the gap for each channel
-    // clamps to the oldest frame while the ring is still filling.
-    const index = this._frameIndex;
+    // Each channel compares against the stored frame nearest its lookback
+    // time, considering only frames older than this one. While the ring is
+    // still filling the gap is shorter than asked for, never longer.
     const ring = this._ring;
-    const ageR = ring.nearest(index - frameOffset, index);
-    const ageG = ring.nearest(index - (frameOffset + channelSpread), index);
-    const ageB = ring.nearest(index - (frameOffset + channelSpread * 2), index);
+    const ageR = ring.nearest(lookbackTime(time, frameOffset, channelSpread, 0), time);
+    const ageG = ring.nearest(lookbackTime(time, frameOffset, channelSpread, 1), time);
+    const ageB = ring.nearest(lookbackTime(time, frameOffset, channelSpread, 2), time);
 
     if (ageR < 0 || ageG < 0 || ageB < 0) {
       // Nothing to compare against yet — show blank
@@ -513,8 +558,10 @@ export class Pipeline {
         gl.renderBlur();
       }
 
-      // Push diff result into trail ring
-      gl.pushTrail();
+      // Add the diff to the trail ring. The same frame rendered again (a
+      // parameter change while paused) replaces its entry instead.
+      if (step === 'repeat') gl.replaceTrail();
+      else gl.pushTrail();
 
       // Accumulate trails → _accumFB
       const isPosy = algorithm === 'posy';
@@ -525,13 +572,18 @@ export class Pipeline {
       this._hasDiff = true;
     }
 
-    this._storeCurrentFrame();
+    this._storeCurrentFrame(time, step);
   }
 
   /** Keep the frame just captured as history for the frames that follow. */
-  _storeCurrentFrame() {
-    this._glRenderer.storeCurrent(this._ring.push(this._frameIndex));
-    this._frameIndex += 1;
+  _storeCurrentFrame(time, step) {
+    if (step === 'repeat') return;
+    const { frameOffset, channelSpread } = this.params;
+    const interval = storeInterval(frameOffset, channelSpread, this._ring.capacity);
+    if (!shouldStore(this._lastStoredTime, time, interval)) return;
+
+    this._glRenderer.storeCurrent(this._ring.push(time));
+    this._lastStoredTime = time;
   }
 
   /**
@@ -545,12 +597,12 @@ export class Pipeline {
 
   // ── Magnify: WebGL path ─────────────────────────────────────
 
-  _processMagnifyWebGL(video) {
+  _processMagnifyWebGL(video, time, step, dtMs) {
     const gl = this._glRenderer;
     if (!gl.captureVideo(video)) return;
 
     // Keep the lookback ring warm so switching back to Posy/Raw behaves.
-    this._storeCurrentFrame();
+    this._storeCurrentFrame(time, step);
     this._hasDiff = false;
 
     if (!gl.magnifySupported) {
@@ -560,7 +612,8 @@ export class Pipeline {
       return;
     }
 
-    const dtMs = this._magFrameDt(performance.now());
+    // dtMs is media time, so the pass band is in Hz of the scene at any
+    // playback rate; a repeated frame advances the filters by nothing.
     const ok = gl.renderMagnify({
       alphaFast: emaAlpha(this.params.magFreqHigh, dtMs),
       alphaSlow: emaAlpha(this.params.magFreqLow, dtMs),
@@ -604,19 +657,18 @@ export class Pipeline {
     }
   }
 
-  _processMagnifyWorker(video) {
+  _processMagnifyWorker(video, time, step, dtMs) {
     const frame = this._captureMagnifyFrame(video);
     if (!frame) return;
-
-    if (this._workerBusy) return;
     this._workerBusy = true;
 
-    const dtMs = this._magFrameDt(performance.now());
     const currentFrameBuffer = frame.data.buffer;
 
     this._worker.postMessage({
       type: 'process',
       currentFrameBuffer,
+      time,
+      step,
       params: { ...this.params },
       dtMs,
       width: frame.width,
@@ -626,11 +678,7 @@ export class Pipeline {
 
   // ── Worker Path (fallback) ──────────────────────────────────
 
-  _processWorker(video) {
-    // One frame in flight at a time. A frame that arrives while the worker
-    // is busy is skipped before it costs a capture.
-    if (this._workerBusy) return;
-
+  _processWorker(video, time, step) {
     const frame = this.captureFrame(video);
     if (!frame) return;
     this._workerBusy = true;
@@ -643,14 +691,14 @@ export class Pipeline {
     this._worker.postMessage({
       type: 'process',
       currentFrameBuffer: pixels.buffer,
-      time: this._frameIndex,
+      time,
+      step,
       params: { ...this.params },
       width: this.width,
       height: this.height,
       energyCols: this._energyCols,
       energyRows: this._energyRows,
     }, [pixels.buffer]);
-    this._frameIndex += 1;
   }
 }
 

@@ -705,7 +705,12 @@ pipeline.onResult = (result) => {
   }
 };
 
-function processCurrentFrame() {
+/**
+ * @param {{mediaTime?: number}} [frameMeta] - requestVideoFrameCallback
+ *   metadata when the frame comes from one; the pipeline stamps the frame
+ *   with its media time
+ */
+function processCurrentFrame(frameMeta) {
   pipeline.setParams({
     frameOffset: controls.state.frameOffset,
     threshold: controls.state.threshold,
@@ -727,7 +732,7 @@ function processCurrentFrame() {
     magDownsample: controls.state.magDownsample,
   });
 
-  pipeline.process(videoEl);
+  pipeline.process(videoEl, frameMeta);
 
   // One audio update per processed frame. gridCols is 0 unless the engine is
   // running, and the pipeline skips the readback entirely at 0.
@@ -735,9 +740,34 @@ function processCurrentFrame() {
   if (grid) audioEngine.update(grid);
 }
 
-function tick() {
+function tick(frameMeta) {
   if (!loopRunning || !videoLoaded) return;
-  processCurrentFrame();
+  processCurrentFrame(frameMeta);
+}
+
+/**
+ * Process the frame a seek landed on while paused. The frame callback gives
+ * its exact media time (the same clock playback uses, so stepping lines up
+ * with frames already in history); browsers without it, or that do not fire
+ * it for a paused seek, fall back to currentTime.
+ */
+let seekFrameToken = 0;
+function processSeekedFrame() {
+  if (!HAS_RVFC) {
+    processCurrentFrame();
+    return;
+  }
+
+  const token = ++seekFrameToken;
+  let done = false;
+  const run = (frameMeta) => {
+    if (done || token !== seekFrameToken) return;
+    done = true;
+    clearTimeout(timer);
+    if (videoLoaded && videoEl.paused) processCurrentFrame(frameMeta);
+  };
+  const timer = setTimeout(() => run(undefined), 250);
+  videoEl.requestVideoFrameCallback((_now, frameMeta) => run(frameMeta));
 }
 
 function resetFrameMetrics() {
@@ -776,9 +806,9 @@ function noteProcessedFrame(now) {
   }
 }
 
-function rvfcTick(now) {
+function rvfcTick(now, frameMeta) {
   if (!shouldSkipFrame(now)) {
-    tick();
+    tick(frameMeta);
     noteProcessedFrame(now);
   }
   if (loopRunning) {
@@ -870,11 +900,13 @@ window.addEventListener('pagehide', () => {
 if (import.meta.env.DEV) {
   // SPEC-sonification A6: compare the WebGL readback against the core math.
   window.__motionDiffEnergyParity = (cols, rows) => debugEnergyParity(pipeline, cols, rows);
+  // Lets a test harness observe frames as they are processed.
+  window.__motionDiffPipeline = pipeline;
 }
 
 videoEl.addEventListener('seeked', () => {
   timeline.syncNow();
   if (videoLoaded && videoEl.paused) {
-    processCurrentFrame();
+    processSeekedFrame();
   }
 });
