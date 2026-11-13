@@ -1,0 +1,8 @@
+{ "scenes": [
+  { "name": "trees-mixed", "clip": "trees", "at": 4.0, "frames": 6, "every": 3, "params": { "algorithm": "posy", "frameOffset": 5, "threshold": 20, "trailLength": 20, "channelSpread": 0, "blurEnabled": false, "ageColorEnabled": true, "ageColorStyle": "mixed" } },
+  { "name": "trees-latest", "clip": "trees", "at": 4.0, "frames": 6, "every": 3, "params": { "algorithm": "posy", "frameOffset": 5, "threshold": 20, "trailLength": 20, "channelSpread": 0, "blurEnabled": false, "ageColorEnabled": true, "ageColorStyle": "latest" } },
+  { "name": "truth-mixed", "clip": "truth", "at": 2.0, "frames": 6, "every": 3, "params": { "algorithm": "posy", "frameOffset": 5, "threshold": 20, "trailLength": 20, "channelSpread": 0, "blurEnabled": false, "ageColorEnabled": true, "ageColorStyle": "mixed" } },
+  { "name": "truth-latest", "clip": "truth", "at": 2.0, "frames": 6, "every": 3, "params": { "algorithm": "posy", "frameOffset": 5, "threshold": 20, "trailLength": 20, "channelSpread": 0, "blurEnabled": false, "ageColorEnabled": true, "ageColorStyle": "latest" } },
+  { "name": "river-mixed", "clip": "river", "at": 3.0, "frames": 6, "every": 3, "params": { "algorithm": "posy", "frameOffset": 5, "threshold": 20, "trailLength": 20, "channelSpread": 0, "blurEnabled": false, "ageColorEnabled": true, "ageColorStyle": "mixed" } },
+  { "name": "river-latest", "clip": "river", "at": 3.0, "frames": 6, "every": 3, "params": { "algorithm": "posy", "frameOffset": 5, "threshold": 20, "trailLength": 20, "channelSpread": 0, "blurEnabled": false, "ageColorEnabled": true, "ageColorStyle": "latest" } }
+] }

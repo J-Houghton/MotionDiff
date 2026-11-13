@@ -1,12 +1,17 @@
 import PipelineWorker from './pipeline.worker.js?worker';
 import { WebGLRenderer } from './renderer.webgl.js';
 import { buildSourceProfile } from './source-profile.js';
-import { emaAlpha } from '../core/magnify.js';
-import { posyBlend } from '../core/diff.js';
-import { cellEnergies } from '../core/energy.js';
+import { FrameRing, ringCapacity } from '../core/buffer.js';
+import {
+  classifyStep,
+  frameDeltaMs,
+  framesToSeconds,
+  shouldStore,
+  storeInterval,
+} from '../core/timebase.js';
+import { defaultParams, getMode } from './modes/index.js';
 
 const DEFAULT_PROCESS_WIDTH = 640;
-const FRAME_STORE_CAP = 120;
 
 /**
  * Whether the browser supports requestVideoFrameCallback on HTMLVideoElement.
@@ -23,22 +28,29 @@ export class Pipeline {
     this._processWidth = DEFAULT_PROCESS_WIDTH;
     this._lastFrameTime = 0;
 
-    // ── Magnify mode ──
-    // Timestamp of the last processed magnify frame (real dt for emaAlpha)
-    this._magLastTime = 0;
-    // Downsampled capture canvas for the worker magnify path
-    this._magCapCanvas = null;
-    this._magCapCtx = null;
+    // ── Media-time base (see core/timebase.js) ──
+    // Stamp of the last processed frame, seconds of media time
+    this._lastTime = NaN;
+    // Stamp of the newest frame kept as history
+    this._lastStoredTime = NaN;
+    // A seek completed since the last processed frame
+    this._seeked = false;
+    // Media time the last new frame advanced by (reused when it is re-rendered)
+    this._lastDtMs = 0;
 
-    // ── Frame store (circular buffer of ImageData for Worker fallback
-    //    or ArrayBuffer references for WebGL texture uploads) ──
-    this._frameStore = new Array(FRAME_STORE_CAP);
-    this._storeHead = -1;
-    this._storeSize = 0;
+    // ── Frame history ──
+    // WebGL: the pixels live in the renderer's texture-array ring and this
+    // FrameRing tracks which layer holds which frame. Worker fallback: the
+    // worker owns both the pixels and its own FrameRing.
+    this._ring = new FrameRing(1);
+    this._ringLayers = [0, 0, 0];
+    // Whether the last processed frame produced a motion magnitude
+    this._hasMagnitude = false;
 
     // ── Worker path (fallback) ──
     this._worker = null;
     this._workerBusy = false;
+    // The frame the worker is currently processing, kept for compositing
     this._pendingFrame = null;
 
     this._currentFrame = null;
@@ -63,43 +75,57 @@ export class Pipeline {
 
     this.hls = null;
 
-    this.params = {
-      frameOffset: 5,
-      threshold: 10,
-      trailLength: 5,
-      channelSpread: 0,
-      algorithm: 'posy',
-      blurEnabled: false,
-      ageColorEnabled: false,
-      rgbTintR: '#ff0000',
-      rgbTintG: '#00ff00',
-      rgbTintB: '#0000ff',
-      ageColorNew: '#ff4400',
-      ageColorOld: '#0044ff',
-      fpsCap: null,
-      magAmp: 15,
-      magFreqLow: 0.7,
-      magFreqHigh: 2.0,
-      magChroma: 1.0,
-      magDownsample: 2,
+    // Every mode's params with their defaults (see modes/index.js), plus the
+    // processing fps cap, which belongs to no mode.
+    this.params = { ...defaultParams(), fpsCap: null };
+
+    /** Display mode for modes that composite: 'diff' | 'overlay' | 'glow' | 'data' */
+    this._currentMode = 'diff';
+    // Per-frame context handed to the active mode's render(); reused.
+    this._frame = {
+      gl: null, ring: null, time: 0, step: 'first', dtMs: 0, stepMs: 0, trailAgeStep: 0,
+      params: this.params, display: 'diff', layers: [0, 0, 0],
     };
+    // Why the active mode cannot run here, if it cannot (reported once)
+    this._unavailable = null;
+
+    /** @type {((message: string, type: string) => void)|null} */
+    this.onStatus = null;
 
     this.onResult = null;
   }
 
-  init(videoEl, outputCanvasEl) {
+  /**
+   * @param {HTMLVideoElement} videoEl
+   * @param {HTMLCanvasElement} outputCanvasEl
+   * @param {object} [options]
+   * @param {boolean} [options.forceCanvas2D] - skip WebGL2 and run the worker
+   *   fallback (for testing that path on a capable GPU)
+   * @param {boolean} [options.noFloat] - behave as a GPU without float render
+   *   targets would (for testing that fallback)
+   * @param {number} [options.ringBudgetBytes] - memory budget for the frame
+   *   ring; phones get a smaller one
+   * @param {number} [options.processWidth] - initial processing width
+   */
+  init(videoEl, outputCanvasEl, options = {}) {
     this._videoEl = videoEl;
     this._outputCanvas = outputCanvasEl;
+    this._ringOptions = options.ringBudgetBytes ? { budgetBytes: options.ringBudgetBytes } : undefined;
+    if (options.processWidth) this._processWidth = options.processWidth;
+    // 2D capture canvas: the worker fallback's frame source, and how
+    // sampleBursts reads pixels for auto-configure on either path.
     this._capCanvas = document.createElement('canvas');
     this._capCtx = this._capCanvas.getContext('2d', { willReadFrequently: true });
 
-    // Seeks must re-seed the magnify EMA states (avoids a flash while
-    // the band-pass re-converges on unrelated content).
-    videoEl.addEventListener('seeked', () => this.resetMagnifyState());
+    // A seek is only noted here. Whether it invalidates history is decided
+    // from the next frame's timestamp: a one-frame step keeps it, a jump or
+    // a rewind does not.
+    videoEl.addEventListener('seeked', () => { this._seeked = true; });
 
     // Try WebGL2 first
     try {
-      this._glRenderer = new WebGLRenderer(outputCanvasEl);
+      if (options.forceCanvas2D) throw new Error('Canvas 2D forced by ?renderer=canvas2d');
+      this._glRenderer = new WebGLRenderer(outputCanvasEl, { noFloat: options.noFloat });
       this._useWebGL = true;
       console.log('Renderer: WebGL2');
     } catch (e) {
@@ -122,6 +148,17 @@ export class Pipeline {
 
       this._workerBusy = false;
 
+      // The motion magnitude grid comes with every kind of result. A result
+      // without one means that frame had no measurement: don't keep
+      // sounding the previous frame's.
+      if (msg.energyBuffer) {
+        this._energyGrid = new Float32Array(msg.energyBuffer);
+        this._energyGridCols = msg.energyCols;
+        this._energyGridRows = msg.energyRows;
+      } else {
+        this._energyGrid = null;
+      }
+
       if (msg.magnifiedBuffer) {
         const magArr = new Uint8ClampedArray(msg.magnifiedBuffer);
         const magnified = new ImageData(magArr, msg.magnifiedWidth, msg.magnifiedHeight);
@@ -132,22 +169,17 @@ export class Pipeline {
       }
 
       let accumulated = null;
-      let currentFrame = null;
+      const currentFrame = this._pendingFrame;
+      this._pendingFrame = null;
+
+      // A result for a frame captured before a resize is stale: drop it.
+      const fits = currentFrame
+        && currentFrame.width === this.width && currentFrame.height === this.height;
+      if (!fits) return;
 
       if (msg.accumulatedBuffer) {
         const accArr = new Uint8ClampedArray(msg.accumulatedBuffer);
         accumulated = new ImageData(accArr, this.width, this.height);
-      }
-
-      if (msg.currentFrameBuffer) {
-        const curArr = new Uint8ClampedArray(msg.currentFrameBuffer);
-        currentFrame = new ImageData(curArr, this.width, this.height);
-      }
-
-      if (msg.energyBuffer) {
-        this._energyGrid = new Float32Array(msg.energyBuffer);
-        this._energyGridCols = msg.energyCols;
-        this._energyGridRows = msg.energyRows;
       }
 
       if (this.onResult) {
@@ -163,13 +195,14 @@ export class Pipeline {
   stop() {
     this._workerBusy = false;
     this._lastFrameTime = 0;
-    this._magLastTime = 0;
   }
 
   clearState() {
-    this._frameStore = new Array(FRAME_STORE_CAP);
-    this._storeHead = -1;
-    this._storeSize = 0;
+    this._ring.clear();
+    this._lastTime = NaN;
+    this._lastStoredTime = NaN;
+    this._seeked = false;
+    this._hasMagnitude = false;
     this._energyGrid = null;
 
     if (this._useWebGL && this._glRenderer) {
@@ -181,16 +214,14 @@ export class Pipeline {
     }
     this._workerBusy = false;
     this._lastFrameTime = 0;
-    this._magLastTime = 0;
   }
 
   /**
    * Re-seed the magnify EMA states from the next frame. Called on source
-   * change, seek, resize, and when switching into magnify mode — the same
-   * situations that clear trails.
+   * change, resize, a break in the timeline (jump, rewind, loop), and when
+   * switching into magnify mode — the same situations that clear trails.
    */
   resetMagnifyState() {
-    this._magLastTime = 0;
     if (this._useWebGL && this._glRenderer) {
       this._glRenderer.resetMagnifyState?.();
     }
@@ -219,47 +250,46 @@ export class Pipeline {
     console.log(`Pipeline: processing at ${this._processWidth}px, cap ${capLabel}`);
   }
 
+  /**
+   * Frame history available for lookback on the active path.
+   * @returns {{frames: number, megabytes: number}}
+   */
+  getHistoryInfo() {
+    const frames = this._useWebGL ? this._ring.capacity : ringCapacity(this.width, this.height, this._ringOptions);
+    return { frames, megabytes: (frames * this.width * this.height * 4) / (1024 * 1024) };
+  }
+
+  /**
+   * Update runtime params. Unknown keys are ignored, so a preset saved by a
+   * build with more modes loads without harm.
+   */
   setParams(params) {
-    if (params.frameOffset !== undefined) this.params.frameOffset = params.frameOffset;
-    if (params.threshold !== undefined) this.params.threshold = params.threshold;
-    if (params.trailLength !== undefined) this.params.trailLength = params.trailLength;
-    if (params.channelSpread !== undefined) this.params.channelSpread = params.channelSpread;
-    if (params.algorithm !== undefined && params.algorithm !== this.params.algorithm) {
-      const wasMagnify = this.params.algorithm === 'magnify';
-      this.params.algorithm = params.algorithm;
-      if (params.algorithm === 'magnify') {
+    const previous = this.params.algorithm;
+    for (const key of Object.keys(params)) {
+      if (!(key in this.params) || params[key] === undefined) continue;
+      if (key === 'magDownsample' && params[key] !== this.params[key]) {
+        this.params[key] = params[key];
         this.resetMagnifyState();
-      } else if (wasMagnify) {
-        // Trails were not fed while magnifying; drop the stale ring
-        // instead of showing pre-magnify ghosts.
-        if (this._useWebGL && this._glRenderer) this._glRenderer.clearTrails();
-        if (this._worker) this._worker.postMessage({ type: 'clear' });
+        continue;
       }
+      this.params[key] = params[key];
     }
-    if (params.blurEnabled !== undefined) this.params.blurEnabled = params.blurEnabled;
-    if (params.ageColorEnabled !== undefined) this.params.ageColorEnabled = params.ageColorEnabled;
-    if (params.rgbTintR !== undefined) this.params.rgbTintR = params.rgbTintR;
-    if (params.rgbTintG !== undefined) this.params.rgbTintG = params.rgbTintG;
-    if (params.rgbTintB !== undefined) this.params.rgbTintB = params.rgbTintB;
-    if (params.ageColorNew !== undefined) this.params.ageColorNew = params.ageColorNew;
-    if (params.ageColorOld !== undefined) this.params.ageColorOld = params.ageColorOld;
-    if (params.fpsCap !== undefined && params.fpsCap !== this.params.fpsCap) {
-      this.params.fpsCap = params.fpsCap;
-      this.logProcessingConfig();
-    }
-    if (params.magAmp !== undefined) this.params.magAmp = params.magAmp;
-    if (params.magFreqLow !== undefined) this.params.magFreqLow = params.magFreqLow;
-    if (params.magFreqHigh !== undefined) this.params.magFreqHigh = params.magFreqHigh;
-    if (params.magChroma !== undefined) this.params.magChroma = params.magChroma;
-    if (params.magDownsample !== undefined && params.magDownsample !== this.params.magDownsample) {
-      this.params.magDownsample = params.magDownsample;
+
+    if (this.params.algorithm !== previous) {
+      this.params.algorithm = getMode(this.params.algorithm).id;
+      // Every mode owns the trail and the temporal state while it runs:
+      // start the new one clean instead of showing the last one's leftovers.
+      if (this._useWebGL && this._glRenderer) this._glRenderer.clearTrails();
+      if (this._worker) this._worker.postMessage({ type: 'clearTrails' });
       this.resetMagnifyState();
+      this._unavailable = null;
     }
   }
 
   /**
-   * Latest motion-energy grid for whichever render path is active, or null
-   * before the first processed frame. Asking for a size is also what turns the
+   * Latest motion-magnitude grid for whichever render path and mode is
+   * active, or null when the last frame carries no measurement (before the
+   * first comparison, right after a seek). Asking for a size is also what turns the
    * grid on: the worker path computes at the requested size from the next frame
    * onward, and cols/rows below 1 switch the readback off entirely.
    *
@@ -280,7 +310,7 @@ export class Pipeline {
     if (nextCols < 1 || nextRows < 1) return null;
 
     if (this._useWebGL) {
-      if (!this._glRenderer || this._storeSize < 2) return null;
+      if (!this._glRenderer || !this._hasMagnitude) return null;
       return this._glRenderer.readEnergyGrid(nextCols, nextRows);
     }
 
@@ -315,15 +345,25 @@ export class Pipeline {
     this._capCanvas.height = this.height;
 
     if (this._useWebGL && this._glRenderer) {
-      this._glRenderer.setSize(this.width, this.height);
+      // The ring is sized from a memory budget, so it gets shorter as the
+      // processing resolution goes up.
+      const frames = this._glRenderer.setSize(
+        this.width, this.height, ringCapacity(this.width, this.height, this._ringOptions),
+      );
+      if (frames !== this._ring.capacity) {
+        this._ring = new FrameRing(frames);
+        const { megabytes } = this.getHistoryInfo();
+        console.log(`Frame ring: ${frames} frames at ${this.width}x${this.height} (${megabytes.toFixed(0)} MB on the GPU)`);
+      }
     }
 
     this.start();
   }
 
   /**
-   * Capture current video frame as ImageData.
-   * Uses VideoFrame bridge when available.
+   * Capture current video frame as ImageData through the 2D canvas.
+   * Uses VideoFrame bridge when available. The WebGL path never calls this
+   * while rendering — it uploads the video element directly.
    */
   captureFrame(video) {
     const w = this.width;
@@ -349,39 +389,89 @@ export class Pipeline {
     }
   }
 
-  _storePush(value) {
-    this._storeHead = (this._storeHead + 1) % FRAME_STORE_CAP;
-    this._frameStore[this._storeHead] = value;
-    if (this._storeSize < FRAME_STORE_CAP) this._storeSize++;
-  }
+  /**
+   * Sample short bursts of consecutive frames for auto-configure.
+   *
+   * A seekable source is sampled by seeking: `burstCount` bursts spread
+   * over the clip, each `framesPerBurst` frames one source-frame interval
+   * apart (aimed at the middle of each frame so a seek cannot straddle two).
+   * A live source (camera, screen, live stream) cannot be seeked, so one
+   * burst is taken from the frames as they arrive.
+   *
+   * Pixels are read through the 2D capture canvas at the processing size.
+   *
+   * @param {HTMLVideoElement} video
+   * @param {{burstCount?: number, framesPerBurst?: number, fps?: number}} [options]
+   *   fps is the source frame rate; defaults to 30
+   * @returns {Promise<{bursts: Uint8ClampedArray[][], fps: number}>} fps is
+   *   the rate the returned frames are actually spaced at
+   */
+  async sampleBursts(video, options = {}) {
+    const burstCount = Math.max(1, options.burstCount ?? 4);
+    const framesPerBurst = Math.max(2, options.framesPerBurst ?? 6);
+    const sourceFps = Number.isFinite(options.fps) && options.fps > 0 ? options.fps : 30;
+    if (!this.width || !this.height) return { bursts: [], fps: sourceFps };
 
-  _storeGet(offset) {
-    if (offset < 0 || offset >= this._storeSize) return null;
-    const idx = (this._storeHead - offset + FRAME_STORE_CAP) % FRAME_STORE_CAP;
-    return this._frameStore[idx];
-  }
-
-  async sampleFrames(video, sampleCount = 30) {
     const duration = Number.isFinite(video.duration) ? video.duration : 0;
-    if (!duration || !this.width || !this.height) return [];
+    if (!duration) return this._sampleLiveBurst(video, framesPerBurst * 2, sourceFps);
 
-    const frames = [];
-    const totalSamples = Math.max(2, sampleCount);
-    const finalTime = Math.max(duration - 0.05, 0);
+    const step = 1 / sourceFps;
+    const burstSpan = framesPerBurst * step;
+    const lastStart = Math.max(duration - burstSpan - 0.05, 0);
     const originalTime = video.currentTime;
+    const bursts = [];
 
-    for (let index = 0; index < totalSamples; index++) {
-      const ratio = totalSamples === 1 ? 0 : index / (totalSamples - 1);
-      const targetTime = finalTime * ratio;
-      await this._seekVideo(video, targetTime);
-      const frame = this.captureFrame(video);
-      if (frame) {
-        frames.push(new Uint8ClampedArray(frame.data));
+    try {
+      for (let b = 0; b < burstCount; b++) {
+        // Burst b starts at the centre of the b-th of burstCount equal slices.
+        const start = lastStart * ((b + 0.5) / burstCount);
+        const frames = [];
+        for (let i = 0; i < framesPerBurst; i++) {
+          await this._seekVideo(video, start + (i + 0.5) * step);
+          const frame = this.captureFrame(video);
+          if (frame) frames.push(frame.data);
+        }
+        if (frames.length >= 2) bursts.push(frames);
       }
+    } finally {
+      await this._seekVideo(video, originalTime);
+    }
+    return { bursts, fps: sourceFps };
+  }
+
+  /**
+   * Capture `count` consecutive frames from a playing, unseekable source
+   * and measure the rate they actually arrived at.
+   */
+  async _sampleLiveBurst(video, count, fallbackFps) {
+    const frames = [];
+    const times = [];
+    const nextFrame = () => new Promise((resolve) => {
+      if (HAS_RVFC) {
+        video.requestVideoFrameCallback((_now, meta) => resolve(meta.mediaTime));
+      } else {
+        requestAnimationFrame(() => resolve(video.currentTime));
+      }
+    });
+
+    // Give up if frames stop arriving (a paused or ended stream).
+    const deadline = performance.now() + 3000;
+    while (frames.length < count && performance.now() < deadline) {
+      const time = await Promise.race([
+        nextFrame(),
+        new Promise((resolve) => setTimeout(() => resolve(null), 500)),
+      ]);
+      if (time === null) continue;
+      if (times.length && time <= times[times.length - 1]) continue; // same frame again
+      const frame = this.captureFrame(video);
+      if (!frame) continue;
+      frames.push(frame.data);
+      times.push(time);
     }
 
-    await this._seekVideo(video, originalTime);
-    return frames;
+    const span = times.length >= 2 ? times[times.length - 1] - times[0] : 0;
+    const fps = span > 0 ? (times.length - 1) / span : fallbackFps;
+    return { bursts: frames.length >= 2 ? [frames] : [], fps };
   }
 
   _seekVideo(video, targetTime) {
@@ -414,306 +504,206 @@ export class Pipeline {
   /**
    * Main processing entry point.
    * Routes to either WebGL or Worker path.
+   *
+   * @param {HTMLVideoElement} video
+   * @param {{mediaTime?: number}} [frameMeta] - requestVideoFrameCallback
+   *   metadata for the frame being presented, when the caller has it
    */
-  process(video) {
+  process(video, frameMeta) {
+    // The worker takes one frame at a time. Skip before stamping so the
+    // next frame it does take is classified against the last one it saw.
+    if (!this._useWebGL && this._workerBusy) return;
+
+    const prevTime = this._lastTime;
+    const time = this._frameTime(video, frameMeta);
+    const step = classifyStep(prevTime, time, this._seeked);
+    this._seeked = false;
+    this._lastTime = time;
+    const dtMs = frameDeltaMs(step, prevTime, time);
+    // A re-rendered frame advances the magnify filters by nothing, but its
+    // trail is recomputed with the step it had the first time.
+    if (step !== 'repeat') this._lastDtMs = dtMs;
+    const trailAgeStep = this._trailAgeStep();
+
+    const mode = getMode(this.params.algorithm);
     if (this._useWebGL) {
-      if (this.params.algorithm === 'magnify') {
-        this._processMagnifyWebGL(video);
-      } else {
-        this._processWebGL(video);
-      }
+      this._applyStepWebGL(step, time);
+      this._renderWebGL(video, mode, time, step, dtMs, trailAgeStep);
+    } else if (!mode.worker) {
+      this._reportUnavailable(`${mode.label} needs WebGL2, which this browser did not provide`);
+    } else if (mode.id === 'magnify') {
+      this._processMagnifyWorker(video, time, step, dtMs);
     } else {
-      if (this.params.algorithm === 'magnify') {
-        this._processMagnifyWorker(video);
-      } else {
-        this._processWorker(video);
-      }
+      this._processWorker(video, time, step, trailAgeStep);
     }
   }
 
+  /** Tell the UI once why the active mode shows nothing. */
+  _reportUnavailable(reason) {
+    if (this._unavailable === reason) return;
+    this._unavailable = reason;
+    if (this.onStatus) this.onStatus(reason, 'error');
+  }
+
   /**
-   * Real frame interval for the magnify EMAs, measured between processed
-   * frames. Falls back to 30 fps on the first frame after a reset.
+   * How far trail ages advance for the current frame, in trail windows.
+   * `trailLength` is in the same 1/30 s units as `frameOffset`.
    */
-  _magFrameDt(now) {
-    const dtMs = this._magLastTime > 0
-      ? Math.min(Math.max(now - this._magLastTime, 0.1), 1000)
-      : 1000 / 30;
-    this._magLastTime = now;
-    return dtMs;
+  _trailAgeStep() {
+    const windowSeconds = framesToSeconds(Math.max(this.params.trailLength, 0.001));
+    return this._lastDtMs / 1000 / windowSeconds;
+  }
+
+  /**
+   * Media time of the frame the video element is showing.
+   *
+   * requestVideoFrameCallback's mediaTime is exact. Without it, a paused
+   * video that has not been seeked is still showing the frame processed
+   * last, whatever currentTime has drifted to; otherwise currentTime is the
+   * best available clock.
+   */
+  _frameTime(video, frameMeta) {
+    const mediaTime = frameMeta?.mediaTime;
+    if (Number.isFinite(mediaTime)) return mediaTime;
+    if (video.paused && !this._seeked && Number.isFinite(this._lastTime)) return this._lastTime;
+    return video.currentTime;
   }
 
   // ── WebGL Path ──────────────────────────────────────────────
 
-  _processWebGL(video) {
-    const frame = this.captureFrame(video);
-    if (!frame) return;
+  /** Drop whatever history the step made unusable. */
+  _applyStepWebGL(step, time) {
+    if (step === 'advance' || step === 'repeat') return;
 
-    // Store the ImageData for later lookback
-    this._storePush(frame);
-
-    if (this._storeSize < 2) {
-      // Not enough frames yet — show blank
-      this._glRenderer.renderBlank(this.params.algorithm, this.params.ageColorEnabled);
-      return;
+    if (step === 'rewind') {
+      // Frames stamped at or after the new position are in its future.
+      this._ring.dropFrom(time);
+      this._lastStoredTime = this._ring.newestTime;
+    } else {
+      this._ring.clear();
+      this._lastStoredTime = NaN;
     }
+    // clearTrails also re-seeds the magnify EMA states.
+    this._glRenderer.clearTrails();
+  }
 
+  _renderWebGL(video, mode, time, step, dtMs, trailAgeStep) {
     const gl = this._glRenderer;
-    const {
-      frameOffset,
-      threshold,
-      channelSpread,
-      trailLength,
-      algorithm,
-      blurEnabled,
-      ageColorEnabled,
-      rgbTintR,
-      rgbTintG,
-      rgbTintB,
-      ageColorNew,
-      ageColorOld,
-    } = this.params;
-    const k = frameOffset;
-    const spread = channelSpread;
+    // Video element → GPU texture; no readback, nothing kept on the JS heap.
+    if (!gl.captureVideo(video)) return;
 
-    // Calculate clamped offsets for RGB channel spread
-    const clamp = (off) => Math.min(off, this._storeSize - 1);
-    const offR = clamp(k);
-    const offG = clamp(k + spread);
-    const offB = clamp(k + spread * 2);
-
-    const oldR = this._storeGet(offR);
-    const oldG = this._storeGet(offG);
-    const oldB = this._storeGet(offB);
-
-    if (!oldR || !oldG || !oldB) {
-      gl.renderBlank(algorithm, ageColorEnabled);
-      return;
+    if (mode.needsFloat && !gl.floatTargets) {
+      gl.renderBlank('raw', false);
+      this._hasMagnitude = false;
+      this._reportUnavailable(`${mode.label} needs float render targets, which this GPU lacks`);
+    } else {
+      const frame = this._frame;
+      frame.gl = gl;
+      frame.ring = this._ring;
+      frame.time = time;
+      frame.step = step;
+      frame.dtMs = dtMs;
+      frame.trailAgeStep = trailAgeStep;
+      frame.stepMs = this._lastDtMs;
+      frame.params = this.params;
+      frame.display = this._currentMode;
+      this._hasMagnitude = mode.render(frame) !== false;
+      if (this._hasMagnitude && this._currentMode === 'data') gl.renderDataView(mode.data.kind);
     }
 
-    // Upload textures
-    gl.uploadImageData(frame, 'current');
-    gl.uploadImageData(oldR, 'oldR');
-    gl.uploadImageData(oldG, 'oldG');
-    gl.uploadImageData(oldB, 'oldB');
+    // Keep the ring warm in every mode so switching modes has history.
+    this._storeCurrentFrame(time, step, mode);
+  }
 
-    // Run diff shader → _diffFB
-    gl.renderDiff({ threshold, algorithm, rgbTintR, rgbTintG, rgbTintB });
+  /** Keep the frame just captured as history for the frames that follow. */
+  _storeCurrentFrame(time, step, mode) {
+    if (step === 'repeat') return;
+    // How far back the mode reads decides how densely history is kept.
+    const { frameOffset, channelSpread } = this.params;
+    const [shortest, longest] = mode.lookback
+      ? mode.lookback(this.params)
+      : [frameOffset, frameOffset + channelSpread * 2];
+    const interval = storeInterval(shortest, (longest - shortest) / 2, this._ring.capacity);
+    if (!shouldStore(this._lastStoredTime, time, interval)) return;
 
-    // Optional blur
-    if (blurEnabled) {
-      gl.renderBlur();
-    }
-
-    // Push diff result into trail ring
-    gl.pushTrail();
-
-    // Accumulate trails → _accumFB
-    const isPosy = algorithm === 'posy';
-    gl.renderAccumulate(trailLength, isPosy, threshold, ageColorEnabled, ageColorNew, ageColorOld);
-
-    // Composite to canvas
-    gl.renderComposite(this._currentMode || 'diff', algorithm, ageColorEnabled);
+    this._glRenderer.storeCurrent(this._ring.push(time));
+    this._lastStoredTime = time;
   }
 
   /**
-   * Set the current display mode for WebGL composite.
-   * Called from main.js to keep the mode in sync.
-   * @param {string} mode - 'diff' | 'overlay' | 'glow'
+   * Display mode: 'diff' | 'overlay' | 'glow', or 'data' to look at the
+   * active mode's data output instead of its picture (WebGL only).
+   * @param {string} mode
    */
   setMode(mode) {
     this._currentMode = mode;
   }
 
-  // ── Magnify: WebGL path ─────────────────────────────────────
-
-  _processMagnifyWebGL(video) {
-    const frame = this.captureFrame(video);
-    if (!frame) return;
-
-    // Keep the lookback store warm so switching back to Posy/Raw behaves.
-    this._storePush(frame);
-
-    const gl = this._glRenderer;
-    if (!gl.magnifySupported) {
-      // The UI disables the magnify option when unsupported; if we still
-      // get here, show a blank frame rather than rendering garbage.
-      gl.renderBlank(this.params.algorithm, false);
-      return;
-    }
-
-    const dtMs = this._magFrameDt(performance.now());
-    gl.uploadImageData(frame, 'current');
-    const ok = gl.renderMagnify({
-      alphaFast: emaAlpha(this.params.magFreqHigh, dtMs),
-      alphaSlow: emaAlpha(this.params.magFreqLow, dtMs),
-      amp: this.params.magAmp,
-      chroma: this.params.magChroma,
-      downsample: this.params.magDownsample,
-      blurEnabled: this.params.blurEnabled,
-    });
-    if (!ok) {
-      gl.renderBlank(this.params.algorithm, false);
-    }
+  /**
+   * The active mode's result as data: one RGBA float per pixel at the data
+   * target's size, row 0 at the top. R is the mode's magnitude (0..1), G and
+   * B are mode-specific (see the mode's `data`). WebGL only; reads back from
+   * the GPU, so it is for tools and experiments, not per-frame use.
+   *
+   * @returns {{kind: string, what: string, width: number, height: number, values: Float32Array}|null}
+   */
+  readData() {
+    if (!this._useWebGL || !this._glRenderer || !this._hasMagnitude) return null;
+    const field = this._glRenderer.readDataField();
+    if (!field) return null;
+    const { kind, what } = getMode(this.params.algorithm).data;
+    return { kind, what, ...field };
   }
 
   // ── Magnify: Worker path (fallback) ─────────────────────────
 
-  /**
-   * Capture the current frame at the magnify processing size. The
-   * downsampling is the spatial pooling; the worker path is capped at
-   * 320 px wide (correctness over speed on the CPU fallback).
-   */
-  _captureMagnifyFrame(video) {
-    if (!this.width || !this.height) return null;
-    const ds = this.params.magDownsample || 1;
-    const w = Math.max(2, Math.min(320, Math.round(this.width / ds)));
-    const h = Math.max(2, Math.round(this.height * (w / this.width)));
-
-    if (!this._magCapCanvas) {
-      this._magCapCanvas = document.createElement('canvas');
-      this._magCapCtx = this._magCapCanvas.getContext('2d', { willReadFrequently: true });
-    }
-    if (this._magCapCanvas.width !== w || this._magCapCanvas.height !== h) {
-      this._magCapCanvas.width = w;
-      this._magCapCanvas.height = h;
-    }
-
-    try {
-      this._magCapCtx.drawImage(video, 0, 0, w, h);
-      return this._magCapCtx.getImageData(0, 0, w, h);
-    } catch {
-      return null;
-    }
-  }
-
-  _processMagnifyWorker(video) {
-    const frame = this._captureMagnifyFrame(video);
+  _processMagnifyWorker(video, time, step, dtMs) {
+    // The worker gets the frame at the processing size and does the
+    // spatial pooling itself, in floats.
+    const frame = this.captureFrame(video);
     if (!frame) return;
-
-    if (this._workerBusy) return;
     this._workerBusy = true;
 
-    const dtMs = this._magFrameDt(performance.now());
     const currentFrameBuffer = frame.data.buffer;
 
-    // Magnify needs no frame-store lookback — skip the store copies.
     this._worker.postMessage({
       type: 'process',
       currentFrameBuffer,
-      frameStoreBuffers: [],
-      frameStoreSize: 0,
-      frameStoreHead: -1,
+      time,
+      step,
       params: { ...this.params },
       dtMs,
       width: frame.width,
       height: frame.height,
+      energyCols: this._energyCols,
+      energyRows: this._energyRows,
     }, [currentFrameBuffer]);
   }
 
   // ── Worker Path (fallback) ──────────────────────────────────
 
-  _processWorker(video) {
+  _processWorker(video, time, step, trailAgeStep) {
     const frame = this.captureFrame(video);
     if (!frame) return;
-
-    const pixelBytes = frame.data.buffer.byteLength;
-    const storeCopy = new ArrayBuffer(pixelBytes);
-    new Uint8ClampedArray(storeCopy).set(frame.data);
-    this._storePush(storeCopy);
-
-    if (this._workerBusy) return;
     this._workerBusy = true;
 
-    const currentFrameBuffer = frame.data.buffer;
-
-    const frameStoreBuffers = new Array(FRAME_STORE_CAP);
-    for (let i = 0; i < FRAME_STORE_CAP; i++) {
-      const buf = this._frameStore[i];
-      if (buf) {
-        frameStoreBuffers[i] = buf.slice(0);
-      } else {
-        frameStoreBuffers[i] = null;
-      }
-    }
+    // The worker keeps the pixels it is sent as its history, so it gets its
+    // own copy and this one stays here for compositing the result.
+    this._pendingFrame = frame;
+    const pixels = frame.data.slice();
 
     this._worker.postMessage({
       type: 'process',
-      currentFrameBuffer,
-      frameStoreBuffers,
-      frameStoreSize: this._storeSize,
-      frameStoreHead: this._storeHead,
+      currentFrameBuffer: pixels.buffer,
+      time,
+      step,
+      trailAgeStep,
+      ringBudgetBytes: this._ringOptions?.budgetBytes,
       params: { ...this.params },
       width: this.width,
       height: this.height,
       energyCols: this._energyCols,
       energyRows: this._energyRows,
-    }, [currentFrameBuffer]);
+    }, [pixels.buffer]);
   }
-}
-
-/**
- * Dev-only parity probe for SPEC-sonification A6.
- *
- * Feeds the same two synthetic frames through the CPU core math and the WebGL
- * readback and returns both grids so their cells can be compared. Only ever
- * called behind `import.meta.env.DEV`, so production builds tree-shake it away.
- *
- * It resizes the renderer to the synthetic frame size and clears the pipeline
- * afterwards — run it on an idle page, not mid-playback.
- *
- * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
- * @param {number} [cols]
- * @param {number} [rows]
- * @returns {{cols: number, rows: number, core: number[], webgl: number[]}|null}
- */
-export function debugEnergyParity(pipeline, cols = 8, rows = 4) {
-  const gl = pipeline?._glRenderer;
-  if (!gl) return null;
-
-  const width = 128;
-  const height = 64;
-  const prev = new Uint8ClampedArray(width * height * 4);
-  const next = new Uint8ClampedArray(width * height * 4);
-  const base = 96;
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-      prev[i] = prev[i + 1] = prev[i + 2] = base;
-      prev[i + 3] = 255;
-      // Only the second frame carries the wedge: motion grows to the right and
-      // is strongest at the top, so every cell lands on a different energy.
-      const wedge = Math.round((x / (width - 1)) * 120 * (1 - y / (height - 1)));
-      next[i] = next[i + 1] = next[i + 2] = base + wedge;
-      next[i + 3] = 255;
-    }
-  }
-
-  const diff = new Uint8ClampedArray(width * height * 4);
-  posyBlend(next, prev, diff, 0);
-  const core = cellEnergies(diff, width, height, cols, rows, true);
-
-  const restoreWidth = gl.width;
-  const restoreHeight = gl.height;
-  gl.setSize(width, height);
-  const prevImage = new ImageData(prev, width, height);
-  const nextImage = new ImageData(next, width, height);
-  gl.uploadImageData(nextImage, 'current');
-  gl.uploadImageData(prevImage, 'oldR');
-  gl.uploadImageData(prevImage, 'oldG');
-  gl.uploadImageData(prevImage, 'oldB');
-  gl.renderDiff({
-    threshold: 0,
-    algorithm: 'posy',
-    rgbTintR: '#ff0000',
-    rgbTintG: '#00ff00',
-    rgbTintB: '#0000ff',
-  });
-  const webgl = Array.from(gl.readEnergyGrid(cols, rows));
-
-  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight);
-  pipeline.clearState();
-
-  return { cols, rows, core: Array.from(core), webgl };
 }

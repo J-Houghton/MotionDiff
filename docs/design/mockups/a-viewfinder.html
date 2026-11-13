@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup A — Viewfinder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Direction A: a camera monitor. The frame owns the screen; everything else
+     is an overlay burned into its corners, in one signal colour, and fades
+     out when you stop touching it.
+     Overlay text sits on solid black plates (label tape), never straight on
+     the picture: footage can be any brightness, and Posy's grey baseline
+     defeats the usual blend-mode tricks. */
+  :root { --ink: #f4f1ea; --dim: rgba(244,241,234,.62); --amber: #ffb000; --edge: rgba(244,241,234,.28);
+          --label: 'Barlow Condensed', 'Arial Narrow', sans-serif; --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; color: var(--ink); overflow: hidden; }
+  .stage { position: fixed; inset: 0; }
+  .stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+  .split { position: absolute; top: 0; bottom: 0; width: 28px; margin-left: -14px; cursor: ew-resize; touch-action: none; }
+  .split::before { content: ''; position: absolute; left: 13px; top: 0; bottom: 0; width: 2px; background: var(--amber); }
+  .split::after { content: 'ORIGINAL ◂ ▸ OUTPUT'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    font: 600 12px/1 var(--label); letter-spacing: .14em; white-space: nowrap; color: #000; background: var(--amber); padding: 5px 8px; }
+  .split:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+  .hud { position: fixed; inset: 0; pointer-events: none; transition: opacity .25s; }
+  .hud > * { position: absolute; pointer-events: auto; }
+  /* framing brackets, like a viewfinder's safe area */
+  .bracket { width: 26px; height: 26px; border: 2px solid var(--amber); pointer-events: none; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
+  .plate { background: #000; }
+  .bracket.tl { left: 28px; top: 28px; border-right: 0; border-bottom: 0; }
+  .bracket.tr { right: 28px; top: 28px; border-left: 0; border-bottom: 0; }
+  .bracket.bl { left: 28px; bottom: 28px; border-right: 0; border-top: 0; }
+  .bracket.br { right: 28px; bottom: 28px; border-left: 0; border-top: 0; }
+
+  .mode { left: 56px; top: 56px; display: grid; justify-items: start; gap: 0; }
+  .mode h1 { margin: 0; font: 700 64px/.82 var(--label); letter-spacing: .01em; text-transform: uppercase; padding: 10px 14px 12px; }
+  .mode p { margin: 0; font: 400 12px/1.4 var(--mono); color: var(--dim); padding: 0 14px 10px; max-width: 46ch; }
+  .mode .num { font: 600 13px/1 var(--label); letter-spacing: .2em; color: #000; background: var(--amber); padding: 5px 8px; }
+
+  .meta { right: 56px; top: 56px; text-align: right; font: 400 12px/1.7 var(--mono); color: var(--dim); padding: 8px 12px; }
+  .meta b { color: var(--ink); font-weight: 500; }
+  .live { color: var(--amber); }
+
+  .readout { left: 56px; bottom: 138px; display: flex; gap: 26px; font: 400 11px/1 var(--mono); color: var(--dim); padding: 12px 14px; }
+  .readout div b { display: block; font: 600 30px/1 var(--label); color: var(--ink); margin-top: 6px; letter-spacing: .01em; }
+  .readout div b small { font: 500 13px/1 var(--label); color: var(--dim); margin-left: 3px; }
+
+  .transport { left: 56px; right: 56px; bottom: 56px; padding: 12px 14px 8px; }
+  .tc { display: flex; align-items: baseline; gap: 18px; font: 500 13px/1 var(--mono); color: var(--dim); }
+  .tc time { font: 500 30px/1 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .tc button { all: unset; cursor: pointer; font: 600 13px/1 var(--label); letter-spacing: .16em; padding: 6px 2px; color: var(--ink); }
+  .tc button:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+  .tc .sp { flex: 1; }
+  .rail { position: relative; height: 22px; margin-top: 12px; }
+  .rail::before { content: ''; position: absolute; left: 0; right: 0; top: 10px; height: 2px; background: var(--edge); }
+  .rail .ticks { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, var(--edge) 0 1px, transparent 1px calc(100% / 52)); height: 6px; top: 8px; opacity: .8; }
+  .rail .done { position: absolute; left: 0; top: 10px; height: 2px; width: 31%; background: var(--amber); }
+  .rail .head { position: absolute; left: 31%; top: 1px; width: 2px; height: 20px; background: var(--amber); }
+  .keys { left: 56px; bottom: 26px; display: flex; gap: 20px; font: 400 11px/1 var(--mono); color: var(--dim); padding: 7px 14px; }
+  .keys kbd { font: 500 11px/1 var(--mono); color: var(--ink); margin-right: 6px; }
+
+  .panel { right: 56px; top: 146px; width: 288px; transition: opacity .2s, transform .2s; }
+  .panel { --tp-base-background-color: #000; --tp-base-shadow-color: transparent; --tp-base-border-radius: 0; --tp-blade-border-radius: 0;
+    --tp-base-font-family: var(--mono); --tp-container-background-color: rgba(244,241,234,.06); --tp-container-background-color-hover: rgba(244,241,234,.10);
+    --tp-container-background-color-focus: rgba(244,241,234,.14); --tp-container-background-color-active: rgba(244,241,234,.18); --tp-container-foreground-color: var(--ink);
+    --tp-input-background-color: rgba(244,241,234,.08); --tp-input-background-color-hover: rgba(244,241,234,.12); --tp-input-background-color-focus: rgba(244,241,234,.16);
+    --tp-input-background-color-active: rgba(244,241,234,.2); --tp-input-foreground-color: var(--ink); --tp-label-foreground-color: var(--dim);
+    --tp-button-background-color: rgba(244,241,234,.14); --tp-button-background-color-hover: rgba(244,241,234,.2); --tp-button-background-color-focus: rgba(244,241,234,.24); --tp-button-background-color-active: rgba(244,241,234,.3);
+    --tp-button-foreground-color: var(--ink); --tp-groove-foreground-color: rgba(244,241,234,.16); --tp-monitor-background-color: rgba(0,0,0,.3); --tp-monitor-foreground-color: var(--dim);
+    border-top: 2px solid var(--amber); }
+  .panel .tp-sldv_k::before, .panel .tp-sldv_k::after { background-color: var(--amber); }
+  .panel .tp-btnv_b { background-color: var(--amber); color: #000; font-weight: 500; }
+  .panel :focus-visible { outline: 2px solid var(--amber) !important; outline-offset: 1px; }
+
+  /* idle: nothing but the picture */
+  [data-state='idle'] .hud { opacity: 0; }
+  [data-state='idle'] .split::after { display: none; }
+  [data-state='nopanel'] .panel { opacity: 0; transform: translateX(12px); pointer-events: none; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<body>
+<main class="stage" id="stage" aria-label="Video output">
+  <img src="assets/frame-glow.jpg" alt="Motion output">
+  <img data-original src="assets/frame-original.jpg" alt="Original frame">
+  <div class="split" data-split role="slider" tabindex="0" aria-label="Split between original and output" aria-valuemin="0" aria-valuemax="100"></div>
+</main>
+
+<div class="hud">
+  <i class="bracket tl"></i><i class="bracket tr"></i><i class="bracket bl"></i><i class="bracket br"></i>
+
+  <header class="mode plate" style="background:none">
+    <span class="num">MODE 1 / 6</span>
+    <h1 class="plate">Posy</h1>
+    <p class="plate">current + inverted frame from 333 ms earlier · grey is stillness</p>
+  </header>
+
+  <div class="meta plate" aria-live="polite">
+    <div><b>640 × 360</b> · WebGL2</div>
+    <div><b>29.97</b> fps · 4.1 ms</div>
+    <div class="live">● trees-in-wind.mp4</div>
+  </div>
+
+  <div class="readout plate" aria-hidden="true">
+    <div>GAP <b>333<small>ms</small></b></div>
+    <div>SPREAD <b>67<small>ms</small></b></div>
+    <div>THRESHOLD <b>24</b></div>
+    <div>TRAIL <b>500<small>ms</small></b></div>
+    <div>DISPLAY <b>GLOW</b></div>
+  </div>
+
+  <nav class="transport plate" aria-label="Transport">
+    <div class="tc">
+      <button aria-label="Step back">◂◂</button><button aria-label="Pause">❚❚ PAUSE</button><button aria-label="Step forward">▸▸</button>
+      <time>00:04.03</time><span>/ 00:13.00</span><span>frame 121</span>
+      <span class="sp"></span><button>1.0×</button><button>LOOP</button><button>● REC</button>
+    </div>
+    <div class="rail" role="slider" tabindex="0" aria-label="Seek" aria-valuetext="4.03 of 13 seconds"><i class="ticks"></i><i class="done"></i><i class="head"></i></div>
+  </nav>
+
+  <div class="keys plate" aria-hidden="true">
+    <span><kbd>SPACE</kbd>play</span><span><kbd>← →</kbd>step</span><span><kbd>1–6</kbd>mode</span><span><kbd>[ ]</kbd>gap</span>
+    <span><kbd>S</kbd>split</span><span><kbd>O</kbd>original</span><span><kbd>P</kbd>parameters</span><span><kbd>N</kbd>source</span><span><kbd>H</kbd>hide all</span><span><kbd>?</kbd>keys</span>
+  </div>
+
+  <aside class="panel" id="panel" aria-label="Parameters"></aside>
+</div>
+
+<script type="module">
+  import { buildPane, splitCompare } from './shared.js';
+  buildPane(document.getElementById('panel'));
+  splitCompare(document.getElementById('stage'), 0.36);
+</script>
+</body>
+</html>

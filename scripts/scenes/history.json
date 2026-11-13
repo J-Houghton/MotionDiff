@@ -1,0 +1,12 @@
+{ "scenes": [
+  {"name":"truth-age","clip":"truth","at":2.5,"frames":6,"every":3,"display":"diff","readData":true,"params":{"algorithm":"history","historyShow":"age","historyLength":30,"frameOffset":5,"secondGap":30,"threshold":20}},
+  {"name":"truth-direction","clip":"truth","at":2.5,"frames":6,"every":3,"display":"diff","readData":true,"params":{"algorithm":"history","historyShow":"direction","historyLength":30,"frameOffset":5,"secondGap":30,"threshold":20}},
+  {"name":"truth2-direction","clip":"truth","at":9,"frames":6,"every":3,"display":"diff","readData":true,"params":{"algorithm":"history","historyShow":"direction","historyLength":30,"frameOffset":5,"secondGap":30,"threshold":20}},
+  {"name":"truth2-age","clip":"truth","at":9,"frames":6,"every":3,"display":"diff","readData":true,"params":{"algorithm":"history","historyShow":"age","historyLength":30,"frameOffset":5,"secondGap":30,"threshold":20}},
+  {"name":"truth-raw","clip":"truth","at":2.5,"frames":6,"every":3,"display":"diff","params":{"algorithm":"raw","frameOffset":5,"threshold":20,"trailLength":30,"channelSpread":0,"blurEnabled":false,"ageColorEnabled":false}},
+  {"name":"truth-posy","clip":"truth","at":2.5,"frames":6,"every":3,"display":"diff","params":{"algorithm":"posy","frameOffset":5,"threshold":20,"trailLength":30,"channelSpread":0,"blurEnabled":false,"ageColorEnabled":false}},
+  {"name":"traffic-direction","clip":"traffic","at":3,"frames":6,"every":3,"display":"diff","readData":false,"params":{"algorithm":"history","historyShow":"direction","historyLength":30,"frameOffset":5,"secondGap":30,"threshold":20}},
+  {"name":"traffic-age","clip":"traffic","at":3,"frames":6,"every":3,"display":"diff","readData":false,"params":{"algorithm":"history","historyShow":"age","historyLength":30,"frameOffset":5,"secondGap":30,"threshold":20}},
+  {"name":"traffic-raw","clip":"traffic","at":3,"frames":6,"every":3,"display":"diff","params":{"algorithm":"raw","frameOffset":5,"threshold":20,"trailLength":30,"channelSpread":0,"blurEnabled":false,"ageColorEnabled":false}},
+  {"name":"traffic-posy","clip":"traffic","at":3,"frames":6,"every":3,"display":"diff","params":{"algorithm":"posy","frameOffset":5,"threshold":20,"trailLength":30,"channelSpread":0,"blurEnabled":false,"ageColorEnabled":false}}
+] }

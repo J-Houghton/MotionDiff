@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup B — Plate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Direction B: a motion-study plate. The frame is printed on paper like a
+     Muybridge plate, captioned underneath, and the only instrument is a time
+     ruler that shows where in the past each channel is looking. Light by
+     default; the opposite of a dark dashboard. */
+  :root { --paper: #f1ece2; --ink: #17140f; --soft: #6b6457; --rule: #c9c1b1; --red: #d4381f;
+          --serif: 'Fraunces', Georgia, 'Times New Roman', serif; --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--paper); color: var(--ink); overflow: hidden; }
+  body { display: grid; grid-template-rows: auto 1fr auto; padding: 18px 40px 16px; gap: 12px; }
+
+  .mast { display: flex; align-items: baseline; gap: 18px; font: 400 12px/1 var(--mono); color: var(--soft); border-bottom: 1px solid var(--ink); padding-bottom: 9px; }
+  .mast strong { font: italic 400 21px/1 var(--serif); color: var(--ink); letter-spacing: -.01em; }
+  .mast .sp { flex: 1; }
+  .mast button { all: unset; cursor: pointer; font: 400 12px/1 var(--mono); color: var(--ink); border-bottom: 1px solid var(--rule); padding: 2px 0; }
+  .mast button:focus-visible, .cap button:focus-visible { outline: 2px solid var(--red); outline-offset: 3px; }
+  kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius: 2px; padding: 1px 4px; color: var(--ink); background: #fff8; }
+
+  /* the plate: as large as the page allows, with a printed border */
+  .plate { position: relative; min-height: 0; display: grid; align-items: center; justify-items: start; padding-left: 6px; }
+  .frame { position: relative; height: 100%; aspect-ratio: 16 / 9; max-width: 100%; background: #808080; outline: 1px solid var(--ink); outline-offset: 5px; }
+  .frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .split { position: absolute; top: -5px; bottom: -5px; width: 24px; margin-left: -12px; cursor: ew-resize; touch-action: none; }
+  .split::before { content: ''; position: absolute; left: 11px; top: 0; bottom: 0; width: 2px; background: var(--red); }
+  .split::after { content: ''; position: absolute; left: 4px; top: -9px; border: 8px solid transparent; border-top-color: var(--red); }
+  .split:focus-visible { outline: 2px solid var(--red); }
+  .tag { position: absolute; top: 10px; font: 500 10px/1 var(--mono); letter-spacing: .08em; background: var(--paper); color: var(--ink); padding: 4px 6px; }
+  .tag.l { left: 10px; } .tag.r { right: 10px; }
+
+  /* caption strip: what a specimen label would say */
+  .cap { display: grid; grid-template-columns: minmax(230px, 1fr) minmax(420px, 2.2fr) auto; gap: 34px; align-items: end; border-top: 1px solid var(--ink); padding-top: 10px; }
+  .cap h1 { margin: 0; font: 600 44px/.9 var(--serif); letter-spacing: -.03em; }
+  .cap h1 small { font: 400 12px/1 var(--mono); letter-spacing: 0; color: var(--soft); margin-left: 8px; vertical-align: 14px; }
+  .cap p { margin: 6px 0 0; font: italic 400 14px/1.3 var(--serif); color: var(--soft); }
+
+  /* the time ruler: now on the right, the past to the left */
+  .ruler { position: relative; height: 84px; font: 400 10px/1 var(--mono); color: var(--soft); }
+  .ruler .axis { position: absolute; left: 0; right: 0; bottom: 18px; height: 1px; background: var(--ink); }
+  .ruler .ticks { position: absolute; left: 0; right: 0; bottom: 18px; height: 7px; background: repeating-linear-gradient(90deg, var(--ink) 0 1px, transparent 1px 3.3333%); }
+  .ruler .lab { position: absolute; bottom: 0; transform: translateX(-50%); }
+  .ruler .trail { position: absolute; bottom: 19px; height: 9px; right: 0; width: 50%; background: repeating-linear-gradient(135deg, var(--rule) 0 3px, transparent 3px 6px); }
+  .ruler .mark { position: absolute; bottom: 18px; width: 2px; height: 30px; transform: translateX(50%); cursor: ew-resize; }
+  .ruler .mark b { position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); font: 500 10px/1 var(--mono); padding: 3px 5px; color: #fff; white-space: nowrap; }
+  .ruler .mark.r { background: #d4381f; } .ruler .mark.r b { background: #d4381f; }
+  .ruler .mark.g { background: #2f8f4e; height: 44px; } .ruler .mark.g b { background: #2f8f4e; bottom: 46px; }
+  .ruler .mark.b { background: #2c5fd8; height: 58px; } .ruler .mark.b b { background: #2c5fd8; bottom: 60px; }
+  .ruler .now { position: absolute; right: 0; bottom: 18px; width: 2px; height: 30px; background: var(--ink); }
+  .ruler .now b { position: absolute; bottom: 32px; right: 0; font: 500 10px/1 var(--mono); background: var(--ink); color: var(--paper); padding: 3px 5px; }
+  .ruler .mark:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .play { display: flex; align-items: baseline; gap: 14px; font: 400 12px/1 var(--mono); color: var(--soft); }
+  .play time { font: 400 34px/1 var(--serif); color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .play button { all: unset; cursor: pointer; font: 500 12px/1 var(--mono); color: var(--ink); border: 1px solid var(--ink); padding: 7px 10px; }
+  .play button.go { background: var(--ink); color: var(--paper); }
+  .scrub { grid-column: 1 / -1; position: relative; height: 12px; margin-top: 2px; }
+  .scrub::before { content: ''; position: absolute; left: 0; right: 0; top: 5px; height: 1px; background: var(--rule); }
+  .scrub i { position: absolute; left: 0; top: 4px; height: 3px; width: 31%; background: var(--ink); }
+  .scrub b { position: absolute; left: 31%; top: 0; width: 3px; height: 12px; background: var(--red); }
+
+  /* parameters: a card laid on the page's margin */
+  .panel { position: fixed; right: 26px; top: 64px; width: 280px; box-shadow: 0 1px 0 var(--ink), 6px 8px 0 #17140f14; border: 1px solid var(--ink); transition: transform .22s, opacity .22s;
+    --tp-base-background-color: #faf6ee; --tp-base-shadow-color: transparent; --tp-base-border-radius: 0; --tp-blade-border-radius: 0; --tp-base-font-family: var(--mono);
+    --tp-container-background-color: #17140f0d; --tp-container-background-color-hover: #17140f17; --tp-container-background-color-focus: #17140f20; --tp-container-background-color-active: #17140f2a;
+    --tp-container-foreground-color: var(--ink); --tp-input-background-color: #17140f10; --tp-input-background-color-hover: #17140f1a; --tp-input-background-color-focus: #17140f24;
+    --tp-input-background-color-active: #17140f2e; --tp-input-foreground-color: var(--ink); --tp-label-foreground-color: var(--soft);
+    --tp-button-background-color: #17140f14; --tp-button-background-color-hover: #17140f22; --tp-button-background-color-focus: #17140f2c; --tp-button-background-color-active: #17140f38;
+    --tp-button-foreground-color: var(--ink); --tp-groove-foreground-color: #17140f22; --tp-monitor-background-color: #17140f0d; --tp-monitor-foreground-color: var(--soft); }
+  .panel .tp-sldv_k::before, .panel .tp-sldv_k::after { background-color: var(--red); }
+  .panel .tp-btnv_b { background-color: var(--ink); color: var(--paper); }
+  .panel :focus-visible { outline: 2px solid var(--red) !important; outline-offset: 1px; }
+  [data-state='nopanel'] .panel { transform: translateX(110%); opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<body>
+<header class="mast">
+  <strong>MotionDiff</strong>
+  <span>Plate 01 — trees-in-wind.mp4 · 1920 × 1080 at 640 · 29.97 fps</span>
+  <span class="sp"></span>
+  <button><kbd>N</kbd> source</button><button><kbd>P</kbd> parameters</button><button><kbd>H</kbd> picture only</button><button><kbd>?</kbd> keys</button>
+</header>
+
+<main class="plate">
+  <div class="frame" id="stage" aria-label="Video output">
+    <img src="assets/frame-posy.jpg" alt="Motion output">
+    <img data-original src="assets/frame-original.jpg" alt="Original frame">
+    <span class="tag l">ORIGINAL</span><span class="tag r">POSY · DIFF</span>
+    <div class="split" data-split role="slider" tabindex="0" aria-label="Split between original and output" aria-valuemin="0" aria-valuemax="100"></div>
+  </div>
+</main>
+
+<footer class="cap">
+  <div>
+    <h1>Posy<small>1 of 6</small></h1>
+    <p>Each frame laid over its own negative from a third of a second ago. What has not moved cancels to grey.</p>
+  </div>
+
+  <div class="ruler" aria-label="Where each channel looks back to">
+    <i class="trail" title="trail: 500 ms"></i>
+    <i class="ticks"></i><i class="axis"></i>
+    <span class="lab" style="left:0">−1.0 s</span><span class="lab" style="left:50%">−0.5 s</span><span class="lab" style="left:100%;transform:translateX(-100%)">now</span>
+    <div class="mark b" role="slider" tabindex="0" aria-label="Blue channel lookback" aria-valuetext="467 milliseconds" style="right:46.7%"><b>B 467 ms</b></div>
+    <div class="mark g" role="slider" tabindex="0" aria-label="Green channel lookback" aria-valuetext="400 milliseconds" style="right:40%"><b>G 400 ms</b></div>
+    <div class="mark r" role="slider" tabindex="0" aria-label="Gap" aria-valuetext="333 milliseconds" style="right:33.3%"><b>R 333 ms</b></div>
+    <div class="now"><b>NOW</b></div>
+  </div>
+
+  <div class="play">
+    <button aria-label="Step back">◂</button><button class="go" aria-label="Pause">❚❚</button><button aria-label="Step forward">▸</button>
+    <time>0:04.03</time><span>/ 0:13.00 · 1×</span><button>● Rec</button>
+  </div>
+  <div class="scrub" role="slider" tabindex="0" aria-label="Seek" aria-valuetext="4.03 of 13 seconds"><i></i><b></b></div>
+</footer>
+
+<aside class="panel" id="panel" aria-label="Parameters"></aside>
+
+<script type="module">
+  import { buildPane, splitCompare } from './shared.js';
+  buildPane(document.getElementById('panel'));
+  splitCompare(document.getElementById('stage'), 0.3);
+</script>
+</body>
+</html>

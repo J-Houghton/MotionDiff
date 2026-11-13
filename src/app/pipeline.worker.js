@@ -1,39 +1,114 @@
 import { posyBlend, rawDiff } from '../core/diff.js';
-import { boxBlur } from '../core/blur.js';
-import { accumulate } from '../core/trails.js';
-import { emaAlpha, seedStates, magnifyFrame } from '../core/magnify.js';
-import { cellEnergies } from '../core/energy.js';
+import { boxBlur, boxBlurFloat } from '../core/blur.js';
+import { TRAIL_HOLD, clearTrailState, createTrailState, trailStep } from '../core/trails.js';
+import { addBand, boxPool, emaAlpha, emaStep, pooledSize, seedStatesFloat } from '../core/magnify.js';
+import { bandMagnitude, diffMagnitude, poolMagnitude } from '../core/magnitude.js';
+import { FrameRing, ringCapacity } from '../core/buffer.js';
+import { lookbackTime, shouldStore, storeInterval } from '../core/timebase.js';
 
-const TRAIL_CAP = 20;
-const trailStore = [];
-let trailHead = -1;
-let trailSize = 0;
+// ── Trail feedback state (see core/trails.js) ──
+// Two states, ping-ponged: `trailCur` is the state after the last frame,
+// `trailPrev` the one that frame was computed from, kept so the same frame
+// can be re-rendered (a parameter change while paused) without stacking.
+const trailStates = [null, null];
+let trailCur = 0;
+let trailPrev = 0;
+let trailHasFrame = false;
+
+function trailsClear() {
+  for (const state of trailStates) if (state) clearTrailState(state);
+  trailCur = 0;
+  trailPrev = 0;
+  trailHasFrame = false;
+}
+
+function ensureTrailStates(pixelCount) {
+  if (trailStates[0] && trailStates[0].peaks.length === pixelCount * 4) return;
+  trailStates[0] = createTrailState(pixelCount);
+  trailStates[1] = createTrailState(pixelCount);
+  trailCur = 0;
+  trailPrev = 0;
+  trailHasFrame = false;
+}
+
+// ── Frame store ──
+// Lives here, not on the main thread: each message carries exactly one
+// frame (transferred, not copied) and the lookback never crosses threads.
+// `ring` tracks which slot holds which frame; `ringFrames` holds the pixels.
+let ring = null;
+let ringFrames = [];
+let ringWidth = 0;
+let ringHeight = 0;
+// Stamp of the newest frame kept as history
+let lastStoredTime = NaN;
+
+function ensureRing(width, height, budgetBytes) {
+  if (ring && ringWidth === width && ringHeight === height) return;
+  ring = new FrameRing(ringCapacity(width, height, budgetBytes ? { budgetBytes } : undefined));
+  ringFrames = new Array(ring.capacity);
+  ringWidth = width;
+  ringHeight = height;
+  lastStoredTime = NaN;
+}
+
+function ringClear() {
+  if (ring) ring.clear();
+  ringFrames = ring ? new Array(ring.capacity) : [];
+  lastStoredTime = NaN;
+}
+
+/**
+ * Drop whatever history a break in the timeline made unusable. The main
+ * thread classifies the step (core/timebase.js classifyStep); the worker
+ * owns the state it applies to.
+ */
+function applyStep(step, time) {
+  if (step === 'advance' || step === 'repeat') return;
+
+  if (step === 'rewind' && ring) {
+    // Frames stamped at or after the new position are in its future.
+    if (ring.dropFrom(time) > 0) {
+      // Release the pixel buffers of the dropped frames.
+      const live = new Set();
+      for (let age = 0; age < ring.size; age++) live.add(ring.slotAt(age));
+      for (let slot = 0; slot < ring.capacity; slot++) {
+        if (!live.has(slot)) ringFrames[slot] = undefined;
+      }
+    }
+    lastStoredTime = ring.newestTime;
+  } else {
+    ringClear();
+  }
+  trailsClear();
+  magClear();
+}
 
 // ── Magnify EMA state (Float32, normalized 0..1, RGBA layout) ──
+// The states live on the pooled grid, which on this CPU path is never wider
+// than MAG_MAX_GRID_WIDTH (correctness over speed, but not unboundedly slow).
+const MAG_MAX_GRID_WIDTH = 320;
 let magFast = null;
 let magSlow = null;
+let magPooled = new Float32Array(0);
 
 function magClear() {
   magFast = null;
   magSlow = null;
 }
 
-function trailPush(data) {
-  trailHead = (trailHead + 1) % TRAIL_CAP;
-  trailStore[trailHead] = data;
-  if (trailSize < TRAIL_CAP) trailSize++;
+// ── Shared motion magnitude (see core/magnitude.js) ──
+// Each mode fills this per-pixel buffer; the grid is pooled from it the
+// same way whatever the mode. Reused across frames, sized on demand.
+let magnitudeScratch = new Float32Array(0);
+
+function magnitudeBuffer(pixelCount) {
+  if (magnitudeScratch.length !== pixelCount) magnitudeScratch = new Float32Array(pixelCount);
+  return magnitudeScratch;
 }
 
-function trailGet(offset) {
-  if (offset < 0 || offset >= trailSize) return null;
-  const idx = (trailHead - offset + TRAIL_CAP) % TRAIL_CAP;
-  return trailStore[idx];
-}
-
-function trailClear() {
-  trailStore.length = 0;
-  trailHead = -1;
-  trailSize = 0;
+/** Pool a filled magnitude buffer into a transferable grid, or null when nobody is listening. */
+function pooledEnergy(magnitude, width, height, cols, rows) {
+  return poolMagnitude(magnitude, width, height, cols, rows).buffer;
 }
 
 function hexToRgb(hex, fallback) {
@@ -59,42 +134,18 @@ function tintChannel(frame, index, tint) {
   );
 }
 
-function tintAgeFrame(frame, age, threshold, newestColor, oldestColor) {
-  const out = new Uint8ClampedArray(frame.length);
-  const thresholdNorm = threshold / 255;
-  const rFactor = newestColor[0] + ((oldestColor[0] - newestColor[0]) * age);
-  const gFactor = newestColor[1] + ((oldestColor[1] - newestColor[1]) * age);
-  const bFactor = newestColor[2] + ((oldestColor[2] - newestColor[2]) * age);
-
-  for (let i = 0; i < frame.length; i += 4) {
-    const motion = (
-      Math.abs(frame[i] - 128) +
-      Math.abs(frame[i + 1] - 128) +
-      Math.abs(frame[i + 2] - 128)
-    ) / (3 * 127);
-
-    if (motion > thresholdNorm) {
-      out[i] = Math.round(rFactor * motion * 255);
-      out[i + 1] = Math.round(gFactor * motion * 255);
-      out[i + 2] = Math.round(bFactor * motion * 255);
-    }
-
-    out[i + 3] = 255;
-  }
-
-  return out;
-}
-
-function clamp(offset, storeSize) {
-  return Math.min(offset, storeSize - 1);
-}
-
 self.onmessage = function (e) {
   const msg = e.data;
 
   if (msg.type === 'clear') {
-    trailClear();
+    trailsClear();
+    ringClear();
     magClear();
+    return;
+  }
+
+  if (msg.type === 'clearTrails') {
+    trailsClear();
     return;
   }
 
@@ -107,9 +158,8 @@ self.onmessage = function (e) {
 
   const {
     currentFrameBuffer,
-    frameStoreBuffers,
-    frameStoreSize,
-    frameStoreHead,
+    time,
+    step,
     params,
     width,
     height,
@@ -120,7 +170,6 @@ self.onmessage = function (e) {
   const {
     frameOffset,
     threshold,
-    trailLength,
     channelSpread,
     algorithm,
     blurEnabled,
@@ -132,38 +181,50 @@ self.onmessage = function (e) {
     ageColorOld,
   } = params;
 
-  const storeCap = frameStoreBuffers.length;
   const curData = new Uint8ClampedArray(currentFrameBuffer);
 
+  applyStep(step, time);
+
   if (params.algorithm === 'magnify') {
+    // Pool the frame with a true box average into floats. Rounding the
+    // pooled means to 8 bits (as a small 2D canvas would) discards exactly
+    // the precision the pooling is for.
+    const factor = Math.max(params.magDownsample || 1, Math.ceil(width / MAG_MAX_GRID_WIDTH));
+    const grid = pooledSize(width, height, factor);
+    const gridLength = grid.width * grid.height * 4;
+    if (magPooled.length !== gridLength) magPooled = new Float32Array(gridLength);
+    boxPool(curData, width, height, factor, magPooled);
+
     // Blur applies pre-EMA only; the band is added onto the unblurred frame.
-    let emaInput = curData;
-    if (params.blurEnabled) {
-      emaInput = new Uint8ClampedArray(curData);
-      boxBlur(emaInput, width, height);
-    }
+    if (params.blurEnabled) boxBlurFloat(magPooled, grid.width, grid.height);
 
     // Re-seed on first frame or size change so the first magnified
     // frame equals the input (no flash). Seed from the EMA input (the
-    // blurred frame when blur is on) so the band starts at exactly zero.
-    if (!magFast || magFast.length !== curData.length) {
-      magFast = new Float32Array(curData.length);
-      magSlow = new Float32Array(curData.length);
-      seedStates(emaInput, magFast, magSlow);
+    // blurred grid when blur is on) so the band starts at exactly zero.
+    if (!magFast || magFast.length !== gridLength) {
+      magFast = new Float32Array(gridLength);
+      magSlow = new Float32Array(gridLength);
+      seedStatesFloat(magPooled, magFast, magSlow);
     }
 
-    const magnified = new Uint8ClampedArray(curData.length);
-    magnifyFrame(
-      emaInput,
+    emaStep(
+      magPooled,
       magFast,
       magSlow,
-      magnified,
       emaAlpha(params.magFreqHigh, msg.dtMs),
       emaAlpha(params.magFreqLow, msg.dtMs),
-      params.magAmp,
-      params.magChroma,
-      curData
     );
+
+    // Full-resolution output: the frame plus the upsampled, amplified band.
+    const magnified = new Uint8ClampedArray(curData.length);
+    addBand(curData, width, height, magFast, magSlow, factor, params.magAmp, params.magChroma, magnified);
+
+    // Magnify's motion magnitude is the strength of the amplified band.
+    let energyBuffer = null;
+    if (energyCols > 0 && energyRows > 0) {
+      const magnitude = bandMagnitude(magFast, magSlow, params.magAmp, magnitudeBuffer(grid.width * grid.height));
+      energyBuffer = pooledEnergy(magnitude, grid.width, grid.height, energyCols, energyRows);
+    }
 
     const magnifiedBuffer = magnified.buffer;
     self.postMessage(
@@ -172,28 +233,16 @@ self.onmessage = function (e) {
         magnifiedBuffer,
         magnifiedWidth: width,
         magnifiedHeight: height,
-        currentFrameBuffer,
+        energyBuffer,
+        energyCols,
+        energyRows,
       },
-      [magnifiedBuffer, currentFrameBuffer]
+      energyBuffer ? [magnifiedBuffer, energyBuffer] : [magnifiedBuffer]
     );
     return;
   }
 
-  if (frameStoreSize < 2) {
-    self.postMessage(
-      { type: 'result', accumulatedBuffer: null, currentFrameBuffer },
-      [currentFrameBuffer]
-    );
-    return;
-  }
-
-  function storeGet(offset) {
-    if (offset < 0 || offset >= frameStoreSize) return null;
-    const idx = (frameStoreHead - offset + storeCap) % storeCap;
-    const buf = frameStoreBuffers[idx];
-    if (!buf) return null;
-    return new Uint8ClampedArray(buf);
-  }
+  ensureRing(width, height, msg.ringBudgetBytes);
 
   const k = frameOffset;
   const spread = channelSpread;
@@ -203,19 +252,25 @@ self.onmessage = function (e) {
   const ageNewest = hexToRgb(ageColorNew, '#ff4400').map((channel) => channel / 255);
   const ageOldest = hexToRgb(ageColorOld, '#0044ff').map((channel) => channel / 255);
 
-  const offR = clamp(k, frameStoreSize);
-  const offG = clamp(k + spread, frameStoreSize);
-  const offB = clamp(k + spread * 2, frameStoreSize);
+  // The ring holds frames older than this one; each channel's gap clamps to
+  // the oldest frame while the ring is still filling.
+  const ageR = ring.nearest(lookbackTime(time, k, spread, 0), time);
+  const ageG = ring.nearest(lookbackTime(time, k, spread, 1), time);
+  const ageB = ring.nearest(lookbackTime(time, k, spread, 2), time);
+  const oldR = ageR < 0 ? null : ringFrames[ring.slotAt(ageR)];
+  const oldG = ageG < 0 ? null : ringFrames[ring.slotAt(ageG)];
+  const oldB = ageB < 0 ? null : ringFrames[ring.slotAt(ageB)];
 
-  const oldR = storeGet(offR);
-  const oldG = storeGet(offG);
-  const oldB = storeGet(offB);
+  // Keep this frame as history (the buffer was transferred in, so storing
+  // it copies nothing) unless it is a re-render of the frame before, or
+  // history is being thinned to fit a long lookback into the ring.
+  if (step !== 'repeat' && shouldStore(lastStoredTime, time, storeInterval(k, spread, ring.capacity))) {
+    ringFrames[ring.push(time)] = curData;
+    lastStoredTime = time;
+  }
 
   if (!oldR || !oldG || !oldB) {
-    self.postMessage(
-      { type: 'result', accumulatedBuffer: null, currentFrameBuffer },
-      [currentFrameBuffer]
-    );
+    self.postMessage({ type: 'result', accumulatedBuffer: null });
     return;
   }
 
@@ -240,48 +295,38 @@ self.onmessage = function (e) {
     boxBlur(diffData, width, height);
   }
 
-  // Sonification energies: post-threshold, pre-composite — the same stage the
-  // WebGL path reads back from. Skipped entirely when no grid is requested.
+  // Motion magnitude: post threshold and blur, pre composite — the same
+  // stage the WebGL path measures. Skipped entirely when no grid is requested.
   let energyBuffer = null;
   if (energyCols > 0 && energyRows > 0) {
-    energyBuffer = cellEnergies(
-      diffData, width, height, energyCols, energyRows, algorithm === 'posy'
-    ).buffer;
+    const magnitude = diffMagnitude(diffData, algorithm === 'posy', magnitudeBuffer(width * height));
+    energyBuffer = pooledEnergy(magnitude, width, height, energyCols, energyRows);
   }
 
-  trailPush(diffData);
-
-  const T = Math.min(trailLength, trailSize);
-  const frames = [];
-  for (let t = 0; t < T; t++) {
-    const frame = trailGet(t);
-    if (!frame) continue;
-
-    if (ageColorEnabled && algorithm === 'posy') {
-      const age = T <= 1 ? 0 : t / (T - 1);
-      frames.push(tintAgeFrame(frame, age, threshold, ageNewest, ageOldest));
-    } else {
-      frames.push(frame);
-    }
+  // Advance the trail by this diff. The same frame rendered again starts
+  // from the state the first attempt started from.
+  ensureTrailStates(width * height);
+  const isPosy = algorithm === 'posy';
+  if (!(step === 'repeat' && trailHasFrame)) {
+    trailPrev = trailCur;
+    trailCur = 1 - trailCur;
   }
-
-  const isPosy = algorithm === 'posy' && !ageColorEnabled;
-  const accResult = accumulate(frames, isPosy);
-
-  if (!accResult) {
-    self.postMessage(
-      { type: 'result', accumulatedBuffer: null, currentFrameBuffer, energyBuffer, energyCols, energyRows },
-      energyBuffer ? [currentFrameBuffer, energyBuffer] : [currentFrameBuffer]
-    );
-    return;
+  const accResult = new Uint8ClampedArray(len);
+  const trailOpts = { isPosy, ageStep: msg.trailAgeStep || 0, hold: TRAIL_HOLD };
+  if (ageColorEnabled && isPosy) {
+    trailOpts.ageColorNew = ageNewest;
+    trailOpts.ageColorOld = ageOldest;
+    trailOpts.ageColorMixed = params.ageColorStyle !== 'latest';
   }
+  trailStep(trailStates[trailPrev], trailStates[trailCur], diffData, accResult, trailOpts);
+  trailHasFrame = true;
 
   const accBuffer = accResult.buffer;
-  const transfers = [accBuffer, currentFrameBuffer];
+  const transfers = [accBuffer];
   if (energyBuffer) transfers.push(energyBuffer);
 
   self.postMessage(
-    { type: 'result', accumulatedBuffer: accBuffer, currentFrameBuffer, energyBuffer, energyCols, energyRows },
+    { type: 'result', accumulatedBuffer: accBuffer, energyBuffer, energyCols, energyRows },
     transfers
   );
 };
