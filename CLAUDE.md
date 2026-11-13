@@ -98,17 +98,67 @@ differencing, motion history, background subtraction, optical flow.
 - **Research before design:** [docs/research.md](docs/research.md) records what other
   implementations do and which of their ideas we adopted. Borrow ideas, not code,
   unless the licence allows it and the source is noted.
-- **UI decisions (made, not yet built):** Tweakpane is the parameter panel, generated
-  from each mode's schema, with the ARIA/focus patch from `docs/research.md` §5 and
-  keyboard shortcuts for everything. One output stage with split compare against the
-  original. Light and dark only, no accent themes. Lit only if it earns its place
-  over plain DOM. The design direction is chosen from `docs/design/`.
+- **UI decisions:** Tweakpane is the parameter panel, generated from each mode's
+  schema, with the ARIA/focus patch from `docs/research.md` §5 and keyboard shortcuts
+  for everything. One output stage with split compare against the original. Light and
+  dark only, no accent themes. Plain DOM shell (no Lit). Layouts from `docs/design/`:
+  **Plate** (B) is the default, with its time ruler and a designed dark theme;
+  **Viewfinder** (A) is the fullscreen mode and the primary layout on phones, where
+  the phone camera is the main source.
+- **Colour-by-age keeps both looks, selectable.** Magnify band-gain normalisation is deferred.
 - **Modes will be a registry:** one module plus one entry per mode, and each mode
   exposes its result as data (a mask, a scalar field or a vector field), not only
   display colours. Posy and Raw stay as they are.
 - **Audio engine is low priority**: keep it working, do not extend it.
 - Stop and report when something needs the owner's decision, especially anything
   that changes how existing output looks; show a before/after.
+
+## Acceptance rules
+The owner does not judge visual results. The agent does, under these rules, and only
+brings the owner things that need permission (pushing, deploying) or that remove an
+existing look. Tune the numbers below if they prove wrong, and record the change and
+the reason under "Changes to these rules".
+
+Tag every change as **visual**, **performance** or **robustness**.
+- **Performance** is accepted on measured numbers (before and after, same machine,
+  interleaved runs).
+- **Robustness** is accepted on a demonstration of the case that broke before and
+  works now.
+- Unit tests stay for logic the eye can't check. Shader parity passes at about 2/255.
+
+**Visual changes**
+1. Before building, write down the expected effect and which reference clip should
+   show it (in `docs/verdicts.md`).
+2. Prototype cheaply, then render before/after filmstrips (several frames in a row)
+   on the reference clips: `npm run filmstrip` (see `scripts/README.md`).
+3. Judging is done by a fresh subagent that has not seen the work. Give it the two
+   filmstrips unlabeled and in random order, at normal viewing size, plus the criteria.
+4. **Visible:** the judge can tell them apart and describes the difference correctly.
+   If it can't on any clip, the change has no visible effect: stop, defer it, log it.
+5. **Intended:** the difference matches what was written down beforehand.
+6. **No regression on the other clips:** static areas stay at baseline, no new
+   flicker, banding or clipping, no motion lost that was visible before.
+7. **Numeric guard:** if fewer than about 0.5% of pixels change by more than 4/255,
+   treat it as invisible whatever the judge says. Flicker in static areas must not rise.
+
+**New modes**, checked on the synthetic clip (known truth) and the reference clips:
+- **Motion mask:** marks the object at its current position only, no ghost at the old
+  one, and visibly fewer speckles than Raw at the same threshold on the noisy clip.
+- **Motion history:** direction hue within about 20 degrees of the known direction;
+  age rises steadily along the path.
+- **Background model:** filled silhouette where frame differencing gives an outline;
+  a stopped object is absorbed in roughly the set time; no permanent ghost.
+- Each mode must show something Posy and Raw don't on at least one clip, as named by
+  the blind judge. If not, report that instead of shipping it.
+
+**Interface**, from screenshots at desktop and phone sizes in every state:
+- The picture is the largest element (at least half the viewport in the Plate layout,
+  all of it in the Viewfinder layout).
+- Text contrast at least 4.5:1, nothing overlapping or clipped, focus visible, touch
+  targets at least 44 px, overlays hide when idle in the Viewfinder layout.
+- A fresh subagent critiques it against the brief: distinct, not a generic dashboard.
+
+**Changes to these rules:** none yet.
 
 ## Gotchas
 - Web Audio / Tone.js cannot start without a user gesture — audio init must happen
