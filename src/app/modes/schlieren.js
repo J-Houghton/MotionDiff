@@ -216,7 +216,7 @@ export default {
     'What it shows: where the air is unevenly hot (the shift follows the change in air density across the line of sight). It is not a speed.',
     'Setup: prop the camera so it cannot move; put a detailed background a metre or so behind the hot air (print public/schlieren-pattern.svg, or use brick, gravel, foliage, a bookshelf); lock focus and exposure on the background. The Setup check view hatches in red whatever cannot be measured.',
     'Reference: by default it follows the scene, so only hot air that changes is shown and a steady plume fades out. Let it settle with nothing hot in view, switch on Hold reference, then light the candle: everything is shown.',
-    'Knife edge is the classic look: light where the background is pushed one way, dark where it is pushed the other. Strength and Direction show the size and the heading of the shift.',
+    'Knife edge is the classic look: light where the background is pushed one way, dark where it is pushed the other. It is always shown on its own, as a grey picture: even grey grain means it is measuring and there is no hot air in view; flat grey means nothing can be measured (a plain background, or a moving camera). Strength and Direction show the size and the heading of the shift, and follow the Display setting (over the video, or alone).',
     'Traces (experimental) follow how the pattern of hot air travels from frame to frame: the movement of its eddies. That is slower than the air itself, there is nothing to follow where the flow is smooth, and a plume that crosses more than about a twentieth of the picture between two frames is too fast to follow: a candle filmed close up at 30 frames a second is.',
     'Nothing is drawn where the background is plain. Lamp flicker, auto-exposure and focus hunting all read as signal; video compression smooths away the smallest shifts.',
     'Sensitivity is the shift drawn at full strength. A larger window and more smoothing see weaker plumes, more coarsely and more slowly.',
@@ -276,8 +276,11 @@ export default {
     if (!traces) {
       show(renderer.pictureFramebuffer, 0);
       const knife = params.schlierenShow === 'knife';
-      // The setup check is a picture of its own: it is never blended onto the frame.
-      renderer.renderComposite(params.schlierenShow === 'check' ? 'diff' : frame.display, knife ? 'posy' : 'raw', false);
+      // The knife edge and the setup check are pictures of their own, never
+      // blended onto the frame: laid over the video, a scene with no hot air
+      // in it looks like the plain camera, as if the mode were doing nothing.
+      const own = knife || params.schlierenShow === 'check';
+      renderer.renderComposite(own ? 'diff' : frame.display, knife ? 'posy' : 'raw', false);
       return true;
     }
 
