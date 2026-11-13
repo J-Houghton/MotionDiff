@@ -3,11 +3,32 @@ import { boxBlur } from '../core/blur.js';
 import { accumulate } from '../core/trails.js';
 import { emaAlpha, seedStates, magnifyFrame } from '../core/magnify.js';
 import { cellEnergies } from '../core/energy.js';
+import { CircularBuffer, FrameRing, ringCapacity } from '../core/buffer.js';
 
 const TRAIL_CAP = 20;
-const trailStore = [];
-let trailHead = -1;
-let trailSize = 0;
+const trails = new CircularBuffer(TRAIL_CAP);
+
+// ── Frame store ──
+// Lives here, not on the main thread: each message carries exactly one
+// frame (transferred, not copied) and the lookback never crosses threads.
+// `ring` tracks which slot holds which frame; `ringFrames` holds the pixels.
+let ring = null;
+let ringFrames = [];
+let ringWidth = 0;
+let ringHeight = 0;
+
+function ensureRing(width, height) {
+  if (ring && ringWidth === width && ringHeight === height) return;
+  ring = new FrameRing(ringCapacity(width, height));
+  ringFrames = new Array(ring.capacity);
+  ringWidth = width;
+  ringHeight = height;
+}
+
+function ringClear() {
+  if (ring) ring.clear();
+  ringFrames = ring ? new Array(ring.capacity) : [];
+}
 
 // ── Magnify EMA state (Float32, normalized 0..1, RGBA layout) ──
 let magFast = null;
@@ -16,24 +37,6 @@ let magSlow = null;
 function magClear() {
   magFast = null;
   magSlow = null;
-}
-
-function trailPush(data) {
-  trailHead = (trailHead + 1) % TRAIL_CAP;
-  trailStore[trailHead] = data;
-  if (trailSize < TRAIL_CAP) trailSize++;
-}
-
-function trailGet(offset) {
-  if (offset < 0 || offset >= trailSize) return null;
-  const idx = (trailHead - offset + TRAIL_CAP) % TRAIL_CAP;
-  return trailStore[idx];
-}
-
-function trailClear() {
-  trailStore.length = 0;
-  trailHead = -1;
-  trailSize = 0;
 }
 
 function hexToRgb(hex, fallback) {
@@ -85,16 +88,18 @@ function tintAgeFrame(frame, age, threshold, newestColor, oldestColor) {
   return out;
 }
 
-function clamp(offset, storeSize) {
-  return Math.min(offset, storeSize - 1);
-}
-
 self.onmessage = function (e) {
   const msg = e.data;
 
   if (msg.type === 'clear') {
-    trailClear();
+    trails.clear();
+    ringClear();
     magClear();
+    return;
+  }
+
+  if (msg.type === 'clearTrails') {
+    trails.clear();
     return;
   }
 
@@ -107,9 +112,7 @@ self.onmessage = function (e) {
 
   const {
     currentFrameBuffer,
-    frameStoreBuffers,
-    frameStoreSize,
-    frameStoreHead,
+    time,
     params,
     width,
     height,
@@ -132,7 +135,6 @@ self.onmessage = function (e) {
     ageColorOld,
   } = params;
 
-  const storeCap = frameStoreBuffers.length;
   const curData = new Uint8ClampedArray(currentFrameBuffer);
 
   if (params.algorithm === 'magnify') {
@@ -172,28 +174,13 @@ self.onmessage = function (e) {
         magnifiedBuffer,
         magnifiedWidth: width,
         magnifiedHeight: height,
-        currentFrameBuffer,
       },
-      [magnifiedBuffer, currentFrameBuffer]
+      [magnifiedBuffer]
     );
     return;
   }
 
-  if (frameStoreSize < 2) {
-    self.postMessage(
-      { type: 'result', accumulatedBuffer: null, currentFrameBuffer },
-      [currentFrameBuffer]
-    );
-    return;
-  }
-
-  function storeGet(offset) {
-    if (offset < 0 || offset >= frameStoreSize) return null;
-    const idx = (frameStoreHead - offset + storeCap) % storeCap;
-    const buf = frameStoreBuffers[idx];
-    if (!buf) return null;
-    return new Uint8ClampedArray(buf);
-  }
+  ensureRing(width, height);
 
   const k = frameOffset;
   const spread = channelSpread;
@@ -203,19 +190,21 @@ self.onmessage = function (e) {
   const ageNewest = hexToRgb(ageColorNew, '#ff4400').map((channel) => channel / 255);
   const ageOldest = hexToRgb(ageColorOld, '#0044ff').map((channel) => channel / 255);
 
-  const offR = clamp(k, frameStoreSize);
-  const offG = clamp(k + spread, frameStoreSize);
-  const offB = clamp(k + spread * 2, frameStoreSize);
+  // The ring holds frames older than this one; each channel's gap clamps to
+  // the oldest frame while the ring is still filling.
+  const ageR = ring.nearest(time - k, time);
+  const ageG = ring.nearest(time - (k + spread), time);
+  const ageB = ring.nearest(time - (k + spread * 2), time);
+  const oldR = ageR < 0 ? null : ringFrames[ring.slotAt(ageR)];
+  const oldG = ageG < 0 ? null : ringFrames[ring.slotAt(ageG)];
+  const oldB = ageB < 0 ? null : ringFrames[ring.slotAt(ageB)];
 
-  const oldR = storeGet(offR);
-  const oldG = storeGet(offG);
-  const oldB = storeGet(offB);
+  // Keep this frame as history. The buffer was transferred in, so storing
+  // it copies nothing.
+  ringFrames[ring.push(time)] = curData;
 
   if (!oldR || !oldG || !oldB) {
-    self.postMessage(
-      { type: 'result', accumulatedBuffer: null, currentFrameBuffer },
-      [currentFrameBuffer]
-    );
+    self.postMessage({ type: 'result', accumulatedBuffer: null });
     return;
   }
 
@@ -249,12 +238,12 @@ self.onmessage = function (e) {
     ).buffer;
   }
 
-  trailPush(diffData);
+  trails.push(diffData);
 
-  const T = Math.min(trailLength, trailSize);
+  const T = Math.min(trailLength, trails.size);
   const frames = [];
   for (let t = 0; t < T; t++) {
-    const frame = trailGet(t);
+    const frame = trails.get(t);
     if (!frame) continue;
 
     if (ageColorEnabled && algorithm === 'posy') {
@@ -270,18 +259,18 @@ self.onmessage = function (e) {
 
   if (!accResult) {
     self.postMessage(
-      { type: 'result', accumulatedBuffer: null, currentFrameBuffer, energyBuffer, energyCols, energyRows },
-      energyBuffer ? [currentFrameBuffer, energyBuffer] : [currentFrameBuffer]
+      { type: 'result', accumulatedBuffer: null, energyBuffer, energyCols, energyRows },
+      energyBuffer ? [energyBuffer] : []
     );
     return;
   }
 
   const accBuffer = accResult.buffer;
-  const transfers = [accBuffer, currentFrameBuffer];
+  const transfers = [accBuffer];
   if (energyBuffer) transfers.push(energyBuffer);
 
   self.postMessage(
-    { type: 'result', accumulatedBuffer: accBuffer, currentFrameBuffer, energyBuffer, energyCols, energyRows },
+    { type: 'result', accumulatedBuffer: accBuffer, energyBuffer, energyCols, energyRows },
     transfers
   );
 };

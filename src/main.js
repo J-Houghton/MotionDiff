@@ -93,7 +93,9 @@ initPresets({
   onStatus: setStatus,
 });
 
-pipeline.init(videoEl, canvas);
+// ?renderer=canvas2d runs the worker fallback even where WebGL2 is available.
+const forceCanvas2D = new URLSearchParams(window.location.search).get('renderer') === 'canvas2d';
+pipeline.init(videoEl, canvas, { forceCanvas2D });
 pipeline.setParams({
   rgbTintR: controls.state.rgbTintR,
   rgbTintG: controls.state.rgbTintG,

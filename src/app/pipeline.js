@@ -7,7 +7,6 @@ import { posyBlend } from '../core/diff.js';
 import { cellEnergies } from '../core/energy.js';
 
 const DEFAULT_PROCESS_WIDTH = 640;
-const FRAME_STORE_CAP = 120;
 
 /**
  * Whether the browser supports requestVideoFrameCallback on HTMLVideoElement.
@@ -31,23 +30,20 @@ export class Pipeline {
     this._magCapCanvas = null;
     this._magCapCtx = null;
 
-    // ── WebGL frame history ──
-    // The pixels live in the renderer's texture-array ring; this only tracks
-    // which layer holds which frame.
+    // ── Frame history ──
+    // WebGL: the pixels live in the renderer's texture-array ring and this
+    // FrameRing tracks which layer holds which frame. Worker fallback: the
+    // worker owns both the pixels and its own FrameRing.
     this._ring = new FrameRing(1);
     this._frameIndex = 0;
     this._ringLayers = [0, 0, 0];
     // Whether the last processed frame produced a diff (energy grid source)
     this._hasDiff = false;
 
-    // ── Frame store for the Worker fallback (ArrayBuffers on the JS heap) ──
-    this._frameStore = new Array(FRAME_STORE_CAP);
-    this._storeHead = -1;
-    this._storeSize = 0;
-
     // ── Worker path (fallback) ──
     this._worker = null;
     this._workerBusy = false;
+    // The frame the worker is currently processing, kept for compositing
     this._pendingFrame = null;
 
     this._currentFrame = null;
@@ -96,7 +92,13 @@ export class Pipeline {
     this.onResult = null;
   }
 
-  init(videoEl, outputCanvasEl) {
+  /**
+   * @param {HTMLVideoElement} videoEl
+   * @param {HTMLCanvasElement} outputCanvasEl
+   * @param {{forceCanvas2D?: boolean}} [options] - forceCanvas2D skips WebGL2
+   *   and runs the worker fallback (for testing that path on a capable GPU)
+   */
+  init(videoEl, outputCanvasEl, options = {}) {
     this._videoEl = videoEl;
     this._outputCanvas = outputCanvasEl;
     // 2D capture canvas: the worker fallback's frame source, and how
@@ -110,6 +112,7 @@ export class Pipeline {
 
     // Try WebGL2 first
     try {
+      if (options.forceCanvas2D) throw new Error('Canvas 2D forced by ?renderer=canvas2d');
       this._glRenderer = new WebGLRenderer(outputCanvasEl);
       this._useWebGL = true;
       console.log('Renderer: WebGL2');
@@ -143,16 +146,17 @@ export class Pipeline {
       }
 
       let accumulated = null;
-      let currentFrame = null;
+      const currentFrame = this._pendingFrame;
+      this._pendingFrame = null;
+
+      // A result for a frame captured before a resize is stale: drop it.
+      const fits = currentFrame
+        && currentFrame.width === this.width && currentFrame.height === this.height;
+      if (!fits) return;
 
       if (msg.accumulatedBuffer) {
         const accArr = new Uint8ClampedArray(msg.accumulatedBuffer);
         accumulated = new ImageData(accArr, this.width, this.height);
-      }
-
-      if (msg.currentFrameBuffer) {
-        const curArr = new Uint8ClampedArray(msg.currentFrameBuffer);
-        currentFrame = new ImageData(curArr, this.width, this.height);
       }
 
       if (msg.energyBuffer) {
@@ -178,9 +182,6 @@ export class Pipeline {
   }
 
   clearState() {
-    this._frameStore = new Array(FRAME_STORE_CAP);
-    this._storeHead = -1;
-    this._storeSize = 0;
     this._ring.clear();
     this._frameIndex = 0;
     this._hasDiff = false;
@@ -238,7 +239,7 @@ export class Pipeline {
    * @returns {{frames: number, megabytes: number}}
    */
   getHistoryInfo() {
-    const frames = this._useWebGL ? this._ring.capacity : FRAME_STORE_CAP;
+    const frames = this._useWebGL ? this._ring.capacity : ringCapacity(this.width, this.height);
     return { frames, megabytes: (frames * this.width * this.height * 4) / (1024 * 1024) };
   }
 
@@ -256,7 +257,7 @@ export class Pipeline {
         // Trails were not fed while magnifying; drop the stale ring
         // instead of showing pre-magnify ghosts.
         if (this._useWebGL && this._glRenderer) this._glRenderer.clearTrails();
-        if (this._worker) this._worker.postMessage({ type: 'clear' });
+        if (this._worker) this._worker.postMessage({ type: 'clearTrails' });
       }
     }
     if (params.blurEnabled !== undefined) this.params.blurEnabled = params.blurEnabled;
@@ -380,18 +381,6 @@ export class Pipeline {
       this._currentFrame?.close();
       this._currentFrame = null;
     }
-  }
-
-  _storePush(value) {
-    this._storeHead = (this._storeHead + 1) % FRAME_STORE_CAP;
-    this._frameStore[this._storeHead] = value;
-    if (this._storeSize < FRAME_STORE_CAP) this._storeSize++;
-  }
-
-  _storeGet(offset) {
-    if (offset < 0 || offset >= this._storeSize) return null;
-    const idx = (this._storeHead - offset + FRAME_STORE_CAP) % FRAME_STORE_CAP;
-    return this._frameStore[idx];
   }
 
   async sampleFrames(video, sampleCount = 30) {
@@ -625,13 +614,9 @@ export class Pipeline {
     const dtMs = this._magFrameDt(performance.now());
     const currentFrameBuffer = frame.data.buffer;
 
-    // Magnify needs no frame-store lookback — skip the store copies.
     this._worker.postMessage({
       type: 'process',
       currentFrameBuffer,
-      frameStoreBuffers: [],
-      frameStoreSize: 0,
-      frameStoreHead: -1,
       params: { ...this.params },
       dtMs,
       width: frame.width,
@@ -642,41 +627,30 @@ export class Pipeline {
   // ── Worker Path (fallback) ──────────────────────────────────
 
   _processWorker(video) {
+    // One frame in flight at a time. A frame that arrives while the worker
+    // is busy is skipped before it costs a capture.
+    if (this._workerBusy) return;
+
     const frame = this.captureFrame(video);
     if (!frame) return;
-
-    const pixelBytes = frame.data.buffer.byteLength;
-    const storeCopy = new ArrayBuffer(pixelBytes);
-    new Uint8ClampedArray(storeCopy).set(frame.data);
-    this._storePush(storeCopy);
-
-    if (this._workerBusy) return;
     this._workerBusy = true;
 
-    const currentFrameBuffer = frame.data.buffer;
-
-    const frameStoreBuffers = new Array(FRAME_STORE_CAP);
-    for (let i = 0; i < FRAME_STORE_CAP; i++) {
-      const buf = this._frameStore[i];
-      if (buf) {
-        frameStoreBuffers[i] = buf.slice(0);
-      } else {
-        frameStoreBuffers[i] = null;
-      }
-    }
+    // The worker keeps the pixels it is sent as its history, so it gets its
+    // own copy and this one stays here for compositing the result.
+    this._pendingFrame = frame;
+    const pixels = frame.data.slice();
 
     this._worker.postMessage({
       type: 'process',
-      currentFrameBuffer,
-      frameStoreBuffers,
-      frameStoreSize: this._storeSize,
-      frameStoreHead: this._storeHead,
+      currentFrameBuffer: pixels.buffer,
+      time: this._frameIndex,
       params: { ...this.params },
       width: this.width,
       height: this.height,
       energyCols: this._energyCols,
       energyRows: this._energyRows,
-    }, [currentFrameBuffer]);
+    }, [pixels.buffer]);
+    this._frameIndex += 1;
   }
 }
 
