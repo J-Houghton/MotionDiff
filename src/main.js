@@ -1,4 +1,4 @@
-import { Pipeline, debugEnergyParity } from './app/pipeline.js';
+import { Pipeline, debugDiffParity, debugEnergyParity } from './app/pipeline.js';
 import { AudioEngine } from './app/audio.js';
 import { attachHlsSource, isDashUrl, isHlsUrl, isYouTubeUrl } from './app/loader.js';
 import { CanvasRecorder } from './app/exporter.js';
@@ -678,12 +678,7 @@ async function handleAutoConfigure() {
     if (bursts.length === 0) throw new Error('could not read any frames');
 
     const analysis = analyzeSample(bursts, fps);
-    const { frameOffset } = analysis;
-    // analyzeSample works in raw difference units; Posy's threshold is
-    // still measured in half-differences.
-    const threshold = controls.state.algorithm === 'posy'
-      ? Math.max(1, Math.round(analysis.threshold / 2))
-      : analysis.threshold;
+    const { frameOffset, threshold } = analysis;
 
     controls.applyParams({ frameOffset, threshold });
     pipeline.setParams({ frameOffset, threshold });
@@ -929,6 +924,8 @@ window.addEventListener('pagehide', () => {
 if (import.meta.env.DEV) {
   // SPEC-sonification A6: compare the WebGL readback against the core math.
   window.__motionDiffEnergyParity = (cols, rows) => debugEnergyParity(pipeline, cols, rows);
+  // Diff and blur shaders against core/diff.js and core/blur.js.
+  window.__motionDiffDiffParity = () => debugDiffParity(pipeline);
   // Lets a test harness observe frames as they are processed.
   window.__motionDiffPipeline = pipeline;
 }

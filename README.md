@@ -22,7 +22,7 @@ Raw Diff uses absolute channel difference:
 Static regions go to black, and brighter pixels mean larger motion between the two samples. It is the more literal mode: high contrast, easy to read, and good for simple motion detection when you do not need Posy mode's gray-centered directional color.
 
 ### Frame offset (k)
-The frame offset chooses how far back in time the comparison reaches.
+The frame offset chooses how far back in time the comparison reaches. One unit is 1/30 s of video time: frames are stamped with their media time and the comparison frame is looked up by time, so `k` means the same thing at any source frame rate, playback speed or processing fps cap.
 
 | k value | Best for |
 |---------|----------|
@@ -53,10 +53,10 @@ Trail accumulation merges the last `T` diff frames into one image.
 - Posy mode keeps the value with the largest deviation from 128 on each channel.
 - Raw Diff keeps the largest raw channel value on each channel.
 
-`T = trail length`, so larger values hold motion on screen longer. Short trails show immediate movement. Long trails turn motion into persistent streaks and ghosted silhouettes.
+`T = trail length`, counted in processed frames, so larger values hold motion on screen longer. Short trails show immediate movement. Long trails turn motion into persistent streaks and ghosted silhouettes.
 
 ### Threshold
-Threshold suppresses noise before accumulation.
+Threshold suppresses noise before accumulation. It is the mean absolute channel difference between the two frames (0-255) and means the same in Posy and Raw mode.
 
 - Low threshold: more sensitive, more noise.
 - High threshold: cleaner image, but subtle motion can disappear.
@@ -87,12 +87,14 @@ Threshold suppresses noise before accumulation.
 │   │   └── source-profile.js       Per-source capture settings (file, URL, HLS, camera, screen).
 │   ├── core/
 │   │   ├── __tests__/              Unit tests (vitest, node).
-│   │   ├── analyze.js              Auto-configuration heuristic.
+│   │   ├── analyze.js              Auto-configuration: noise floor, threshold and gap from frame bursts.
 │   │   ├── blur.js                 3 x 3 box blur.
 │   │   ├── buffer.js               Ring buffers and frame-ring memory budgeting.
 │   │   ├── diff.js                 Posy Blend and Raw Diff pixel math.
 │   │   ├── energy.js               Motion energy grid and pitch/pan mapping for sonification.
 │   │   ├── magnify.js              Eulerian magnification math.
+│   │   ├── magnitude.js            Shared unsigned motion magnitude and grid pooling.
+│   │   ├── timebase.js             Media-time base: frame stamps, seek/loop detection, lookback.
 │   │   └── trails.js               Trail accumulation rules for Posy and Raw modes.
 │   ├── styles/main.css             Application stylesheet and theme variables.
 │   ├── ui/                         DOM bindings: controls, timeline, presets, audio panel, help, theme, status.
@@ -124,7 +126,9 @@ npm run build   # production build
 ## Renderer
 MotionDiff detects WebGL2 at runtime and uses it when available; otherwise it falls back to a Canvas 2D + Worker pipeline. The console logs which renderer is active, so you can confirm the path immediately on load.
 
-On the WebGL path frames never leave the GPU: the video element is uploaded with `texImage2D`, scaled to the processing size, and past frames are kept in a `TEXTURE_2D_ARRAY` ring. Diff, blur, accumulation, and composite passes all run as shaders. The ring is sized from a memory budget (192 MiB), so it holds 120 frames at 640px, 54 at 1280x720 and 24 at 1920x1080. The Canvas 2D fallback still captures through `getImageData`.
+On the WebGL path frames never leave the GPU: the video element is uploaded with `texImage2D`, scaled to the processing size, and past frames are kept in a `TEXTURE_2D_ARRAY` ring. Diff, blur, accumulation, and composite passes all run as shaders. The ring is sized from a memory budget (192 MiB), so it holds 120 frames at 640px, 54 at 1280x720 and 24 at 1920x1080. The Canvas 2D fallback still captures through `getImageData`, but keeps its frame history inside the worker. Append `?renderer=canvas2d` to the URL to run the fallback on a machine that has WebGL2.
 
 ## Tests
-Tests cover the pure functions under `src/core/`: diff math, blur, buffers, trails, analysis, the sonification energy grid, and the magnification math. Run them with `npm test`.
+Tests cover the pure functions under `src/core/`: diff math, blur, ring buffers, the time base, trails, analysis, the shared motion magnitude, the sonification grid mapping, and the magnification math. Run them with `npm test`.
+
+The shaders are checked against those functions in a real browser: in a dev build, `__motionDiffDiffParity()`, `__motionDiffEnergyParity()` and `__magnifyParityHarness()` in the console run the same synthetic frames through core and GPU and report the largest difference.

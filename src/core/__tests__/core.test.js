@@ -5,6 +5,7 @@ import { boxBlur } from '../blur.js';
 import { CircularBuffer, FrameRing, ringCapacity } from '../buffer.js';
 import { analyzeSample } from '../analyze.js';
 import { buildSourceProfile, isStreamSource } from '../../app/source-profile.js';
+import { PARAMETER_PRESETS, PRESET_VERSION, migratePresetParams } from '../../app/clips.js';
 
 /**
  * Build a Uint8ClampedArray from RGBA quads.
@@ -68,7 +69,7 @@ describe('posyBlend', () => {
   it('below threshold suppresses to gray (128)', () => {
     // cur=[140,128,128], old=[128,128,128]
     // bR = (140+127+1)>>1 = 134, bG = 128, bB = 128
-    // devR=6, devG=0, devB=0, mag=2
+    // devR=6, devG=0, devB=0: mean deviation 2 = mean difference 4
     const cur = makePixels([140, 128, 128, 255]);
     const old = makePixels([128, 128, 128, 255]);
     const out = new Uint8ClampedArray(4);
@@ -153,6 +154,101 @@ describe('rawDiff', () => {
 
     expect(cur).toEqual(curCopy);
     expect(old).toEqual(oldCopy);
+  });
+});
+
+// ─────────────────────────────────────
+//  diff.js — one threshold unit for both modes
+// ─────────────────────────────────────
+
+describe('threshold means the same in Posy and Raw', () => {
+  // A uniform difference of 20 on every channel.
+  const cur = makePixels([140, 140, 140, 255]);
+  const old = makePixels([120, 120, 120, 255]);
+
+  const kept = (fn, threshold, baseline) => {
+    const out = new Uint8ClampedArray(4);
+    fn(cur, old, out, threshold);
+    return out[0] !== baseline;
+  };
+
+  it('a threshold at the mean channel difference keeps the pixel in both', () => {
+    expect(kept(rawDiff, 20, 0)).toBe(true);
+    expect(kept(posyBlend, 20, 128)).toBe(true);
+  });
+
+  it('one above it suppresses the pixel in both', () => {
+    expect(kept(rawDiff, 21, 0)).toBe(false);
+    expect(kept(posyBlend, 21, 128)).toBe(false);
+  });
+
+  it('agrees pixel for pixel on which pixels survive (even differences)', () => {
+    // Even per-channel differences, so Posy's halving loses nothing.
+    const n = 64;
+    const a = new Uint8ClampedArray(n * 4);
+    const b = new Uint8ClampedArray(n * 4);
+    for (let i = 0; i < n; i++) {
+      for (let c = 0; c < 3; c++) {
+        b[i * 4 + c] = 100;
+        a[i * 4 + c] = 100 + 2 * ((i * (c + 3)) % 23);
+      }
+      a[i * 4 + 3] = b[i * 4 + 3] = 255;
+    }
+
+    for (const threshold of [0, 6, 13, 20, 31]) {
+      const raw = new Uint8ClampedArray(n * 4);
+      const posy = new Uint8ClampedArray(n * 4);
+      rawDiff(a, b, raw, threshold);
+      posyBlend(a, b, posy, threshold);
+
+      for (let i = 0; i < n; i++) {
+        const rawKept = raw[i * 4] + raw[i * 4 + 1] + raw[i * 4 + 2] > 0;
+        const posyKept = posy[i * 4] !== 128 || posy[i * 4 + 1] !== 128 || posy[i * 4 + 2] !== 128;
+        expect(posyKept).toBe(rawKept);
+      }
+    }
+  });
+});
+
+// ─────────────────────────────────────
+//  clips.js — preset migration
+// ─────────────────────────────────────
+
+describe('migratePresetParams', () => {
+  it('doubles the threshold of an unversioned Posy preset', () => {
+    const old = { algorithm: 'posy', threshold: 8, frameOffset: 2 };
+    expect(migratePresetParams(old, undefined)).toEqual({ algorithm: 'posy', threshold: 16, frameOffset: 2 });
+    expect(migratePresetParams(old, 1)).toEqual({ algorithm: 'posy', threshold: 16, frameOffset: 2 });
+  });
+
+  it('leaves Raw and Magnify presets alone', () => {
+    const raw = { algorithm: 'raw', threshold: 5 };
+    const magnify = { algorithm: 'magnify', threshold: 10 };
+    expect(migratePresetParams(raw, 1)).toBe(raw);
+    expect(migratePresetParams(magnify, 1)).toBe(magnify);
+  });
+
+  it('never migrates a current-version preset twice', () => {
+    const current = { algorithm: 'posy', threshold: 16 };
+    expect(migratePresetParams(current, PRESET_VERSION)).toBe(current);
+  });
+
+  it('caps the migrated threshold at the control maximum', () => {
+    expect(migratePresetParams({ algorithm: 'posy', threshold: 60 }, 1).threshold).toBe(120);
+    expect(migratePresetParams({ algorithm: 'posy', threshold: 90 }, 1).threshold).toBe(120);
+  });
+
+  it('does not mutate its input', () => {
+    const old = { algorithm: 'posy', threshold: 8 };
+    migratePresetParams(old, 1);
+    expect(old.threshold).toBe(8);
+  });
+
+  it('built-in presets are stored in current units', () => {
+    const subtle = PARAMETER_PRESETS.find((preset) => preset.name === 'Subtle Wind');
+    const contrast = PARAMETER_PRESETS.find((preset) => preset.name === 'High Contrast');
+    expect(subtle.params.threshold).toBe(16); // was 8 in half-difference units
+    expect(contrast.params.threshold).toBe(5); // Raw: unchanged
   });
 });
 
@@ -554,9 +650,9 @@ function makeBurst({ width = 64, height = 32, count = 6, noise = 0, speed = 0, b
 
 describe('analyzeSample', () => {
   it('returns the defaults when there is nothing to analyse', () => {
-    expect(analyzeSample([], 30)).toMatchObject({ frameOffset: 5, threshold: 10 });
-    expect(analyzeSample(null, 30)).toMatchObject({ frameOffset: 5, threshold: 10 });
-    expect(analyzeSample([[makePixels([1, 2, 3, 255])]], 30)).toMatchObject({ frameOffset: 5, threshold: 10 });
+    expect(analyzeSample([], 30)).toMatchObject({ frameOffset: 5, threshold: 20 });
+    expect(analyzeSample(null, 30)).toMatchObject({ frameOffset: 5, threshold: 20 });
+    expect(analyzeSample([[makePixels([1, 2, 3, 255])]], 30)).toMatchObject({ frameOffset: 5, threshold: 20 });
   });
 
   it('a clean static scene gets the minimum threshold and a long gap', () => {

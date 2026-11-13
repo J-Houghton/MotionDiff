@@ -24,7 +24,7 @@
 const REFERENCE_FPS = 30;
 
 /** Returned when there is nothing to analyse. */
-export const DEFAULT_ANALYSIS = { frameOffset: 5, threshold: 10 };
+export const DEFAULT_ANALYSIS = { frameOffset: 5, threshold: 20 };
 
 /** Threshold = noise floor × margin + headroom, clamped. */
 const NOISE_MARGIN = 3;

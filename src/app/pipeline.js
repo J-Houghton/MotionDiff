@@ -10,7 +10,8 @@ import {
   shouldStore,
   storeInterval,
 } from '../core/timebase.js';
-import { posyBlend } from '../core/diff.js';
+import { boxBlur } from '../core/blur.js';
+import { posyBlend, rawDiff } from '../core/diff.js';
 import { diffMagnitude, poolMagnitude } from '../core/magnitude.js';
 
 const DEFAULT_PROCESS_WIDTH = 640;
@@ -77,7 +78,7 @@ export class Pipeline {
 
     this.params = {
       frameOffset: 5,
-      threshold: 10,
+      threshold: 20,
       trailLength: 5,
       channelSpread: 0,
       algorithm: 'posy',
@@ -740,6 +741,104 @@ export class Pipeline {
       energyRows: this._energyRows,
     }, [pixels.buffer]);
   }
+}
+
+/**
+ * Dev-only parity probe for the diff and blur shaders against core/diff.js
+ * and core/blur.js. Runs Posy and Raw, with and without threshold and blur,
+ * on a pair of pseudo-random frames and reports the largest per-channel
+ * difference per case. Everything except the tinted case is expected to be
+ * exactly 0: the shader does the same whole-number arithmetic as the core.
+ *
+ * Like debugEnergyParity it resizes the renderer and clears the pipeline —
+ * run it on an idle page.
+ *
+ * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
+ * @returns {{cases: {name: string, maxDiff: number}[], pass: boolean}|null}
+ */
+export function debugDiffParity(pipeline) {
+  const gl = pipeline?._glRenderer;
+  if (!gl) return null;
+
+  const width = 32;
+  const height = 16;
+  let seed = 12345;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  const prev = new Uint8ClampedArray(width * height * 4);
+  const next = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0; i < prev.length; i += 4) {
+    for (let c = 0; c < 3; c++) {
+      prev[i + c] = Math.floor(random() * 256);
+      // Mostly small differences so the threshold has pixels on both sides.
+      next[i + c] = Math.min(255, Math.max(0, prev[i + c] + Math.round((random() - 0.5) * (random() < 0.3 ? 200 : 30))));
+    }
+    prev[i + 3] = next[i + 3] = 255;
+  }
+
+  const restoreWidth = gl.width;
+  const restoreHeight = gl.height;
+  const restoreFrames = gl.ringFrames;
+  gl.setSize(width, height, 2);
+  gl.uploadPixels(new ImageData(prev, width, height));
+  gl.storeCurrent(0);
+  gl.uploadPixels(new ImageData(next, width, height));
+
+  const tint = (hex) => {
+    const rgb = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16));
+    const sum = rgb[0] + rgb[1] + rgb[2];
+    return rgb.map((v) => v / sum);
+  };
+
+  const CASES = [
+    { name: 'posy t=0', algorithm: 'posy', threshold: 0 },
+    { name: 'posy t=14', algorithm: 'posy', threshold: 14 },
+    { name: 'raw t=0', algorithm: 'raw', threshold: 0 },
+    { name: 'raw t=14', algorithm: 'raw', threshold: 14 },
+    { name: 'posy t=14 blur', algorithm: 'posy', threshold: 14, blur: true },
+    { name: 'raw t=14 blur', algorithm: 'raw', threshold: 14, blur: true },
+    { name: 'posy t=14 tinted', algorithm: 'posy', threshold: 14, tints: ['#ff8800', '#00ff40', '#2040ff'], tolerance: 1 },
+  ];
+
+  const cases = CASES.map(({ name, algorithm, threshold, blur = false, tints = ['#ff0000', '#00ff00', '#0000ff'], tolerance = 0 }) => {
+    // Core reference, built the way the worker builds it.
+    const weights = tints.map(tint);
+    const old = new Uint8ClampedArray(prev.length);
+    for (let i = 0; i < prev.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        old[i + c] = Math.round(prev[i] * weights[c][0] + prev[i + 1] * weights[c][1] + prev[i + 2] * weights[c][2]);
+      }
+      old[i + 3] = 255;
+    }
+    const core = new Uint8ClampedArray(prev.length);
+    (algorithm === 'posy' ? posyBlend : rawDiff)(next, old, core, threshold);
+    if (blur) boxBlur(core, width, height);
+
+    gl.renderDiff({
+      threshold,
+      algorithm,
+      rgbTintR: tints[0],
+      rgbTintG: tints[1],
+      rgbTintB: tints[2],
+      layers: [0, 0, 0],
+    });
+    if (blur) gl.renderBlur();
+    const gpu = gl.readDiffPixels();
+
+    let maxDiff = 0;
+    for (let i = 0; i < core.length; i++) {
+      if ((i & 3) === 3) continue;
+      maxDiff = Math.max(maxDiff, Math.abs(core[i] - gpu[i]));
+    }
+    return { name, maxDiff, pass: maxDiff <= tolerance };
+  });
+
+  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
+  pipeline.clearState();
+
+  return { cases, pass: cases.every((c) => c.pass) };
 }
 
 /**

@@ -56,15 +56,15 @@ function renderHelpContent() {
     <section>
       <h2>Examples</h2>
       <h3>Subtle wind</h3>
-      <div class="help-code"><code>offset=2 threshold=8 trail=8 spread=0 algorithm=Posy blur=off</code></div>
+      <div class="help-code"><code>offset=2 threshold=16 trail=8 spread=0 algorithm=Posy blur=off</code></div>
       <p>Best for grass fields, hair, fur, and fabric in a gentle breeze. Look for fine filament-like traces on moving edges.</p>
 
       <h3>Ghost trails</h3>
-      <div class="help-code"><code>offset=10 threshold=12 trail=15 spread=2 algorithm=Posy blur=off</code></div>
+      <div class="help-code"><code>offset=10 threshold=24 trail=15 spread=2 algorithm=Posy blur=off</code></div>
       <p>Best for people walking slowly and branches swaying. Look for a double silhouette and a rainbow smear caused by RGB spread.</p>
 
       <h3>Atmosphere</h3>
-      <div class="help-code"><code>offset=30 threshold=6 trail=20 spread=1 algorithm=Posy blur=on</code></div>
+      <div class="help-code"><code>offset=30 threshold=12 trail=20 spread=1 algorithm=Posy blur=on</code></div>
       <p>Best for fog, smoke, steam, and distant water shimmer. Look for large soft blobs of color that reveal drift.</p>
 
       <h3>High contrast motion</h3>
@@ -75,7 +75,7 @@ function renderHelpContent() {
     <section>
       <h2>Parameter guide</h2>
       <h3>Choosing threshold</h3>
-      <p>Start at <code>10</code>. Raise it if static areas show noise. Lower it if subtle motion is missing. The typical range is <code>5-25</code>.</p>
+      <p>Threshold is the mean channel difference between the two frames (0-255), the same in Posy and Raw. Start at <code>20</code>. Raise it if static areas show noise. Lower it if subtle motion is missing. The typical range is <code>10-50</code>; Auto measures the noise floor and sets it for you.</p>
 
       <h3>Trail length and algorithm interaction</h3>
       <p>In Posy mode, longer trails show a smooth color fade because each trail frame retains its deviation-from-128 value and the accumulator picks the maximum deviation per channel.</p>

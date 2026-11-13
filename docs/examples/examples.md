@@ -1,7 +1,7 @@
 # MotionDiff Examples
 
 ## Subtle wind
-Parameters: `offset=2`, `threshold=8`, `trail=8`, `spread=0`, `algorithm=Posy`, `blur=off`
+Parameters: `offset=2`, `threshold=16`, `trail=8`, `spread=0`, `algorithm=Posy`, `blur=off`
 
 Best for: grass fields, hair, fur, fabric in gentle breeze.
 
@@ -10,7 +10,7 @@ What to look for: fine filament-like traces on moving edges.
 ![Subtle wind example](../screenshots/posy-mode.png)
 
 ## Ghost trails
-Parameters: `offset=10`, `threshold=12`, `trail=15`, `spread=2`, `algorithm=Posy`, `blur=off`
+Parameters: `offset=10`, `threshold=24`, `trail=15`, `spread=2`, `algorithm=Posy`, `blur=off`
 
 Best for: people walking slowly, branches swaying.
 
@@ -19,7 +19,7 @@ What to look for: double silhouette - one where the object was, one where it is.
 ![Ghost trails example](../screenshots/ghost-trails.png)
 
 ## Atmosphere
-Parameters: `offset=30`, `threshold=6`, `trail=20`, `spread=1`, `algorithm=Posy`, `blur=on`
+Parameters: `offset=30`, `threshold=12`, `trail=20`, `spread=1`, `algorithm=Posy`, `blur=on`
 
 Best for: fog, smoke, steam, distant water shimmer.
 

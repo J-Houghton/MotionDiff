@@ -174,7 +174,7 @@ export function initControls({
 
   const state = {
     frameOffset: 5,
-    threshold: 10,
+    threshold: 20,
     trailLength: 5,
     channelSpread: 0,
     algorithm: 'posy',

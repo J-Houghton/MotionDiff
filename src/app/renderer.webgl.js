@@ -25,6 +25,7 @@ import {
   seedStatesFloat,
 } from '../core/magnify.js';
 import { bandMagnitude, poolMagnitude } from '../core/magnitude.js';
+import { boxBlurFloat } from '../core/blur.js';
 
 // ── Shader sources ──────────────────────────────────────────────
 
@@ -36,6 +37,10 @@ void main() {
   gl_Position = vec4(aPosition, 0.0, 1.0);
 }`;
 
+// Posy / Raw diff. Mirrors core/diff.js exactly: the arithmetic is done on
+// whole 0..255 values (floats hold them exactly), so rounding, the Posy
+// baseline of 128 and the threshold comparison all match the core functions
+// bit for bit instead of approximately.
 const DIFF_FRAG = `#version 300 es
 precision highp float;
 
@@ -47,14 +52,14 @@ uniform vec3 uLayers;       // ring layers compared by the R, G and B channels
 uniform vec3 uTintR;
 uniform vec3 uTintG;
 uniform vec3 uTintB;
-uniform float uThreshold;   // 0-60 mapped to 0.0-0.235
+uniform float uThreshold;   // mean channel difference, 0..255 (both modes)
 uniform int uAlgorithm;     // 0 = Posy, 1 = Raw Diff
 
 in vec2 vUV;
 out vec4 fragColor;
 
 void main() {
-  vec4 cur = texture(uCurrent, vUV);
+  vec3 cur = floor(texture(uCurrent, vUV).rgb * 255.0 + 0.5);
   vec4 oldR = texture(uRing, vec3(vUV, uLayers.x));
   vec4 oldG = texture(uRing, vec3(vUV, uLayers.y));
   vec4 oldB = texture(uRing, vec3(vUV, uLayers.z));
@@ -62,50 +67,59 @@ void main() {
   float tintSumR = max(dot(uTintR, vec3(1.0)), 0.0001);
   float tintSumG = max(dot(uTintG, vec3(1.0)), 0.0001);
   float tintSumB = max(dot(uTintB, vec3(1.0)), 0.0001);
-  vec3 old = vec3(
+  // Each output channel compares against a tint-weighted mix of one old
+  // frame, rounded to a whole value like the worker's tintChannel.
+  vec3 old = floor(vec3(
     dot(oldR.rgb, uTintR / tintSumR),
     dot(oldG.rgb, uTintG / tintSumG),
     dot(oldB.rgb, uTintB / tintSumB)
-  );
+  ) * 255.0 + 0.5);
 
   vec3 result;
-  float mag;
 
   if (uAlgorithm == 0) {
-    // Posy: (current + invert(old) + 1/255) / 2
-    // The +1/255 matches the CPU +1 before >>1 for rounding
-    result = (cur.rgb + (1.0 - old) + (1.0 / 255.0)) * 0.5;
-    mag = (abs(result.r - 0.5) + abs(result.g - 0.5) +
-           abs(result.b - 0.5)) / 3.0;
-    if (mag < uThreshold) result = vec3(0.5);
+    // Posy: (current + invert(old) + 1) >> 1
+    result = floor((cur + (255.0 - old) + 1.0) * 0.5);
+    vec3 dev = abs(result - 128.0);
+    // mean deviation × 2 < threshold → suppress to the 128 baseline
+    if ((dev.r + dev.g + dev.b) * 2.0 < uThreshold * 3.0) result = vec3(128.0);
   } else {
-    // Raw diff
-    result = abs(cur.rgb - old);
-    mag = (result.r + result.g + result.b) / 3.0;
-    if (mag < uThreshold) result = vec3(0.0);
+    // Raw diff: |current − old|
+    result = abs(cur - old);
+    if (result.r + result.g + result.b < uThreshold * 3.0) result = vec3(0.0);
   }
 
-  fragColor = vec4(result, 1.0);
+  fragColor = vec4(result / 255.0, 1.0);
 }`;
 
+// 3x3 box blur. Mirrors core/blur.js: a pixel on the edge averages only the
+// neighbours that exist (no clamped duplicates). uQuantize rounds the mean to
+// a whole 0..255 value the way boxBlur does for 8-bit diff data; the float
+// magnify grid is blurred unrounded, like boxBlurFloat.
 const BLUR_FRAG = `#version 300 es
 precision highp float;
 
 uniform sampler2D uInput;
-uniform vec2 uTexelSize;  // 1.0/width, 1.0/height
+uniform int uQuantize;
 
-in vec2 vUV;
 out vec4 fragColor;
 
 void main() {
+  ivec2 size = textureSize(uInput, 0);
+  ivec2 p = ivec2(gl_FragCoord.xy);
   vec3 sum = vec3(0.0);
+  float count = 0.0;
   for (int dy = -1; dy <= 1; dy++) {
     for (int dx = -1; dx <= 1; dx++) {
-      vec2 offset = vec2(float(dx), float(dy)) * uTexelSize;
-      sum += texture(uInput, vUV + offset).rgb;
+      ivec2 q = p + ivec2(dx, dy);
+      if (q.x < 0 || q.y < 0 || q.x >= size.x || q.y >= size.y) continue;
+      sum += texelFetch(uInput, q, 0).rgb;
+      count += 1.0;
     }
   }
-  fragColor = vec4(sum / 9.0, 1.0);
+  vec3 mean = sum / count;
+  if (uQuantize == 1) mean = floor(mean * 255.0 + 0.5) / 255.0;
+  fragColor = vec4(mean, 1.0);
 }`;
 
 // ── Shared motion magnitude (GLSL mirror of core/magnitude.js) ──
@@ -200,8 +214,12 @@ uniform vec3 uAgeColorOld;
 in vec2 vUV;
 out vec4 fragColor;
 
+// Posy "no motion" value: 128 of 255, not 0.5 (which is 127.5 and would
+// make 127 and 128 equally far from the baseline).
+const float POSY_BASE = 128.0 / 255.0;
+
 void main() {
-  float baseVal = (uIsPosy == 1 && uAgeColorEnabled == 0) ? 0.5 : 0.0;
+  float baseVal = (uIsPosy == 1 && uAgeColorEnabled == 0) ? POSY_BASE : 0.0;
   vec3 best;
   if (uIsFirst == 1) {
     best = vec3(baseVal);
@@ -213,18 +231,19 @@ void main() {
 
   if (uIsPosy == 1 && uAgeColorEnabled == 1) {
     float age = uTrailAge[uTrailIndex];
+    // Mean deviation over the Posy range of 127, as in the worker.
     float motionMagnitude = (
-      abs(s.r - 0.5) +
-      abs(s.g - 0.5) +
-      abs(s.b - 0.5)
-    ) / 1.5;
+      abs(s.r - POSY_BASE) +
+      abs(s.g - POSY_BASE) +
+      abs(s.b - POSY_BASE)
+    ) * 255.0 / (3.0 * 127.0);
     vec3 ageColor = mix(uAgeColorNew, uAgeColorOld, age);
     vec3 tinted = motionMagnitude > uThreshold ? ageColor * motionMagnitude : vec3(0.0);
     best = max(best, tinted);
   } else if (uIsPosy == 1) {
-    // Max deviation from 0.5 per channel
-    vec3 bestDev = abs(best - 0.5);
-    vec3 srcDev = abs(s - 0.5);
+    // Max deviation from the baseline per channel
+    vec3 bestDev = abs(best - POSY_BASE);
+    vec3 srcDev = abs(s - POSY_BASE);
     if (srcDev.r > bestDev.r) best.r = s.r;
     if (srcDev.g > bestDev.g) best.g = s.g;
     if (srcDev.b > bestDev.b) best.b = s.b;
@@ -350,6 +369,8 @@ uniform int uAgeColorEnabled;
 in vec2 vUV;
 out vec4 fragColor;
 
+const float POSY_BASE = 128.0 / 255.0;
+
 void main() {
   vec3 diff = texture(uDiff, vUV).rgb;
   vec3 orig = texture(uOriginal, vUV).rgb;
@@ -363,7 +384,7 @@ void main() {
     // Overlay: screen blend of motion magnitude onto original
     vec3 mot;
     if (uAlgorithm == 0 && uAgeColorEnabled == 0) {
-      mot = min(vec3(1.0), abs(diff - 0.5) * 4.0);
+      mot = min(vec3(1.0), abs(diff - POSY_BASE) * 4.0);
     } else {
       mot = min(vec3(1.0), diff * 2.0);
     }
@@ -373,7 +394,7 @@ void main() {
     // Glow: additive blend
     vec3 mot;
     if (uAlgorithm == 0 && uAgeColorEnabled == 0) {
-      mot = min(vec3(1.0), abs(diff - 0.5) * 6.0);
+      mot = min(vec3(1.0), abs(diff - POSY_BASE) * 6.0);
     } else {
       mot = min(vec3(1.0), diff * 3.0);
     }
@@ -904,8 +925,8 @@ export class WebGLRenderer {
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this._ringTex);
 
     gl.uniform3f(u.uLayers, params.layers[0], params.layers[1], params.layers[2]);
-    // threshold: 0-60 in UI → normalize to 0.0-0.235 range (60/255 ≈ 0.235)
-    gl.uniform1f(u.uThreshold, params.threshold / 255.0);
+    // Mean channel difference in 0..255, the same unit in Posy and Raw
+    gl.uniform1f(u.uThreshold, params.threshold);
     gl.uniform1i(u.uAlgorithm, params.algorithm === 'posy' ? 0 : 1);
     // This frame's motion magnitude comes from the diff texture (read
     // lazily, so a blur pass that follows is included).
@@ -915,6 +936,26 @@ export class WebGLRenderer {
     gl.uniform3fv(u.uTintB, hexToVec3(params.rgbTintB, '#0000ff'));
 
     this._drawQuadTo(this._diffFB, this.width, this.height);
+  }
+
+  /**
+   * Read the diff target back as top-down RGBA rows. Dev parity probes only.
+   * @returns {Uint8Array} width*height*4 bytes, row 0 at the top
+   */
+  readDiffPixels() {
+    const gl = this.gl;
+    const w = this.width;
+    const h = this.height;
+    const raw = new Uint8Array(w * h * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this._diffFB);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    const out = new Uint8Array(raw.length);
+    for (let y = 0; y < h; y++) {
+      out.set(raw.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);
+    }
+    return out;
   }
 
   /**
@@ -928,7 +969,7 @@ export class WebGLRenderer {
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this._diffTex);
-    gl.uniform2f(u.uTexelSize, 1.0 / this.width, 1.0 / this.height);
+    gl.uniform1i(u.uQuantize, 1);
 
     this._drawQuadTo(this._blurFB, this.width, this.height);
 
@@ -1116,7 +1157,7 @@ export class WebGLRenderer {
       gl.useProgram(this._blurProg.prog);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this._magFrameTex);
-      gl.uniform2f(this._blurProg.u.uTexelSize, 1.0 / w, 1.0 / h);
+      gl.uniform1i(this._blurProg.u.uQuantize, 0);
       this._drawQuadTo(this._magBlurFB, w, h);
       frameTex = this._magBlurTex;
     }
@@ -1328,7 +1369,7 @@ export class WebGLRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.width, this.height);
     if (algorithm === 'posy' && !ageColorEnabled) {
-      gl.clearColor(0.5, 0.5, 0.5, 1.0);
+      gl.clearColor(128 / 255, 128 / 255, 128 / 255, 1.0);
     } else {
       gl.clearColor(0.0, 0.0, 0.0, 1.0);
     }
@@ -1429,6 +1470,7 @@ export function runMagnifyParityHarness() {
     { name: '2x 16x12', W: 16, H: 12, factor: 2 },
     { name: '4x 16x12', W: 16, H: 12, factor: 4 },
     { name: '4x 18x10 (partial blocks)', W: 18, H: 10, factor: 4 },
+    { name: '2x 16x12 pre-EMA blur', W: 16, H: 12, factor: 2, blur: true },
   ];
 
   // GPU path on an isolated renderer instance.
@@ -1443,7 +1485,7 @@ export function runMagnifyParityHarness() {
 
   const cases = [];
   let magnitudeMaxDiff = 0;
-  for (const { name, W, H, factor } of CASES) {
+  for (const { name, W, H, factor, blur = false } of CASES) {
     const frames = parityFrames(W, H);
     const grid = pooledSize(W, H, factor);
 
@@ -1451,10 +1493,15 @@ export function runMagnifyParityHarness() {
     const pooled = new Float32Array(grid.width * grid.height * 4);
     const fast = new Float32Array(pooled.length);
     const slow = new Float32Array(pooled.length);
-    seedStatesFloat(boxPool(frames[0].data, W, H, factor, pooled), fast, slow);
+    const pool = (frame) => {
+      boxPool(frame.data, W, H, factor, pooled);
+      if (blur) boxBlurFloat(pooled, grid.width, grid.height);
+      return pooled;
+    };
+    seedStatesFloat(pool(frames[0]), fast, slow);
     const cpuOut = frames.map((frame) => {
       const out = new Uint8ClampedArray(W * H * 4);
-      emaStep(boxPool(frame.data, W, H, factor, pooled), fast, slow, ALPHA_FAST, ALPHA_SLOW);
+      emaStep(pool(frame), fast, slow, ALPHA_FAST, ALPHA_SLOW);
       addBand(frame.data, W, H, fast, slow, factor, AMP, CHROMA, out);
       return out;
     });
@@ -1484,7 +1531,7 @@ export function runMagnifyParityHarness() {
         amp: AMP,
         chroma: CHROMA,
         downsample: factor,
-        blurEnabled: false,
+        blurEnabled: blur,
       });
       gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
 

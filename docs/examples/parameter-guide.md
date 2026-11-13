@@ -1,7 +1,7 @@
 # Parameter Guide
 
 ## Choosing frame offset
-The offset controls the temporal "distance" of the comparison. A longer offset reveals slower motion because the displacement between frames is larger, making it more likely to cross the threshold.
+The offset controls the temporal "distance" of the comparison. One unit is 1/30 s of video time, whatever the source frame rate, playback speed or processing fps cap. A longer offset reveals slower motion because the displacement between frames is larger, making it more likely to cross the threshold.
 
 | k value | Best for | Notes |
 |---------|----------|-------|
@@ -11,12 +11,16 @@ The offset controls the temporal "distance" of the comparison. A longer offset r
 | 50-90 | Imperceptibly slow motion, moonrise, tide | Best reserved for locked-off shots with very stable backgrounds |
 
 ## Choosing threshold
-Rule of thumb: start at 10. If static areas show noise, raise it. If you are missing slow motion, lower it. Typical range: 5-25.
+Threshold is the mean absolute channel difference between the two compared frames, on a 0-255 scale. It means the same thing in Posy and Raw mode.
+
+Rule of thumb: start at 20. If static areas show noise, raise it. If you are missing slow motion, lower it. Typical range: 10-50. The Auto button measures the noise floor of the clip and picks a value just above it.
 
 ## Trail length and algorithm interaction
 In Posy mode, longer trails show a smooth color fade because each trail frame retains its deviation-from-128 value and the accumulator picks the maximum deviation per channel.
 
 In Raw Diff mode, trails simply persist the brightest motion seen - they do not encode direction or age.
+
+Trail length counts processed frames, so unlike the offset it lasts longer on screen at a lower processing frame rate.
 
 ## RGB spread and motion direction
 Spread=0: colors are determined only by which channels changed most.

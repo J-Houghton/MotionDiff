@@ -1,4 +1,4 @@
-import { PARAMETER_PRESETS } from '../app/clips.js';
+import { PARAMETER_PRESETS, PRESET_VERSION, migratePresetParams } from '../app/clips.js';
 
 const STORAGE_KEY = 'motiondiff:user-presets';
 
@@ -30,14 +30,18 @@ function loadUserPresets() {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((preset) => preset && typeof preset.name === 'string' && preset.params);
+    return parsed
+      .filter((preset) => preset && typeof preset.name === 'string' && preset.params)
+      // Presets saved before the threshold unit changed carry no version.
+      .map((preset) => ({ name: preset.name, params: migratePresetParams(preset.params, preset.v) }));
   } catch {
     return [];
   }
 }
 
 function saveUserPresets(presets) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(presets));
+  const stamped = presets.map(({ name, params }) => ({ name, params, v: PRESET_VERSION }));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(stamped));
 }
 
 export function initPresets({ getCurrentParams, onPresetLoad, onStatus }) {
