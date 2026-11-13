@@ -37,8 +37,10 @@ differencing, motion history, background subtraction, optical flow.
   `core/` (tested) and a GLSL mirror in `app/renderer.webgl.js`. The shader must match
   it, exactly where the data is 8-bit: the diff and blur shaders work on whole 0..255
   values for that reason. Dev builds expose parity probes that run the same synthetic
-  frames through both: `__motionDiffDiffParity()`, `__motionDiffEnergyParity()`,
-  `__magnifyParityHarness()`. Run them after touching a shader or its core function.
+  frames through both: `__motionDiffDiffParity()`, `__motionDiffTrailParity()`,
+  `__motionDiffEnergyParity()`, `__magnifyParityHarness()`. Run them after touching a
+  shader or its core function. A new mode gets a core function with tests first, then
+  its shader mirror and a probe.
 - **Posy space:** 128 (`128.0 / 255.0` in shaders, never `0.5`) = "no motion" baseline.
   Motion = deviation from 128. Raw mode baseline is 0. New math must respect the
   mode's baseline.
@@ -51,7 +53,12 @@ differencing, motion history, background subtraction, optical flow.
   the previous stamp (`classifyStep`): a `jump` clears history, a `rewind` (loop,
   backward seek or step) drops only frames at or after the new position, a `repeat`
   (re-render while paused) stores nothing new. Don't add a code path that pushes a
-  frame without a stamp. Trail length is the one thing still counted in processed frames.
+  frame without a stamp, and don't count processed frames for anything a user sets:
+  `frameOffset`, `channelSpread` and `trailLength` are all in 1/30 s of media time.
+- **Trails** (`core/trails.js`). One feedback state per pixel and channel: the
+  strongest recent diff value and its age in trail windows, shown under a
+  hold-then-fade envelope. No ring of past diffs. Two states are ping-ponged so a
+  frame re-rendered while paused is recomputed from the state before it.
 - **Frame history** (`core/buffer.js`). `FrameRing` tracks slots and stamps, no pixels.
   WebGL: the video element is uploaded straight to a texture and past frames live in a
   `TEXTURE_2D_ARRAY` (slot = layer); nothing is read back or kept on the JS heap.
@@ -82,11 +89,26 @@ differencing, motion history, background subtraction, optical flow.
   `makePixels([R,G,B,A], ...)` helper style for pixel buffers. New core modules get
   their own describe blocks in `core.test.js` or a sibling `*.test.js`.
 
-## Still to do (decided, not built)
-- **UI replacement** needs explicit approval of the design first. Modes will be a
-  registry: one module plus one entry per mode. Lightweight libraries (Lit, Tweakpane
-  or similar) are acceptable for the UI; `core/` and `app/` stay framework-free.
+## Working agreements
+- **The governing rule for every choice: lightweight, and easy for the owner to
+  maintain and debug by hand.** Few dependencies, no clever abstractions, plain
+  modules over frameworks unless a framework clearly earns its place.
+- **[ROADMAP.md](ROADMAP.md) is the plan.** Update it at the end of every session:
+  one status per item (done, in progress, planned, deferred).
+- **Research before design:** [docs/research.md](docs/research.md) records what other
+  implementations do and which of their ideas we adopted. Borrow ideas, not code,
+  unless the licence allows it and the source is noted.
+- **UI decisions (made, not yet built):** Tweakpane is the parameter panel, generated
+  from each mode's schema, with the ARIA/focus patch from `docs/research.md` §5 and
+  keyboard shortcuts for everything. One output stage with split compare against the
+  original. Light and dark only, no accent themes. Lit only if it earns its place
+  over plain DOM. The design direction is chosen from `docs/design/`.
+- **Modes will be a registry:** one module plus one entry per mode, and each mode
+  exposes its result as data (a mask, a scalar field or a vector field), not only
+  display colours. Posy and Raw stay as they are.
 - **Audio engine is low priority**: keep it working, do not extend it.
+- Stop and report when something needs the owner's decision, especially anything
+  that changes how existing output looks; show a before/after.
 
 ## Gotchas
 - Web Audio / Tone.js cannot start without a user gesture — audio init must happen

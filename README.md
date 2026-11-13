@@ -47,13 +47,13 @@ G old:    t - (k + spread)
 B old:    t - (k + spread x 2)
 ```
 
-### Trail accumulation
-Trail accumulation merges the last `T` diff frames into one image.
+### Trails
+A trail keeps a pixel's motion on screen for a while after it happened. For every pixel and channel MotionDiff remembers the strongest recent diff value and how long ago it was written, holds it at full strength for the first half of the trail length, then fades it out.
 
-- Posy mode keeps the value with the largest deviation from 128 on each channel.
-- Raw Diff keeps the largest raw channel value on each channel.
+- Posy mode measures strength as deviation from 128 and fades back to grey.
+- Raw Diff measures it as the channel value and fades to black.
 
-`T = trail length`, counted in processed frames, so larger values hold motion on screen longer. Short trails show immediate movement. Long trails turn motion into persistent streaks and ghosted silhouettes.
+Trail length is in the same 1/30 s units as the frame offset and is measured in video time, so a trail lasts the same at any frame rate, playback speed or processing fps cap. Short trails show immediate movement. Long trails turn motion into persistent streaks and ghosted silhouettes.
 
 ### Threshold
 Threshold suppresses noise before accumulation. It is the mean absolute channel difference between the two frames (0-255) and means the same in Posy and Raw mode.
@@ -89,17 +89,18 @@ Threshold suppresses noise before accumulation. It is the mean absolute channel 
 │   │   ├── __tests__/              Unit tests (vitest, node).
 │   │   ├── analyze.js              Auto-configuration: noise floor, threshold and gap from frame bursts.
 │   │   ├── blur.js                 3 x 3 box blur.
-│   │   ├── buffer.js               Ring buffers and frame-ring memory budgeting.
+│   │   ├── buffer.js               Frame ring bookkeeping and memory budgeting.
 │   │   ├── diff.js                 Posy Blend and Raw Diff pixel math.
 │   │   ├── energy.js               Motion energy grid and pitch/pan mapping for sonification.
 │   │   ├── magnify.js              Eulerian magnification math.
 │   │   ├── magnitude.js            Shared unsigned motion magnitude and grid pooling.
 │   │   ├── timebase.js             Media-time base: frame stamps, seek/loop detection, lookback.
-│   │   └── trails.js               Trail accumulation rules for Posy and Raw modes.
+│   │   └── trails.js               Trails: one decaying feedback state per pixel.
 │   ├── styles/main.css             Application stylesheet and theme variables.
 │   ├── ui/                         DOM bindings: controls, timeline, presets, audio panel, help, theme, status.
 │   └── main.js                     App wiring and render loop control.
-├── docs/                           Extended examples, parameter recipes, screenshots.
+├── docs/                           Examples, parameter recipes, research notes, design mockups.
+├── ROADMAP.md                      What is done, in progress, planned and deferred.
 ├── index.html                      Single-page shell.
 └── vite.config.js                  Vite base-path configuration.
 ```
@@ -128,7 +129,10 @@ MotionDiff detects WebGL2 at runtime and uses it when available; otherwise it fa
 
 On the WebGL path frames never leave the GPU: the video element is uploaded with `texImage2D`, scaled to the processing size, and past frames are kept in a `TEXTURE_2D_ARRAY` ring. Diff, blur, accumulation, and composite passes all run as shaders. The ring is sized from a memory budget (192 MiB), so it holds 120 frames at 640px, 54 at 1280x720 and 24 at 1920x1080. The Canvas 2D fallback still captures through `getImageData`, but keeps its frame history inside the worker. Append `?renderer=canvas2d` to the URL to run the fallback on a machine that has WebGL2.
 
+## Magnify mode and patents
+Magnify implements the simplest real-time variant of Eulerian video magnification (Wu et al., SIGGRAPH 2012) from the published description; it contains no MIT code. The method itself is covered by MIT patents (US 9,811,901 and related), which MIT licenses for commercial use. This project is a personal, non-commercial demo. If you want to use magnify mode commercially, ask MIT's Technology Licensing Office or a lawyer first. See `docs/research.md`.
+
 ## Tests
 Tests cover the pure functions under `src/core/`: diff math, blur, ring buffers, the time base, trails, analysis, the shared motion magnitude, the sonification grid mapping, and the magnification math. Run them with `npm test`.
 
-The shaders are checked against those functions in a real browser: in a dev build, `__motionDiffDiffParity()`, `__motionDiffEnergyParity()` and `__magnifyParityHarness()` in the console run the same synthetic frames through core and GPU and report the largest difference.
+The shaders are checked against those functions in a real browser: in a dev build, `__motionDiffDiffParity()`, `__motionDiffTrailParity()`, `__motionDiffEnergyParity()` and `__magnifyParityHarness()` in the console run the same synthetic frames through core and GPU and report the largest difference.

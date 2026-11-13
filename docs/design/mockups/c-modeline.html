@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup C — Modeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* Direction C: a modal editor for video. The picture is everything; the
+     interface is one status line and a command palette. Nothing to hide,
+     because there is almost nothing there. Keyboard first, pointer optional. */
+  :root { --bg: #0b0b0c; --ink: #ecebe7; --dim: #8d8b85; --line: #2a2a2c; --hot: #ff4d8d;
+          --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; color: var(--ink); font: 400 13px/1 var(--mono); overflow: hidden; }
+  .stage { position: fixed; inset: 0 0 31px 0; }
+  .stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .stage [data-original] { display: none; }
+  [data-state='split'] .stage [data-original] { display: block; }
+  .split { display: none; position: absolute; top: 0; bottom: 0; width: 24px; margin-left: -12px; cursor: ew-resize; touch-action: none; }
+  [data-state='split'] .split { display: block; }
+  .split::before { content: ''; position: absolute; left: 11px; top: 0; bottom: 0; width: 2px; background: var(--hot); }
+
+  /* scrubber: a 3px line that is also the top edge of the status line */
+  .seek { position: fixed; left: 0; right: 0; bottom: 28px; height: 3px; background: var(--line); cursor: pointer; }
+  .seek i { position: absolute; left: 0; top: 0; bottom: 0; width: 31%; background: var(--hot); }
+  .seek:focus-visible { outline: 2px solid var(--ink); }
+
+  .line { position: fixed; left: 0; right: 0; bottom: 0; height: 28px; background: var(--bg); display: flex; align-items: stretch; white-space: nowrap; }
+  .line > * { display: flex; align-items: center; padding: 0 12px; border-right: 1px solid var(--line); color: var(--dim); }
+  .line b { color: var(--ink); font-weight: 500; margin-left: 7px; }
+  .line .mode { background: var(--hot); color: #000; font-weight: 700; letter-spacing: .06em; border: 0; }
+  .line .sp { flex: 1; border: 0; }
+  .line .r { border-right: 0; border-left: 1px solid var(--line); }
+  .line button { all: unset; cursor: pointer; display: flex; align-items: center; padding: 0 12px; border-left: 1px solid var(--line); color: var(--ink); }
+  .line button:focus-visible { outline: 2px solid var(--hot); outline-offset: -2px; }
+  .line kbd { font: 500 12px/1 var(--mono); color: var(--hot); margin-right: 6px; }
+
+  /* command palette */
+  .palette { position: fixed; left: 50%; top: 16%; width: min(620px, 86vw); transform: translateX(-50%); background: var(--bg); border: 1px solid var(--ink); box-shadow: 0 0 0 9999px #0006; display: none; }
+  [data-state='palette'] .palette { display: block; }
+  .palette .in { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); font-size: 16px; }
+  .palette .in span { color: var(--hot); font-weight: 700; }
+  .palette .in i { width: 9px; height: 19px; background: var(--ink); animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .palette ul { list-style: none; margin: 0; padding: 6px 0; }
+  .palette li { display: flex; align-items: center; gap: 12px; padding: 9px 16px; color: var(--dim); }
+  .palette li b { color: var(--ink); font-weight: 500; }
+  .palette li em { font-style: normal; margin-left: auto; color: var(--dim); }
+  .palette li kbd { font: 500 12px/1 var(--mono); border: 1px solid var(--line); padding: 3px 6px; color: var(--ink); }
+  .palette li.sel { background: var(--hot); color: #000; }
+  .palette li.sel b, .palette li.sel em { color: #000; } .palette li.sel kbd { border-color: #0005; color: #000; }
+  .palette .foot { border-top: 1px solid var(--line); padding: 9px 16px; color: var(--dim); font-size: 11px; display: flex; gap: 18px; white-space: nowrap; }
+
+  /* parameters: summoned, docked left, same flat language */
+  .panel { position: fixed; left: 0; top: 0; bottom: 31px; width: 300px; background: var(--bg); border-right: 1px solid var(--line); overflow: auto; display: none;
+    --tp-base-background-color: var(--bg); --tp-base-shadow-color: transparent; --tp-base-border-radius: 0; --tp-blade-border-radius: 0; --tp-base-font-family: var(--mono);
+    --tp-container-background-color: #ffffff0a; --tp-container-background-color-hover: #ffffff12; --tp-container-background-color-focus: #ffffff1a; --tp-container-background-color-active: #ffffff22;
+    --tp-container-foreground-color: var(--ink); --tp-input-background-color: #ffffff0f; --tp-input-background-color-hover: #ffffff17; --tp-input-background-color-focus: #ffffff20;
+    --tp-input-background-color-active: #ffffff2a; --tp-input-foreground-color: var(--ink); --tp-label-foreground-color: var(--dim);
+    --tp-button-background-color: #ffffff17; --tp-button-background-color-hover: #ffffff22; --tp-button-background-color-focus: #ffffff2c; --tp-button-background-color-active: #ffffff38;
+    --tp-button-foreground-color: var(--ink); --tp-groove-foreground-color: #ffffff22; --tp-monitor-background-color: #00000055; --tp-monitor-foreground-color: var(--dim); }
+  [data-state='panel'] .panel, [data-state='split'] .panel { display: block; }
+  [data-state='panel'] .stage, [data-state='split'] .stage { left: 300px; }
+  .panel .tp-sldv_k::before, .panel .tp-sldv_k::after { background-color: var(--hot); }
+  .panel .tp-btnv_b { background-color: var(--hot); color: #000; }
+  .panel :focus-visible { outline: 2px solid var(--hot) !important; outline-offset: 1px; }
+</style>
+<body>
+<main class="stage" id="stage" aria-label="Video output">
+  <img src="assets/frame-age.jpg" alt="Motion output">
+  <img data-original src="assets/frame-original.jpg" alt="Original frame">
+  <div class="split" data-split role="slider" tabindex="0" aria-label="Split between original and output" aria-valuemin="0" aria-valuemax="100"></div>
+</main>
+
+<aside class="panel" id="panel" aria-label="Parameters"></aside>
+
+<div class="seek" role="slider" tabindex="0" aria-label="Seek" aria-valuetext="4.03 of 13 seconds"><i></i></div>
+<footer class="line" aria-label="Status">
+  <span class="mode">POSY</span>
+  <span>gap<b>333ms</b></span><span>spread<b>0</b></span><span>thr<b>20</b></span><span>trail<b>667ms</b></span><span>view<b>age</b></span>
+  <span class="sp"></span>
+  <span class="r">▶<b>0:04.03</b>&nbsp;/ 0:13.00</span><span class="r">1×</span><span class="r">640p<b>29.97</b></span>
+  <button><kbd>:</kbd>command</button><button><kbd>P</kbd>params</button><button><kbd>?</kbd>keys</button>
+</footer>
+
+<div class="palette" role="dialog" aria-label="Command palette">
+  <div class="in"><span>:</span>gap<i></i></div>
+  <ul>
+    <li class="sel"><b>gap</b> 333 ms → type a value, or use the keys<em><kbd>[</kbd> <kbd>]</kbd></em></li>
+    <li><b>gap auto</b> measure the clip and pick one<em><kbd>A</kbd></em></li>
+    <li><b>mode magnify</b> amplify slow change<em><kbd>3</kbd></em></li>
+    <li><b>split</b> compare against the original<em><kbd>S</kbd></em></li>
+    <li><b>source camera</b> use the webcam<em><kbd>N</kbd></em></li>
+    <li><b>record</b> save the output as WebM<em><kbd>R</kbd></em></li>
+  </ul>
+  <div class="foot"><span>↑↓ choose</span><span>⏎ run</span><span>esc close</span><span style="margin-left:auto">every command also has a key</span></div>
+</div>
+
+<script type="module">
+  import { buildPane, splitCompare } from './shared.js';
+  buildPane(document.getElementById('panel'));
+  splitCompare(document.getElementById('stage'), 0.45);
+</script>
+</body>
+</html>

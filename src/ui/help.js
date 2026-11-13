@@ -78,8 +78,8 @@ function renderHelpContent() {
       <p>Threshold is the mean channel difference between the two frames (0-255), the same in Posy and Raw. Start at <code>20</code>. Raise it if static areas show noise. Lower it if subtle motion is missing. The typical range is <code>10-50</code>; Auto measures the noise floor and sets it for you.</p>
 
       <h3>Trail length and algorithm interaction</h3>
-      <p>In Posy mode, longer trails show a smooth color fade because each trail frame retains its deviation-from-128 value and the accumulator picks the maximum deviation per channel.</p>
-      <p>In Raw Diff mode, trails simply persist the brightest motion seen. They do not encode direction or age.</p>
+      <p>A trail holds each pixel's strongest recent motion at full strength for the first half of the trail length, then fades it out. In Posy mode it fades back to grey, in Raw Diff mode to black.</p>
+      <p>Offset and trail are both measured in video time (one step is 1/30 s), so they look the same at any frame rate, playback speed or fps cap.</p>
 
       <h3>RGB spread and motion direction</h3>
       <p><code>Spread=0</code> means color is determined only by which channels changed most. <code>Spread=2</code> typically reads as red leading and blue trailing. <code>Spread=4+</code> becomes a strong rainbow smear that is more artistic than analytical.</p>
