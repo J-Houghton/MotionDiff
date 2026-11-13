@@ -50,6 +50,21 @@ const SEEK_FRAME_WAIT_MS = 250;
  */
 const FRAME_CALLBACK_STALL_MS = 120;
 const FRAME_CALLBACK_HEALTHY = 4;
+/**
+ * A camera reports a placeholder picture size until its first real frame
+ * arrives: 0x0 in some browsers, 2x2 on phones. Sizing the pipeline to that
+ * gives a flat grey picture. Wait for a real size, but not for ever.
+ */
+const PLACEHOLDER_SIZE = 2;
+const STREAM_SIZE_WAIT_MS = 4000;
+/**
+ * Some browsers never advance the decoded-frame counter (on a camera stream,
+ * for one). When it has stood still this long while the video's clock keeps
+ * running and callbacks are not flowing either, it is not counting: frames
+ * are then taken at the display rate, so the picture cannot freeze on its
+ * first frame.
+ */
+const COUNTER_STALL_MS = 300;
 
 export class Session {
   /**
@@ -86,6 +101,9 @@ export class Session {
     this._lastCallbackMs = 0;
     this._callbackRun = 0;      // frame callbacks that arrived on time, in a row
     this._watchdogFrame = -1;   // decoder frame count at the last display-clock frame
+    this._watchdogMovedMs = 0;  // when that count last changed
+    this._watchdogClock = NaN;  // currentTime at the last display-clock frame
+    this._watchdogTookMs = 0;   // when the last display-clock frame was taken
     this._fpsProbe = null;
     this._frameDeltas = [];
     this._lastMediaTime = NaN;
@@ -111,6 +129,7 @@ export class Session {
     pipeline.onResult = (result) => this._drawWorkerResult(result);
 
     video.addEventListener('seeked', () => this._onSeeked());
+    video.addEventListener('resize', () => this._onResize());
     video.addEventListener('ended', () => { if (!video.loop) this._setPlaying(false); });
     document.addEventListener('visibilitychange', () => this._onVisibility());
     window.addEventListener('pagehide', () => this.audio.dispose());
@@ -382,8 +401,7 @@ export class Session {
       const ready = this._whenMetadata();
       video.srcObject = stream;
       await ready;
-      // Some streams report 0x0 until the first frame arrives.
-      if (!video.videoWidth) await new Promise((resolve) => video.addEventListener('resize', resolve, { once: true }));
+      await this._whenSized();
     } catch {
       this._fail('The stream could not be played');
       return;
@@ -403,6 +421,41 @@ export class Session {
 
     const rate = stream.getVideoTracks()[0]?.getSettings?.().frameRate;
     await this._ready(Number.isFinite(rate) && rate > 0 ? rate : undefined);
+  }
+
+  /** Resolves once the element reports a real picture size (see PLACEHOLDER_SIZE). */
+  _whenSized() {
+    const { video } = this;
+    const real = () => video.videoWidth > PLACEHOLDER_SIZE && video.videoHeight > PLACEHOLDER_SIZE;
+    if (real()) return Promise.resolve();
+    return new Promise((resolve) => {
+      const finish = () => {
+        video.removeEventListener('resize', check);
+        clearTimeout(timer);
+        resolve();
+      };
+      const check = () => { if (real()) finish(); };
+      // If it never comes, carry on: _onResize follows the size whenever it does change.
+      const timer = setTimeout(finish, STREAM_SIZE_WAIT_MS);
+      video.addEventListener('resize', check);
+    });
+  }
+
+  /**
+   * The source changed size while loaded: a camera's first real frame after
+   * a placeholder, a phone turned on its side, a shared window resized.
+   * Everything sized to the old picture starts over.
+   */
+  _onResize() {
+    const { video, pipeline } = this;
+    if (!this.loaded || !video.videoWidth || !video.videoHeight) return;
+    const before = `${pipeline.width}x${pipeline.height}`;
+    pipeline.updateDimensions(video);
+    if (`${pipeline.width}x${pipeline.height}` === before) return;
+    pipeline.clearState();
+    this._syncCanvasSize();
+    this._emit('source');
+    this._redrawIfPaused();
   }
 
   async _ready(knownFps) {
@@ -481,6 +534,13 @@ export class Session {
    *   metadata when the frame comes from one
    */
   _process(frameMeta) {
+    // A live stream has no media timeline to trust: browsers disagree on what
+    // a camera frame's mediaTime is (time since start, a capture timestamp,
+    // nothing at all), and it need not agree with currentTime, so mixing the
+    // two reads as seeks and throws the history away. A live picture runs on
+    // real time, so stamp it with our own clock. (Paused, the pipeline keeps
+    // the last stamp; a tool feeding frames by hand brings its own.)
+    if (this._stream && !this.manual && !this.video.paused) frameMeta = { mediaTime: performance.now() / 1000 };
     this.pipeline.process(this.video, frameMeta);
     // One audio update per processed frame. The grid size is 0 unless the
     // engine is running, and the pipeline skips the readback entirely at 0.
@@ -575,10 +635,23 @@ export class Session {
       this._callbackRun = Math.min(this._callbackRun, FRAME_CALLBACK_HEALTHY - 1);
       const decoded = this._decodedFrames();
       // Without a frame counter, fall back to "the clock moved".
-      const fresh = decoded >= 0 ? decoded !== this._watchdogFrame : video.currentTime !== this._watchdogFrame;
-      if (fresh) {
+      const counted = decoded >= 0 ? decoded !== this._watchdogFrame : video.currentTime !== this._watchdogFrame;
+      if (counted) {
         this._watchdogFrame = decoded >= 0 ? decoded : video.currentTime;
+        this._watchdogMovedMs = now;
+        // Only real counts feed the frame-rate estimate.
         if (decoded >= 0 && !this._stream) this._noteDecoded(decoded, video.currentTime);
+      }
+      // A counter that stands still while the clock runs is not counting
+      // (see COUNTER_STALL_MS): take frames at the source's own rate, since
+      // the display may be much faster.
+      const uncounted = !counted
+        && now - this._watchdogMovedMs > COUNTER_STALL_MS
+        && video.currentTime !== this._watchdogClock
+        && now - this._watchdogTookMs >= 1000 / (this.fps || DEFAULT_FPS) - 2;
+      if (counted || uncounted) {
+        this._watchdogClock = video.currentTime;
+        this._watchdogTookMs = now;
         if (!this._skipForCap(now)) this._process();
       }
     }

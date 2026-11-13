@@ -169,6 +169,8 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .play { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .play button { background: none; border: 1px solid var(--ink); padding: 7px 10px; min-width: 36px; min-height: 34px; }
 .play button.go { background: var(--ink); color: var(--paper); min-width: 44px; }
+/* wide enough for "0.25×": the label must not push its neighbours about */
+.play #btnRate { min-width: 62px; text-align: center; }
 .play button:not(:disabled):hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 #app[data-recording='true'] #btnRec { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .clock { display: inline-flex; align-items: baseline; gap: 4px; color: var(--soft); margin: 0 4px; }
