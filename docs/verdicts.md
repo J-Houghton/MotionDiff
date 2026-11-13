@@ -604,3 +604,28 @@ added, so no fresh critique against the brief was run.
 ### Deferred for having no visible effect (session 4)
 - **A head and tail of different colours on plain traces.** Built, judged, not visible
   as a direction: removed.
+
+### I3. Samples that open in a mode — interface, and a check of each clip
+Eight samples were added to the source picker, one or more for every mode except
+Magnify (the face clip was tried and taken out at the owner's request; a replacement
+that is not a face has not been found yet); each names its mode
+on the button and selects it with fitting settings when loaded. The three older samples
+keep whatever mode is current, as before.
+
+| Sample | Mode | What its filmstrip showed (my own reading; no blind judge was run for these) |
+|---|---|---|
+| Flower Opening | Posy | Fine outlines of leaves and stems on grey, colour fringes on the opening flower |
+| Bees at the Hive | Motion mask | Each bee cut out in its own colours on black; a few specks of wall beside the fliers |
+| Gulls Overhead | Motion history | An orange-to-blue ribbon along each bird's path |
+| Crossing from Above | Background model | Cars and pedestrians cut out whole, with their shadows |
+| Motorway | Optical flow | Two opposed streams in two hues (V6) |
+| Clouds over Peaks | Optical flow, over the video | Traces along the cloud front, none on the mountains or the plain |
+| Weir | Optical flow | A stream across the foam at lower left; the smooth sheet of water on the right carries almost none (little texture) |
+| Candle Plume | Schlieren | The plume of V7 |
+
+All eleven samples (and the face clip, before it was removed) were loaded from their hosts in headless Chrome the way the picker
+does it: each came up in its mode with a picture (first frame after 0.2 to 1.0 s here;
+the 49 MB candle clip after 1.0 to 1.4 s). The picker passes the interface audit at
+desktop and phone sizes. Rejected after rendering: the intersection in Optical flow
+(dim, the vehicles move too far per frame). Not checked: loading on a phone or a slow
+connection, and browsers other than Chrome (the candle clip is a QuickTime file).

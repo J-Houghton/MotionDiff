@@ -10,7 +10,7 @@
  * State lives in the Session; this module calls its methods and redraws when
  * it reports a change.
  */
-import { MODES } from '../app/modes/index.js';
+import { MODES, getMode } from '../app/modes/index.js';
 import { TEST_CLIPS } from '../app/clips.js';
 import { initPanel } from './panel.js';
 import { initRuler } from './ruler.js';
@@ -360,7 +360,15 @@ export function initShell({ root, session }) {
     const samples = document.createElement('div');
     samples.className = 'sources-row sources-samples';
     samples.append(Object.assign(document.createElement('span'), { textContent: 'Samples' }));
-    for (const clip of TEST_CLIPS) samples.append(button(clip.label, run(() => session.loadUrl(clip.url))));
+    for (const clip of TEST_CLIPS) {
+      const sample = button(clip.label, run(() => session.loadSample(clip)));
+      if (clip.mode) {
+        // Says which mode the sample opens in.
+        sample.append(Object.assign(document.createElement('small'), { textContent: getMode(clip.mode).label }));
+        sample.title = clip.credit || '';
+      }
+      samples.append(sample);
+    }
 
     container.replaceChildren(row, url, samples);
   }

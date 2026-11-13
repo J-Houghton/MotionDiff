@@ -225,6 +225,20 @@ export class Session {
     return this._loadVideo(url, false);
   }
 
+  /**
+   * Load one of the built-in samples (app/clips.js). A sample that shows off
+   * a mode brings that mode and its settings with it.
+   * @param {{label: string, url: string, mode?: string, params?: object, display?: string}} clip
+   */
+  loadSample(clip) {
+    if (clip.display) this.setDisplay(clip.display);
+    if (clip.mode) this.setParams({ ...clip.params, algorithm: clip.mode });
+    this._beginLoad();
+    this.setStatus('Loading…', 'info');
+    this._pendingSource = { kind: 'url', label: clip.label };
+    return this._loadVideo(clip.url, false);
+  }
+
   async loadCamera() {
     if (!navigator.mediaDevices?.getUserMedia) {
       this.setStatus('This browser has no camera access (it needs HTTPS)', 'error');

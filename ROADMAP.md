@@ -38,6 +38,7 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 | Asynchronous readback of the particle field | planned only if a phone needs it | No visible effect; a frame-rate measure | Small | The one per-frame readback; fine on desktop, unmeasured on phones |
 | Second-gap marker on the time ruler | planned | The ruler shows the mask's second gap and the history length | Small | |
 | The time ruler in the Viewfinder layout | planned | Gap and trail read as a ruler in fullscreen and on phones, as on the Plate | Small | |
+| A sample clip for Magnify that is not a face | planned | A locked-off shot of something nearly still with a small rhythm (a sleeping animal breathing, a slight sway) opens in Magnify and shows it | Small | One search was started and stopped unfinished |
 | Arrow grid for flow | deferred | | | Particles and colour cover it |
 
 ## Motion extraction
@@ -81,7 +82,9 @@ Ranked by visible effect for the effort.
 | Optical flow: Lucas–Kanade core, shader mirror, probe, mode with colour and particle views; particle traces | `578ec21` | V5, V6 |
 | Schlieren mode; synthetic plume scenes with a known field; two real candle clips in the reference set; printable background pattern | `7687582` | V7 |
 | Fixes from the blind judges and the interface audit; schlieren probe | `2fc96fd` | I2 |
-| Research notes §6 and §7, design notes for particles and schlieren, optical-flow note brought up to date | with this roadmap update | |
+| Research notes §6 and §7, design notes for particles and schlieren, optical-flow note brought up to date | `c0095c2` | |
+| Schlieren's knife-edge view always shown on its own (laid over the video it looked like a plain camera) | `e481f4b` | From the first try on a phone |
+| Samples that open in a mode: eight new, among them a real candle plume for Schlieren | branch `demo-clips` | Each checked in its mode from a filmstrip; six added to the reference clips. Magnify has none yet |
 
 ### Session 3
 | Item | Commit | Notes |
@@ -111,7 +114,8 @@ Ranked by visible effect for the effort.
 | Research write-up, design mockups | `3922a07` |
 
 ## Known gaps
-- **Schlieren and the particle display have not run on a real phone.** Frame-rate
+- **Schlieren live on a phone does not work well yet** (owner's first try, session 4): the preset clips work there, the live camera gives a flat grey picture, which means nothing could be measured (a plain background or a moving phone are the likely causes; not diagnosed). The setup guide under Applications is the next step.
+- **Frame rates on a real phone have not been measured.** Frame-rate
   figures are from one desktop GPU. Schlieren has been checked on synthetic scenes and
   two recordings from the web, not on phone footage, weak sources or natural backgrounds.
 - Schlieren traces show nothing on the real candle recording (too fast between frames

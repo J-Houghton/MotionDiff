@@ -33,6 +33,8 @@ Fills `ref-clips/` (git-ignored) from `scripts/reference-clips.json`: clips with
 | `candle-dots` | Real schlieren footage: a candle plume against printed random dots (MIT, JPaonaskar/Background-Oriented-Schlieren). |
 | `candle-screen` | Real schlieren footage: a candle against a monitor showing a fine checkerboard; needs a processing width of 1280 px or more (MIT, FinFetChannel/SyntheticSchlieren). |
 
+| `weir`, `clouds`, `crossing`, `bees`, `gulls`, `flower` | The clips behind the app's samples, each with a static camera: water down a weir, a cloud timelapse over a ridge, an intersection from above (60 fps), bees on a plain wall, gulls against clear sky, a flower opening. |
+
 Clips are test material only and are not redistributed with the repository.
 
 The synthetic scenes are defined in `scripts/page/scene.js`, which also gives the
