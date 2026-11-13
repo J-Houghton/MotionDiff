@@ -606,14 +606,15 @@ added, so no fresh critique against the brief was run.
   as a direction: removed.
 
 ### I3. Samples that open in a mode — interface, and a check of each clip
-Nine samples were added to the source picker, one or more per mode; each names its mode
+Eight samples were added to the source picker, one or more for every mode except
+Magnify (the face clip was tried and taken out at the owner's request; a replacement
+that is not a face has not been found yet); each names its mode
 on the button and selects it with fitting settings when loaded. The three older samples
 keep whatever mode is current, as before.
 
 | Sample | Mode | What its filmstrip showed (my own reading; no blind judge was run for these) |
 |---|---|---|
 | Flower Opening | Posy | Fine outlines of leaves and stems on grey, colour fringes on the opening flower |
-| Face, Held Still | Magnify | Loads and runs; the picture was not judged again (clip unchanged since session 3) |
 | Bees at the Hive | Motion mask | Each bee cut out in its own colours on black; a few specks of wall beside the fliers |
 | Gulls Overhead | Motion history | An orange-to-blue ribbon along each bird's path |
 | Crossing from Above | Background model | Cars and pedestrians cut out whole, with their shadows |
@@ -622,7 +623,7 @@ keep whatever mode is current, as before.
 | Weir | Optical flow | A stream across the foam at lower left; the smooth sheet of water on the right carries almost none (little texture) |
 | Candle Plume | Schlieren | The plume of V7 |
 
-All twelve samples were loaded from their hosts in headless Chrome the way the picker
+All eleven samples (and the face clip, before it was removed) were loaded from their hosts in headless Chrome the way the picker
 does it: each came up in its mode with a picture (first frame after 0.2 to 1.0 s here;
 the 49 MB candle clip after 1.0 to 1.4 s). The picker passes the interface audit at
 desktop and phone sizes. Rejected after rendering: the intersection in Optical flow

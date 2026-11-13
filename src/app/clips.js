@@ -29,8 +29,10 @@ export const TEST_CLIPS = [
     url: 'https://videos.pexels.com/video-files/5646694/5646694-hd_1920_1080_30fps.mp4',
     credit: 'Pexels licence',
   },
-  // One sample per mode, in mode order. Each was checked in its mode with
-  // these settings (static camera, or the whole frame would light up).
+  // Samples that show off a mode, in mode order. Each was checked in its mode
+  // with these settings (static camera, or the whole frame would light up).
+  // Magnify has none yet: it wants a locked-off shot of something nearly
+  // still with a small rhythm (breathing, a sway), and not a face.
   {
     // A timelapse: a flower unfolds against a still wall.
     label: 'Flower Opening',
@@ -38,13 +40,6 @@ export const TEST_CLIPS = [
     mode: 'posy',
     params: { frameOffset: 30, threshold: 8, trailLength: 20, channelSpread: 2, blurEnabled: false, ageColorEnabled: false },
     display: 'diff',
-    credit: 'Pexels licence',
-  },
-  {
-    label: 'Face, Held Still',
-    url: 'https://videos.pexels.com/video-files/8724224/8724224-hd_1366_720_25fps.mp4',
-    mode: 'magnify',
-    params: { magAmp: 15, magFreqLow: 0.7, magFreqHigh: 2.0, magChroma: 1.0, magDownsample: 2, blurEnabled: false },
     credit: 'Pexels licence',
   },
   {

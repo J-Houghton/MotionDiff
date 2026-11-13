@@ -38,6 +38,7 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 | Asynchronous readback of the particle field | planned only if a phone needs it | No visible effect; a frame-rate measure | Small | The one per-frame readback; fine on desktop, unmeasured on phones |
 | Second-gap marker on the time ruler | planned | The ruler shows the mask's second gap and the history length | Small | |
 | The time ruler in the Viewfinder layout | planned | Gap and trail read as a ruler in fullscreen and on phones, as on the Plate | Small | |
+| A sample clip for Magnify that is not a face | planned | A locked-off shot of something nearly still with a small rhythm (a sleeping animal breathing, a slight sway) opens in Magnify and shows it | Small | One search was started and stopped unfinished |
 | Arrow grid for flow | deferred | | | Particles and colour cover it |
 
 ## Motion extraction
@@ -83,7 +84,7 @@ Ranked by visible effect for the effort.
 | Fixes from the blind judges and the interface audit; schlieren probe | `2fc96fd` | I2 |
 | Research notes §6 and §7, design notes for particles and schlieren, optical-flow note brought up to date | `c0095c2` | |
 | Schlieren's knife-edge view always shown on its own (laid over the video it looked like a plain camera) | `e481f4b` | From the first try on a phone |
-| Samples that open in a mode: one per mode, nine new, among them a real candle plume for Schlieren | branch `demo-clips` | Each checked in its mode from a filmstrip; six added to the reference clips |
+| Samples that open in a mode: eight new, among them a real candle plume for Schlieren | branch `demo-clips` | Each checked in its mode from a filmstrip; six added to the reference clips. Magnify has none yet |
 
 ### Session 3
 | Item | Commit | Notes |
