@@ -3,32 +3,57 @@
 Status of everything planned for MotionDiff. Updated at the end of every working
 session. Statuses: **done**, **in progress**, **planned**, **deferred**.
 
-Last updated: 2026-11-13 (end of session 3: new interface, three new modes, visual
-tooling).
+Last updated: 2026-11-13 (end of session 4: optical flow, particle traces, schlieren).
 
 The governing rule for every item: lightweight, and easy to maintain and debug by hand.
 Visual work is accepted under the rules in `docs/development.md`; results are logged in
 `docs/verdicts.md`.
 
-## Planned, in order
-Ranked by visible effect for the effort. "Visible effect" is what a blind judge should
-be able to see, and on which reference clip (`scripts/README.md`); an item with none
-is deferred, not planned.
+The project is no longer only motion differencing. Work is listed under three heads:
+- **Motion extraction**: measuring what moved (differencing, masks, models, flow).
+- **Visualisations**: ways of showing a measured field.
+- **Applications**: a measurement put to a particular use.
 
-| # | Item | Expected visible effect, and on what footage | Effort | Notes |
+"Expected visible effect" is what a blind judge should be able to see, and on which
+reference clip (`scripts/README.md`); an item with none is deferred, not planned.
+
+## Applications
+| Item | Status | Expected visible effect, and on what footage | Effort | Notes |
 |---|---|---|---|---|
-| 1 | Frozen reference frame ("difference from this moment") | Everything that changed since the pin stays lit, however slowly it changed: the whole cloud bank on `sunset`, where Raw at any gap shows thin edges | Small | One pinned ring layer and a key to pin |
-| 2 | Direction legend and second-gap marker | A hue wheel in the picture corner makes the history view readable without the help text; the ruler shows the mask's second gap and the history length | Small | Interface only; `traffic`, any clip |
-| 3 | Dense optical flow | Speed and heading per patch from one frame pair: on `truth`, the square and discs in three hues with brightness by speed; no trail needed | Large | Design in `docs/optical-flow.md`, with acceptance numbers |
-| 4 | Global-motion estimate, then camera compensation | On `handheld` and `highway` the scenery goes dark and only real movers remain, in every mode. Today those clips light up everywhere | Medium, after 3 | 8×8 pooled flow, median on the CPU |
-| 5 | Per-pixel noise threshold | On `night` and `truth-noisy` the mask is clean without touching the threshold; today it needs Auto-configure or a hand-set value | Medium | Threshold from the background model's variance, ×√2 for a difference |
-| 6 | Combining several frame gaps | On `traffic`, the slow far carriageway and the fast near one both show fully at one setting | Medium | Maximum over two or three gaps |
-| 7 | Magnify: per-level amplification | On `face`, the pulse shows as a colour change of the skin without the amplified edges and noise the single band gives | Medium-large | Biggest quality gain found in research |
-| 8 | Lighting normalisation (gradient-image differencing) | On `sunset`, and on a camera with auto-exposure, a brightness change no longer lights the whole frame | Medium | |
-| 9 | Morphological open and close | On `traffic`, mask and background-model cut-outs lose their holes (windscreens) and ragged rims | Small-medium | The 3×3 vote already does the cheap part |
-| 10 | Real-time stabiliser | `handheld` plays back steady | Medium, after 4 | |
-| 11 | Magnify: pulse and motion presets, deeper pooling | On `face`, one click gives a visible pulse | Small | |
-| 12 | The time ruler in the Viewfinder layout | Gap and trail read as a ruler in fullscreen and on phones, as on the Plate | Small | From the interface critique: the two layouts share too little |
+| Schlieren: hot air and gas made visible | **done**, session 4 | A candle plume appears where the video shows a still background (`candle-dots`, `plume`) | | `docs/schlieren.md`, verdict V7 |
+| Schlieren on a real phone, and on the owner's footage | **in progress** | The same, live from a phone camera; weak sources (a mug, a heater); natural backgrounds; a held reference | Small once footage exists | Waiting for the footage listed in `docs/schlieren.md` and for a deploy to test on a phone. Defaults (window, smoothing, sensitivity) may need tuning for phone noise and compression |
+| Schlieren: a step-by-step setup guide in the picture | planned | First-time users reach a working setup without the help sheet: background, steady camera, settle, hold | Small | Today: a status-line note, the Setup check view, help text |
+| Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. Would replace the experimental traces view on real footage |
+| Camera compensation (global motion, then subtract it) | planned | On `handheld`, `highway` and `river` (whose camera moves forward, as flow revealed) the scenery goes dark and only real movers remain, in every mode | Medium | The flow and its median shift exist; needs a zoom term for `river` |
+| Real-time stabiliser | planned, after compensation | `handheld` plays back steady | Medium | |
+| Sonification | done; **deferred** beyond keeping it working | | | Could be driven by flow speed and heading |
+
+## Visualisations
+| Item | Status | Expected visible effect, and on what footage | Effort | Notes |
+|---|---|---|---|---|
+| Particle traces (wind-map display) | **done**, session 4 | Streams that show direction and speed at a glance: two opposed streams on `traffic` | | `docs/particles.md`, verdict V6 |
+| Traces keep flowing while the video is paused | planned | A paused frame shows the streamlines of that instant, like a wind map of one moment | Small | Needs a redraw loop while paused |
+| Direction legend | planned | A hue wheel in the corner makes heading colours readable without the help text (flow, history, schlieren direction) | Small | Any clip |
+| Traces drawn at display resolution | planned | Crisp hair-lines on a large screen instead of soft ones | Small-medium | Today they are drawn at the processing size |
+| Asynchronous readback of the particle field | planned only if a phone needs it | No visible effect; a frame-rate measure | Small | The one per-frame readback; fine on desktop, unmeasured on phones |
+| Second-gap marker on the time ruler | planned | The ruler shows the mask's second gap and the history length | Small | |
+| The time ruler in the Viewfinder layout | planned | Gap and trail read as a ruler in fullscreen and on phones, as on the Plate | Small | |
+| Arrow grid for flow | deferred | | | Particles and colour cover it |
+
+## Motion extraction
+Ranked by visible effect for the effort.
+
+| # | Item | Status | Expected visible effect, and on what footage | Effort | Notes |
+|---|---|---|---|---|---|
+| | Dense optical flow | **done**, session 4 | Speed and heading per patch from one frame pair | | `docs/optical-flow.md`, verdict V5 |
+| 1 | Frozen reference frame ("difference from this moment") | planned | Everything that changed since the pin stays lit, however slowly it changed: the whole cloud bank on `sunset` | Small | One pinned ring layer and a key to pin. Schlieren's held reference is the same idea for shifts |
+| 2 | Per-pixel noise threshold | planned | On `night` and `truth-noisy` the mask is clean without touching the threshold | Medium | Threshold from the background model's variance, ×√2 for a difference |
+| 3 | Combining several frame gaps | planned | On `traffic`, the slow far carriageway and the fast near one both show fully at one setting; in flow, slow and fast motion in one picture | Medium | Maximum over two or three gaps |
+| 4 | Magnify: per-level amplification | planned | On `face`, the pulse shows as a colour change of the skin without the amplified edges and noise | Medium-large | Biggest quality gain found in research |
+| 5 | Lighting normalisation (gradient-image differencing) | planned | On `sunset`, and on a camera with auto-exposure, a brightness change no longer lights the whole frame | Medium | Would also help schlieren under changing light |
+| 6 | Morphological open and close | planned | On `traffic`, mask and background-model cut-outs lose their holes and ragged rims | Small-medium | |
+| 7 | Magnify: pulse and motion presets, deeper pooling | planned | On `face`, one click gives a visible pulse | Small | |
+| 8 | Flow at moving edges | planned | The ragged outlines of movers in the flow colour view become clean | Medium | A median or an edge-aware window |
 
 ## Deferred
 | Item | Why |
@@ -39,7 +64,10 @@ is deferred, not planned.
 | Centred three-frame variant | Costs a gap of latency; the causal form passes its checks |
 | Worker fallback for the mask, history and background modes | No effect where WebGL2 exists; those modes report that they cannot run |
 | Automatic per-frame threshold from a noise model on the GPU | Superseded by item 5 |
-| Sparse optical flow | Dense low-resolution flow is the better fit for WebGL2 |
+| Sparse optical flow | Dense low-resolution flow is the better fit for WebGL2, and is built |
+| Plain traces that show which way they run in a still picture | Tried with a tinted tail; a blind judge could not tell (`docs/verdicts.md`, session 4). Heading colours do it |
+| Temperature or density values from schlieren | Needs calibration and tomography; the picture is the product |
+| Worker fallback for optical flow and schlieren | As for the other WebGL-only modes |
 | Blob extraction and tracking | |
 | Compression motion vectors | |
 | YOLO proof of concept | Run on the original frame, not on diff output; combine with motion in data |
@@ -47,6 +75,14 @@ is deferred, not planned.
 | Phase-based / Riesz magnification | Large shader cost and a separate patent |
 
 ## Done
+### Session 4
+| Item | Commit | Notes |
+|---|---|---|
+| Optical flow: Lucas–Kanade core, shader mirror, probe, mode with colour and particle views; particle traces | `578ec21` | V5, V6 |
+| Schlieren mode; synthetic plume scenes with a known field; two real candle clips in the reference set; printable background pattern | `7687582` | V7 |
+| Fixes from the blind judges and the interface audit; schlieren probe | `2fc96fd` | I2 |
+| Research notes §6 and §7, design notes for particles and schlieren, optical-flow note brought up to date | with this roadmap update | |
+
 ### Session 3
 | Item | Commit | Notes |
 |---|---|---|
@@ -75,6 +111,16 @@ is deferred, not planned.
 | Research write-up, design mockups | `3922a07` |
 
 ## Known gaps
+- **Schlieren and the particle display have not run on a real phone.** Frame-rate
+  figures are from one desktop GPU. Schlieren has been checked on synthetic scenes and
+  two recordings from the web, not on phone footage, weak sources or natural backgrounds.
+- Schlieren traces show nothing on the real candle recording (too fast between frames
+  at 30 fps); the view is labelled experimental.
+- A fine regular pattern on a screen is a poor schlieren background, and unusable below
+  a 1280 px processing width.
+- Plain (uncoloured) traces do not show which way they run in a still picture.
+- Optical flow: ragged outlines on movers; nothing measured along the middle of a
+  straight edge or on flat surfaces; a moving camera makes everything flow.
 - Verified in headless Chrome on one Windows machine with an Intel GPU only, with
   phone and tablet layouts under device emulation and Chrome's fake camera. Not
   tested: a real phone, a real camera, Firefox, Safari, screen capture, HLS.
