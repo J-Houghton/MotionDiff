@@ -1,0 +1,343 @@
+/**
+ * Dev-only parity probes: the same synthetic frames through the core
+ * functions and through the WebGL shaders, reporting the largest difference.
+ * Only referenced behind `import.meta.env.DEV`, so production builds drop
+ * this file. Each probe resizes the renderer and clears the pipeline — run
+ * them on an idle page.
+ */
+import { boxBlur } from '../core/blur.js';
+import { posyBlend, rawDiff } from '../core/diff.js';
+import { diffMagnitude, poolMagnitude } from '../core/magnitude.js';
+import { TRAIL_HOLD, TRAIL_REFRESH, createTrailState, trailStep } from '../core/trails.js';
+
+/**
+ * Dev-only parity probe for the diff and blur shaders against core/diff.js
+ * and core/blur.js. Runs Posy and Raw, with and without threshold and blur,
+ * on a pair of pseudo-random frames and reports the largest per-channel
+ * difference per case. Everything except the tinted case is expected to be
+ * exactly 0: the shader does the same whole-number arithmetic as the core.
+ *
+ * Like debugEnergyParity it resizes the renderer and clears the pipeline —
+ * run it on an idle page.
+ *
+ * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
+ * @returns {{cases: {name: string, maxDiff: number}[], pass: boolean}|null}
+ */
+export function debugDiffParity(pipeline) {
+  const gl = pipeline?._glRenderer;
+  if (!gl) return null;
+
+  const width = 32;
+  const height = 16;
+  let seed = 12345;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  const prev = new Uint8ClampedArray(width * height * 4);
+  const next = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0; i < prev.length; i += 4) {
+    for (let c = 0; c < 3; c++) {
+      prev[i + c] = Math.floor(random() * 256);
+      // Mostly small differences so the threshold has pixels on both sides.
+      next[i + c] = Math.min(255, Math.max(0, prev[i + c] + Math.round((random() - 0.5) * (random() < 0.3 ? 200 : 30))));
+    }
+    prev[i + 3] = next[i + 3] = 255;
+  }
+
+  const restoreWidth = gl.width;
+  const restoreHeight = gl.height;
+  const restoreFrames = gl.ringFrames;
+  gl.setSize(width, height, 2);
+  gl.uploadPixels(new ImageData(prev, width, height));
+  gl.storeCurrent(0);
+  gl.uploadPixels(new ImageData(next, width, height));
+
+  const tint = (hex) => {
+    const rgb = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16));
+    const sum = rgb[0] + rgb[1] + rgb[2];
+    return rgb.map((v) => v / sum);
+  };
+
+  const CASES = [
+    { name: 'posy t=0', algorithm: 'posy', threshold: 0 },
+    { name: 'posy t=14', algorithm: 'posy', threshold: 14 },
+    { name: 'raw t=0', algorithm: 'raw', threshold: 0 },
+    { name: 'raw t=14', algorithm: 'raw', threshold: 14 },
+    { name: 'posy t=14 blur', algorithm: 'posy', threshold: 14, blur: true },
+    { name: 'raw t=14 blur', algorithm: 'raw', threshold: 14, blur: true },
+    { name: 'posy t=14 tinted', algorithm: 'posy', threshold: 14, tints: ['#ff8800', '#00ff40', '#2040ff'], tolerance: 1 },
+  ];
+
+  const cases = CASES.map(({ name, algorithm, threshold, blur = false, tints = ['#ff0000', '#00ff00', '#0000ff'], tolerance = 0 }) => {
+    // Core reference, built the way the worker builds it.
+    const weights = tints.map(tint);
+    const old = new Uint8ClampedArray(prev.length);
+    for (let i = 0; i < prev.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        old[i + c] = Math.round(prev[i] * weights[c][0] + prev[i + 1] * weights[c][1] + prev[i + 2] * weights[c][2]);
+      }
+      old[i + 3] = 255;
+    }
+    const core = new Uint8ClampedArray(prev.length);
+    (algorithm === 'posy' ? posyBlend : rawDiff)(next, old, core, threshold);
+    if (blur) boxBlur(core, width, height);
+
+    gl.renderDiff({
+      threshold,
+      algorithm,
+      rgbTintR: tints[0],
+      rgbTintG: tints[1],
+      rgbTintB: tints[2],
+      layers: [0, 0, 0],
+    });
+    if (blur) gl.renderBlur();
+    const gpu = gl.readDiffPixels();
+
+    let maxDiff = 0;
+    for (let i = 0; i < core.length; i++) {
+      if ((i & 3) === 3) continue;
+      maxDiff = Math.max(maxDiff, Math.abs(core[i] - gpu[i]));
+    }
+    return { name, maxDiff, pass: maxDiff <= tolerance };
+  });
+
+  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
+  pipeline.clearState();
+
+  return { cases, pass: cases.every((c) => c.pass) };
+}
+
+/**
+ * Dev-only parity probe for the trail shader against core/trails.js
+ * trailStep. Runs a short sequence of pseudo-random frames through diff and
+ * trail on both sides — Posy, Raw and colour-by-age — including one
+ * re-rendered frame, and reports the largest per-channel difference.
+ *
+ * It resizes the renderer and clears the pipeline — run it on an idle page.
+ *
+ * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
+ * @returns {{cases: {name: string, maxDiff: number}[], floatAges: boolean, pass: boolean}|null}
+ */
+export function debugTrailParity(pipeline) {
+  const gl = pipeline?._glRenderer;
+  if (!gl) return null;
+
+  const width = 32;
+  const height = 16;
+  let seed = 4242;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  // Frames that change in patches, so peaks of different ages overlap.
+  const frames = [];
+  let last = new Uint8ClampedArray(width * height * 4).fill(120);
+  for (let k = 0; k < 7; k++) {
+    const frame = new Uint8ClampedArray(last);
+    for (let i = 0; i < frame.length; i += 4) {
+      const x = (i / 4) % width;
+      if (Math.floor(x / 4) % 7 === k % 7 || random() < 0.08) {
+        for (let c = 0; c < 3; c++) frame[i + c] = Math.min(255, Math.max(0, frame[i + c] + Math.round((random() - 0.5) * 160)));
+      }
+      frame[i + 3] = 255;
+    }
+    frames.push(frame);
+    last = frame;
+  }
+  const AGE_STEPS = [0, 0.22, 0.31, 0.18, 0.4, 0.27];
+  const hexToUnit = (hex) => [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16) / 255);
+
+  const restoreWidth = gl.width;
+  const restoreHeight = gl.height;
+  const restoreFrames = gl.ringFrames;
+  gl.setSize(width, height, 2);
+
+  const CASES = [
+    { name: 'posy', algorithm: 'posy' },
+    { name: 'raw', algorithm: 'raw' },
+    { name: 'posy colour by age', algorithm: 'posy', ageColor: true },
+  ];
+  const ageNew = '#ff4400';
+  const ageOld = '#0044ff';
+
+  const cases = CASES.map(({ name, algorithm, ageColor = false }) => {
+    const isPosy = algorithm === 'posy';
+    let prev = createTrailState(width * height);
+    let next = createTrailState(width * height);
+    const shown = new Uint8ClampedArray(width * height * 4);
+    gl.clearTrails();
+    let maxDiff = 0;
+
+    for (let k = 1; k < frames.length; k++) {
+      const ageStep = AGE_STEPS[k - 1];
+      const diff = new Uint8ClampedArray(width * height * 4);
+      (isPosy ? posyBlend : rawDiff)(frames[k], frames[k - 1], diff, 10);
+
+      gl.uploadPixels(new ImageData(frames[k - 1], width, height));
+      gl.storeCurrent(0);
+      gl.uploadPixels(new ImageData(frames[k], width, height));
+      const drawDiff = () => gl.renderDiff({
+        threshold: 10, algorithm, rgbTintR: '#ff0000', rgbTintG: '#00ff00', rgbTintB: '#0000ff', layers: [0, 0, 0],
+      });
+      const trailOpts = { isPosy, ageStep, hold: TRAIL_HOLD, refresh: TRAIL_REFRESH, ageColorEnabled: ageColor, ageColorNew: ageNew, ageColorOld: ageOld };
+      const coreOpts = { isPosy, ageStep, hold: TRAIL_HOLD };
+      if (ageColor) Object.assign(coreOpts, { ageColorNew: hexToUnit(ageNew), ageColorOld: hexToUnit(ageOld) });
+
+      drawDiff();
+      gl.renderTrail({ ...trailOpts, repeat: false });
+      trailStep(prev, next, diff, shown, coreOpts);
+      if (k === 3) {
+        // Render frame 3 a second time, as a parameter change while paused would.
+        drawDiff();
+        gl.renderTrail({ ...trailOpts, repeat: true });
+        trailStep(prev, next, diff, shown, coreOpts);
+      }
+      [prev, next] = [next, prev];
+
+      const gpu = gl.readTrailPixels();
+      for (let i = 0; i < shown.length; i++) {
+        if ((i & 3) === 3) continue;
+        maxDiff = Math.max(maxDiff, Math.abs(shown[i] - gpu[i]));
+      }
+    }
+    return { name, maxDiff, pass: maxDiff <= 1 };
+  });
+
+  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
+  pipeline.clearState();
+
+  return { cases, floatAges: gl._trailAgesFloat, pass: cases.every((c) => c.pass) };
+}
+
+/**
+ * Synthetic frame pairs for the magnitude parity probe.
+ *
+ * - `wedge`: only the second frame carries a brightness wedge, so every cell
+ *   lands on a different magnitude and every deviation has the same sign.
+ * - `signed`: a bright square moves 6 px inside one cell (a positive band
+ *   where it arrives, a negative band where it left) and a checkerboard
+ *   inverts (alternate pixels deviate up and down). Averaging the signed
+ *   Posy values over a cell cancels both to ~0; only a per-pixel unsigned
+ *   magnitude sees them.
+ */
+function buildParityPatterns(width, height) {
+  const base = 96;
+  const make = (fn) => {
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        data[i] = data[i + 1] = data[i + 2] = fn(x, y);
+        data[i + 3] = 255;
+      }
+    }
+    return data;
+  };
+  const square = (x0) => (x, y) => {
+    if (x >= 64 && y >= 32) return 0; // checkerboard region, filled below
+    return x >= x0 && x < x0 + 6 && y >= 20 && y < 28 ? 216 : base;
+  };
+  const checker = (phase) => (x, y) => ((x + y + phase) % 2 === 0 ? 136 : 56);
+  const signed = (x0, phase) => (x, y) => (x >= 64 && y >= 32 ? checker(phase)(x, y) : square(x0)(x, y));
+
+  return {
+    wedge: {
+      prev: make(() => base),
+      // Motion grows to the right and is strongest at the top.
+      next: make((x, y) => base + Math.round((x / (width - 1)) * 120 * (1 - y / (height - 1)))),
+    },
+    signed: {
+      prev: make(signed(34, 0)),
+      next: make(signed(40, 1)),
+    },
+  };
+}
+
+/**
+ * Dev-only parity probe for the shared motion magnitude (originally
+ * SPEC-sonification A6).
+ *
+ * Feeds synthetic frame pairs through the CPU core math
+ * (posyBlend → diffMagnitude → poolMagnitude) and through the WebGL diff,
+ * magnitude and pooling programs, and returns both grids per pattern. Only
+ * ever called behind `import.meta.env.DEV`, so production builds tree-shake
+ * it away.
+ *
+ * For the signed pattern it also reports `signedMean`: what pooling the
+ * signed diff first would have measured, to show the cancellation the
+ * unsigned magnitude avoids.
+ *
+ * It resizes the renderer to the synthetic frame size and clears the pipeline
+ * afterwards — run it on an idle page, not mid-playback.
+ *
+ * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
+ * @param {number} [cols]
+ * @param {number} [rows]
+ * @returns {object|null} { cols, rows, core, webgl, maxDiff } for the wedge
+ *   pattern, the same fields plus signedMean under `signed`, and `pass`
+ *   (every cell of both patterns within 0.05)
+ */
+export function debugEnergyParity(pipeline, cols = 8, rows = 4) {
+  const gl = pipeline?._glRenderer;
+  if (!gl) return null;
+
+  const width = 128;
+  const height = 64;
+  const patterns = buildParityPatterns(width, height);
+
+  const restoreWidth = gl.width;
+  const restoreHeight = gl.height;
+  const restoreFrames = gl.ringFrames;
+  gl.setSize(width, height, 2);
+
+  const run = ({ prev, next }) => {
+    const diff = new Uint8ClampedArray(width * height * 4);
+    posyBlend(next, prev, diff, 0);
+    const magnitude = diffMagnitude(diff, true, new Float32Array(width * height));
+    const core = Array.from(poolMagnitude(magnitude, width, height, cols, rows));
+
+    // Previous frame into ring layer 0, then the frame under test as current.
+    gl.uploadPixels(new ImageData(prev, width, height));
+    gl.storeCurrent(0);
+    gl.uploadPixels(new ImageData(next, width, height));
+    gl.renderDiff({
+      threshold: 0,
+      algorithm: 'posy',
+      rgbTintR: '#ff0000',
+      rgbTintG: '#00ff00',
+      rgbTintB: '#0000ff',
+      layers: [0, 0, 0],
+    });
+    const grid = gl.readEnergyGrid(cols, rows);
+    const webgl = grid ? Array.from(grid) : [];
+
+    // Pool the signed values first, then take the deviation (the wrong order).
+    const signedValues = new Float32Array(width * height);
+    for (let p = 0; p < signedValues.length; p++) signedValues[p] = diff[p * 4] / 255;
+    const signedMean = Array.from(poolMagnitude(signedValues, width, height, cols, rows))
+      .map((mean) => Math.abs(mean * 255 - 128) / 127);
+
+    let maxDiff = webgl.length === core.length ? 0 : Infinity;
+    for (let i = 0; i < core.length && i < webgl.length; i++) {
+      maxDiff = Math.max(maxDiff, Math.abs(core[i] - webgl[i]));
+    }
+    return { core, webgl, signedMean, maxDiff };
+  };
+
+  const wedge = run(patterns.wedge);
+  const signed = run(patterns.signed);
+
+  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
+  pipeline.clearState();
+
+  return {
+    cols,
+    rows,
+    core: wedge.core,
+    webgl: wedge.webgl,
+    maxDiff: wedge.maxDiff,
+    signed,
+    pass: wedge.maxDiff < 0.05 && signed.maxDiff < 0.05,
+  };
+}

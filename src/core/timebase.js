@@ -33,6 +33,14 @@ export const MAX_SEEK_STEP = 0.25;
 export const SAME_FRAME_EPSILON = 1e-4;
 
 /**
+ * During playback (no seek), a stamp this little before the previous one is
+ * the clock, not the video, going backwards: frames can be stamped from two
+ * sources (a frame callback's mediaTime, or currentTime when callbacks are
+ * not arriving) that disagree by up to a frame. Treated as the same frame.
+ */
+export const MAX_CLOCK_JITTER = 0.1;
+
+/**
  * A frame gap may be widened by at most this fraction of the shortest
  * requested gap when history is thinned to fit the ring. See storeInterval.
  */
@@ -76,7 +84,8 @@ export function lookbackTime(time, frameOffset, channelSpread, channel) {
  * - `rewind`  earlier than the previous frame: a loop, a backward seek or a
  *             backward frame step. History stamped at or after the new time
  *             is now in the future and must be dropped; anything older is
- *             still valid.
+ *             still valid. (A backward step of under MAX_CLOCK_JITTER with
+ *             no seek is clock jitter and counts as `repeat`.)
  * - `jump`    too far forward to be continuous: all history is stale
  *
  * @param {number} prevTime - Stamp of the previous frame, or NaN
@@ -88,7 +97,7 @@ export function classifyStep(prevTime, time, seeked = false) {
   if (!Number.isFinite(prevTime)) return 'first';
   const delta = time - prevTime;
   if (Math.abs(delta) < SAME_FRAME_EPSILON) return 'repeat';
-  if (delta < 0) return 'rewind';
+  if (delta < 0) return !seeked && delta > -MAX_CLOCK_JITTER ? 'repeat' : 'rewind';
   return delta > (seeked ? MAX_SEEK_STEP : MAX_CONTINUOUS_GAP) ? 'jump' : 'advance';
 }
 

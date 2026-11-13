@@ -366,6 +366,31 @@ void main() {
   fragColor = vec4(clamp(result, 0.0, 1.0), 1.0);
 }`;
 
+// Shows a mode's data output instead of its picture: the magnitude in R as
+// grey, or for a vector field the direction in G/B as hue with the magnitude
+// as brightness.
+const DATA_VIEW_FRAG = `#version 300 es
+precision highp float;
+
+uniform sampler2D uData;
+uniform int uVector;
+
+in vec2 vUV;
+out vec4 fragColor;
+
+vec3 hue(float h) {
+  return clamp(abs(fract(h + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+}
+
+void main() {
+  vec4 d = texture(uData, vUV);
+  vec3 colour = vec3(d.r);
+  if (uVector == 1 && dot(d.gb, d.gb) > 1e-6) {
+    colour = hue(atan(d.b, d.g) / 6.2831853) * max(d.r, 0.15);
+  }
+  fragColor = vec4(colour, 1.0);
+}`;
+
 const COMPOSITE_FRAG = `#version 300 es
 precision highp float;
 
@@ -507,7 +532,16 @@ export class WebGLRenderer {
    * @param {HTMLCanvasElement} canvas - The output canvas element
    * @throws {Error} If WebGL2 is not available
    */
-  constructor(canvas) {
+  /**
+   * @param {HTMLCanvasElement} canvas - The output canvas element
+   * @param {{noFloat?: boolean}} [options] - noFloat behaves as a GPU without
+   *   float render targets would (for exercising that fallback)
+   */
+  constructor(canvas, options = {}) {
+    this._noFloat = Boolean(options.noFloat);
+    // Programs and render targets created on demand by mode modules
+    this._modePrograms = new Map();
+    this._modeTargets = new Map();
     const gl = canvas.getContext('webgl2', {
       alpha: false,
       antialias: false,
@@ -623,6 +657,7 @@ export class WebGLRenderer {
     this._blurProg = createProgram(gl, vs, BLUR_FRAG, { uInput: 0 });
     this._trailProg = createProgram(gl, vs, TRAIL_FRAG, { uPeaks: 0, uAges: 1, uDiff: 2 });
     this._compositeProg = createProgram(gl, vs, COMPOSITE_FRAG, { uDiff: 0, uOriginal: 1 });
+    this._dataViewProg = createProgram(gl, vs, DATA_VIEW_FRAG, { uData: 0 });
     this._copyProg = createProgram(gl, vs, COPY_FRAG, { uInput: 0 });
     this._boxPoolProg = createProgram(gl, vs, BOX_POOL_FRAG, { uInput: 0 });
     this._emaProg = createProgram(gl, vs, EMA_FRAG, { uState: 0, uFrame: 1 });
@@ -631,8 +666,8 @@ export class WebGLRenderer {
     this._magnitudeBandProg = createProgram(gl, vs, MAGNITUDE_BAND_FRAG, { uFast: 0, uSlow: 1 });
     this._poolProg = createProgram(gl, vs, POOL_FRAG, { uInput: 0 });
 
-    // The programs keep their own reference to the linked vertex shader.
-    gl.deleteShader(vs);
+    // Kept: mode modules compile their own programs against it later.
+    this._vertexShader = vs;
 
     // ── Magnify float-texture support ──
     // EMA states need render-to-float. Prefer RGBA32F (only when its
@@ -640,8 +675,8 @@ export class WebGLRenderer {
     // otherwise RGBA16F, which WebGL2 filters natively and which either
     // color-buffer extension makes renderable. With neither extension,
     // magnify mode is unavailable on the WebGL path.
-    const extFloat = gl.getExtension('EXT_color_buffer_float');
-    const extHalf = extFloat ? null : gl.getExtension('EXT_color_buffer_half_float');
+    const extFloat = this._noFloat ? null : gl.getExtension('EXT_color_buffer_float');
+    const extHalf = extFloat || this._noFloat ? null : gl.getExtension('EXT_color_buffer_half_float');
     const extFloatLinear = gl.getExtension('OES_texture_float_linear');
     this.magnifySupported = Boolean(extFloat || extHalf);
     this._magUseFullFloat = Boolean(extFloat && extFloatLinear);
@@ -770,16 +805,13 @@ export class WebGLRenderer {
   _allocateTrailState(width, height) {
     const gl = this.gl;
     const build = (floatAges) => {
-      const wasFloat = this._dataFloat;
       for (let i = 0; i < 2; i++) {
         if (this._trailPeaks[i]) gl.deleteTexture(this._trailPeaks[i]);
         if (this._trailAgeTex[i]) gl.deleteTexture(this._trailAgeTex[i]);
         if (this._trailFB[i]) gl.deleteFramebuffer(this._trailFB[i]);
 
         this._trailPeaks[i] = this._createSizedTexture(width, height);
-        this._dataFloat = floatAges;
-        this._trailAgeTex[i] = this._createDataTexture(width, height);
-        this._dataFloat = wasFloat;
+        this._trailAgeTex[i] = this._createDataTexture(width, height, floatAges);
 
         const fb = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
@@ -1231,7 +1263,7 @@ export class WebGLRenderer {
    * A single-channel data texture: half float where renderable, RGBA8
    * otherwise. Only ever read with texelFetch, so no filtering is needed.
    */
-  _createDataTexture(w, h) {
+  _createDataTexture(w, h, float = this._dataFloat) {
     const gl = this.gl;
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -1239,7 +1271,7 @@ export class WebGLRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    if (this._dataFloat) {
+    if (float) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
     } else {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -1252,32 +1284,39 @@ export class WebGLRenderer {
    * program its mode registered through `_magnitudeSource`.
    * @returns {boolean} false when the frame has no motion measurement
    */
+  /** (Re)allocate the data target, falling back to 8 bits if float will not complete. */
+  _ensureMagnitudeTarget(w, h) {
+    const gl = this.gl;
+    if (w === this._magnitudeW && h === this._magnitudeH && this._magnitudeTex) return;
+    this._cleanupTexFB(this._magnitudeTex, this._magnitudeFB);
+    this._magnitudeTex = this._createDataTexture(w, h);
+    this._magnitudeFB = createFramebuffer(gl, this._magnitudeTex);
+    if (this._dataFloat && gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      // Driver advertises float rendering but will not complete this
+      // target: fall back to 8-bit for all data textures.
+      this._dataFloat = false;
+      this._cleanupTexFB(this._magnitudeTex, this._magnitudeFB);
+      this._magnitudeTex = this._createDataTexture(w, h);
+      this._magnitudeFB = createFramebuffer(gl, this._magnitudeTex);
+      this._poolCols = 0;
+    }
+    this._magnitudeW = w;
+    this._magnitudeH = h;
+  }
+
   _renderMagnitude() {
     const gl = this.gl;
     const source = this._magnitudeSource;
     if (!source) return false;
+    // A mode that draws its own data has already filled the target.
+    if (source === 'filled') return true;
 
     const isBand = source === 'band';
     const w = isBand ? this._magW : this.width;
     const h = isBand ? this._magH : this.height;
     if (w <= 0 || h <= 0) return false;
 
-    if (w !== this._magnitudeW || h !== this._magnitudeH || !this._magnitudeTex) {
-      this._cleanupTexFB(this._magnitudeTex, this._magnitudeFB);
-      this._magnitudeTex = this._createDataTexture(w, h);
-      this._magnitudeFB = createFramebuffer(gl, this._magnitudeTex);
-      if (this._dataFloat && gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
-        // Driver advertises float rendering but will not complete this
-        // target: fall back to 8-bit for all data textures.
-        this._dataFloat = false;
-        this._cleanupTexFB(this._magnitudeTex, this._magnitudeFB);
-        this._magnitudeTex = this._createDataTexture(w, h);
-        this._magnitudeFB = createFramebuffer(gl, this._magnitudeTex);
-        this._poolCols = 0;
-      }
-      this._magnitudeW = w;
-      this._magnitudeH = h;
-    }
+    this._ensureMagnitudeTarget(w, h);
 
     if (isBand) {
       const { prog, u } = this._magnitudeBandProg;
@@ -1365,6 +1404,130 @@ export class WebGLRenderer {
     return grid;
   }
 
+  // ── For mode modules (app/modes/) ───────────────────────────────
+
+  /** Whether half-float render targets work here (feature-detected). */
+  get floatTargets() {
+    return this._dataFloat;
+  }
+
+  /** The current frame at the processing size (sampler2D). */
+  get currentTexture() { return this._curTex; }
+
+  /** Past frames (sampler2DArray); layers come from the pipeline's FrameRing. */
+  get ringTexture() { return this._ringTex; }
+
+  /**
+   * Where a mode draws its picture when it wants the shared trail and
+   * diff/overlay/glow compositing to follow: an RGBA8 image in Raw space
+   * (0 = no motion) or Posy space (128 = no motion).
+   */
+  get diffFramebuffer() { return this._diffFB; }
+
+  /**
+   * A program compiled once per renderer and cached under `key`.
+   * @param {string} key
+   * @param {string} fragSrc - GLSL ES 3.00 fragment shader; gets `in vec2 vUV`
+   * @param {Record<string, number>} [samplers] - sampler uniform → texture unit
+   * @returns {{prog: WebGLProgram, u: Record<string, WebGLUniformLocation>}}
+   */
+  program(key, fragSrc, samplers) {
+    let program = this._modePrograms.get(key);
+    if (!program) {
+      program = createProgram(this.gl, this._vertexShader, fragSrc, samplers);
+      this._modePrograms.set(key, program);
+    }
+    return program;
+  }
+
+  /**
+   * A render target owned by a mode, kept under `key` and rebuilt when the
+   * size changes. `fresh` is true until the caller clears it (new or
+   * rebuilt: its contents are undefined).
+   *
+   * @param {string} key
+   * @param {number} width
+   * @param {number} height
+   * @param {{float?: boolean}} [options] - half float instead of RGBA8
+   * @returns {{tex: WebGLTexture, fb: WebGLFramebuffer, width: number, height: number, fresh: boolean}}
+   */
+  target(key, width, height, options = {}) {
+    let target = this._modeTargets.get(key);
+    if (!target || target.width !== width || target.height !== height) {
+      if (target) this._cleanupTexFB(target.tex, target.fb);
+      const tex = options.float ? this._createDataTexture(width, height, true) : this._createSizedTexture(width, height);
+      if (!options.float) {
+        // Mode targets are read with texelFetch; keep them unfiltered.
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+      }
+      target = { tex, fb: createFramebuffer(this.gl, tex), width, height, fresh: true };
+      this._modeTargets.set(key, target);
+    }
+    return target;
+  }
+
+  /** Bind a texture to a unit: `array` for the frame ring. */
+  bind(unit, texture, array = false) {
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE0 + unit);
+    gl.bindTexture(array ? gl.TEXTURE_2D_ARRAY : gl.TEXTURE_2D, texture);
+  }
+
+  /** Draw the fullscreen quad with the program in use into a framebuffer (null = canvas). */
+  draw(framebuffer, width = this.width, height = this.height) {
+    this._drawQuadTo(framebuffer, width, height);
+  }
+
+  /**
+   * The data target for a mode that fills it itself: draw one RGBA value per
+   * pixel into the returned framebuffer (R = magnitude 0..1, G/B mode-specific)
+   * before the frame ends. Built-in modes instead register a source that is
+   * rendered lazily (see _renderMagnitude).
+   *
+   * @returns {WebGLFramebuffer}
+   */
+  dataFramebuffer(width = this.width, height = this.height) {
+    this._ensureMagnitudeTarget(width, height);
+    this._magnitudeSource = 'filled';
+    return this._magnitudeFB;
+  }
+
+  /** Show the data target on the canvas (display mode 'data'). */
+  renderDataView(kind) {
+    if (!this._renderMagnitude()) return;
+    const gl = this.gl;
+    const { prog, u } = this._dataViewProg;
+    gl.useProgram(prog);
+    this.bind(0, this._magnitudeTex);
+    gl.uniform1i(u.uVector, kind === 'vector' ? 1 : 0);
+    this._drawQuadTo(null, this.width, this.height);
+  }
+
+  /**
+   * Read the data target back: RGBA floats, row 0 at the top.
+   * @returns {{width: number, height: number, values: Float32Array}|null}
+   */
+  readDataField() {
+    if (!this._renderMagnitude()) return null;
+    const gl = this.gl;
+    const w = this._magnitudeW;
+    const h = this._magnitudeH;
+    const raw = this._dataFloat ? new Float32Array(w * h * 4) : new Uint8Array(w * h * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this._magnitudeFB);
+    gl.readPixels(0, 0, w, h, gl.RGBA, this._dataFloat ? gl.FLOAT : gl.UNSIGNED_BYTE, raw);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    const values = new Float32Array(w * h * 4);
+    const scale = this._dataFloat ? 1 : 1 / 255;
+    for (let y = 0; y < h; y++) {
+      const from = (h - 1 - y) * w * 4;
+      const to = y * w * 4;
+      for (let i = 0; i < w * 4; i++) values[to + i] = raw[from + i] * scale;
+    }
+    return { width: w, height: h, values };
+  }
+
   /**
    * Render a fallback solid color when no diff data is available.
    * @param {string} algorithm - 'posy' | 'raw'
@@ -1424,6 +1587,11 @@ export class WebGLRenderer {
      this._magnitudeFB, this._poolHFB, this._poolFB].forEach(fb => {
       if (fb) gl.deleteFramebuffer(fb);
     });
+
+    for (const program of this._modePrograms.values()) gl.deleteProgram(program.prog);
+    for (const target of this._modeTargets.values()) this._cleanupTexFB(target.tex, target.fb);
+    if (this._dataViewProg) gl.deleteProgram(this._dataViewProg.prog);
+    if (this._vertexShader) gl.deleteShader(this._vertexShader);
 
     // VAO
     if (this._quadVAO) gl.deleteVertexArray(this._quadVAO);

@@ -2,19 +2,14 @@ import PipelineWorker from './pipeline.worker.js?worker';
 import { WebGLRenderer } from './renderer.webgl.js';
 import { buildSourceProfile } from './source-profile.js';
 import { FrameRing, ringCapacity } from '../core/buffer.js';
-import { emaAlpha } from '../core/magnify.js';
 import {
   classifyStep,
   frameDeltaMs,
   framesToSeconds,
-  lookbackTime,
   shouldStore,
   storeInterval,
 } from '../core/timebase.js';
-import { TRAIL_HOLD, TRAIL_REFRESH, createTrailState, trailStep } from '../core/trails.js';
-import { boxBlur } from '../core/blur.js';
-import { posyBlend, rawDiff } from '../core/diff.js';
-import { diffMagnitude, poolMagnitude } from '../core/magnitude.js';
+import { defaultParams, getMode } from './modes/index.js';
 
 const DEFAULT_PROCESS_WIDTH = 640;
 
@@ -80,26 +75,22 @@ export class Pipeline {
 
     this.hls = null;
 
-    this.params = {
-      frameOffset: 5,
-      threshold: 20,
-      trailLength: 5,
-      channelSpread: 0,
-      algorithm: 'posy',
-      blurEnabled: false,
-      ageColorEnabled: false,
-      rgbTintR: '#ff0000',
-      rgbTintG: '#00ff00',
-      rgbTintB: '#0000ff',
-      ageColorNew: '#ff4400',
-      ageColorOld: '#0044ff',
-      fpsCap: null,
-      magAmp: 15,
-      magFreqLow: 0.7,
-      magFreqHigh: 2.0,
-      magChroma: 1.0,
-      magDownsample: 2,
+    // Every mode's params with their defaults (see modes/index.js), plus the
+    // processing fps cap, which belongs to no mode.
+    this.params = { ...defaultParams(), fpsCap: null };
+
+    /** Display mode for modes that composite: 'diff' | 'overlay' | 'glow' | 'data' */
+    this._currentMode = 'diff';
+    // Per-frame context handed to the active mode's render(); reused.
+    this._frame = {
+      gl: null, ring: null, time: 0, step: 'first', dtMs: 0, trailAgeStep: 0,
+      params: this.params, display: 'diff', layers: [0, 0, 0],
     };
+    // Why the active mode cannot run here, if it cannot (reported once)
+    this._unavailable = null;
+
+    /** @type {((message: string, type: string) => void)|null} */
+    this.onStatus = null;
 
     this.onResult = null;
   }
@@ -107,12 +98,20 @@ export class Pipeline {
   /**
    * @param {HTMLVideoElement} videoEl
    * @param {HTMLCanvasElement} outputCanvasEl
-   * @param {{forceCanvas2D?: boolean}} [options] - forceCanvas2D skips WebGL2
-   *   and runs the worker fallback (for testing that path on a capable GPU)
+   * @param {object} [options]
+   * @param {boolean} [options.forceCanvas2D] - skip WebGL2 and run the worker
+   *   fallback (for testing that path on a capable GPU)
+   * @param {boolean} [options.noFloat] - behave as a GPU without float render
+   *   targets would (for testing that fallback)
+   * @param {number} [options.ringBudgetBytes] - memory budget for the frame
+   *   ring; phones get a smaller one
+   * @param {number} [options.processWidth] - initial processing width
    */
   init(videoEl, outputCanvasEl, options = {}) {
     this._videoEl = videoEl;
     this._outputCanvas = outputCanvasEl;
+    this._ringOptions = options.ringBudgetBytes ? { budgetBytes: options.ringBudgetBytes } : undefined;
+    if (options.processWidth) this._processWidth = options.processWidth;
     // 2D capture canvas: the worker fallback's frame source, and how
     // sampleBursts reads pixels for auto-configure on either path.
     this._capCanvas = document.createElement('canvas');
@@ -126,7 +125,7 @@ export class Pipeline {
     // Try WebGL2 first
     try {
       if (options.forceCanvas2D) throw new Error('Canvas 2D forced by ?renderer=canvas2d');
-      this._glRenderer = new WebGLRenderer(outputCanvasEl);
+      this._glRenderer = new WebGLRenderer(outputCanvasEl, { noFloat: options.noFloat });
       this._useWebGL = true;
       console.log('Renderer: WebGL2');
     } catch (e) {
@@ -256,45 +255,34 @@ export class Pipeline {
    * @returns {{frames: number, megabytes: number}}
    */
   getHistoryInfo() {
-    const frames = this._useWebGL ? this._ring.capacity : ringCapacity(this.width, this.height);
+    const frames = this._useWebGL ? this._ring.capacity : ringCapacity(this.width, this.height, this._ringOptions);
     return { frames, megabytes: (frames * this.width * this.height * 4) / (1024 * 1024) };
   }
 
+  /**
+   * Update runtime params. Unknown keys are ignored, so a preset saved by a
+   * build with more modes loads without harm.
+   */
   setParams(params) {
-    if (params.frameOffset !== undefined) this.params.frameOffset = params.frameOffset;
-    if (params.threshold !== undefined) this.params.threshold = params.threshold;
-    if (params.trailLength !== undefined) this.params.trailLength = params.trailLength;
-    if (params.channelSpread !== undefined) this.params.channelSpread = params.channelSpread;
-    if (params.algorithm !== undefined && params.algorithm !== this.params.algorithm) {
-      const wasMagnify = this.params.algorithm === 'magnify';
-      this.params.algorithm = params.algorithm;
-      if (params.algorithm === 'magnify') {
+    const previous = this.params.algorithm;
+    for (const key of Object.keys(params)) {
+      if (!(key in this.params) || params[key] === undefined) continue;
+      if (key === 'magDownsample' && params[key] !== this.params[key]) {
+        this.params[key] = params[key];
         this.resetMagnifyState();
-      } else if (wasMagnify) {
-        // Trails were not fed while magnifying; drop the stale ring
-        // instead of showing pre-magnify ghosts.
-        if (this._useWebGL && this._glRenderer) this._glRenderer.clearTrails();
-        if (this._worker) this._worker.postMessage({ type: 'clearTrails' });
+        continue;
       }
+      this.params[key] = params[key];
     }
-    if (params.blurEnabled !== undefined) this.params.blurEnabled = params.blurEnabled;
-    if (params.ageColorEnabled !== undefined) this.params.ageColorEnabled = params.ageColorEnabled;
-    if (params.rgbTintR !== undefined) this.params.rgbTintR = params.rgbTintR;
-    if (params.rgbTintG !== undefined) this.params.rgbTintG = params.rgbTintG;
-    if (params.rgbTintB !== undefined) this.params.rgbTintB = params.rgbTintB;
-    if (params.ageColorNew !== undefined) this.params.ageColorNew = params.ageColorNew;
-    if (params.ageColorOld !== undefined) this.params.ageColorOld = params.ageColorOld;
-    if (params.fpsCap !== undefined && params.fpsCap !== this.params.fpsCap) {
-      this.params.fpsCap = params.fpsCap;
-      this.logProcessingConfig();
-    }
-    if (params.magAmp !== undefined) this.params.magAmp = params.magAmp;
-    if (params.magFreqLow !== undefined) this.params.magFreqLow = params.magFreqLow;
-    if (params.magFreqHigh !== undefined) this.params.magFreqHigh = params.magFreqHigh;
-    if (params.magChroma !== undefined) this.params.magChroma = params.magChroma;
-    if (params.magDownsample !== undefined && params.magDownsample !== this.params.magDownsample) {
-      this.params.magDownsample = params.magDownsample;
+
+    if (this.params.algorithm !== previous) {
+      this.params.algorithm = getMode(this.params.algorithm).id;
+      // Every mode owns the trail and the temporal state while it runs:
+      // start the new one clean instead of showing the last one's leftovers.
+      if (this._useWebGL && this._glRenderer) this._glRenderer.clearTrails();
+      if (this._worker) this._worker.postMessage({ type: 'clearTrails' });
       this.resetMagnifyState();
+      this._unavailable = null;
     }
   }
 
@@ -360,7 +348,7 @@ export class Pipeline {
       // The ring is sized from a memory budget, so it gets shorter as the
       // processing resolution goes up.
       const frames = this._glRenderer.setSize(
-        this.width, this.height, ringCapacity(this.width, this.height),
+        this.width, this.height, ringCapacity(this.width, this.height, this._ringOptions),
       );
       if (frames !== this._ring.capacity) {
         this._ring = new FrameRing(frames);
@@ -537,18 +525,24 @@ export class Pipeline {
     if (step !== 'repeat') this._lastDtMs = dtMs;
     const trailAgeStep = this._trailAgeStep();
 
+    const mode = getMode(this.params.algorithm);
     if (this._useWebGL) {
       this._applyStepWebGL(step, time);
-      if (this.params.algorithm === 'magnify') {
-        this._processMagnifyWebGL(video, time, step, dtMs);
-      } else {
-        this._processWebGL(video, time, step, trailAgeStep);
-      }
-    } else if (this.params.algorithm === 'magnify') {
+      this._renderWebGL(video, mode, time, step, dtMs, trailAgeStep);
+    } else if (!mode.worker) {
+      this._reportUnavailable(`${mode.label} needs WebGL2, which this browser did not provide`);
+    } else if (mode.id === 'magnify') {
       this._processMagnifyWorker(video, time, step, dtMs);
     } else {
       this._processWorker(video, time, step, trailAgeStep);
     }
+  }
+
+  /** Tell the UI once why the active mode shows nothing. */
+  _reportUnavailable(reason) {
+    if (this._unavailable === reason) return;
+    this._unavailable = reason;
+    if (this.onStatus) this.onStatus(reason, 'error');
   }
 
   /**
@@ -593,78 +587,42 @@ export class Pipeline {
     this._glRenderer.clearTrails();
   }
 
-  _processWebGL(video, time, step, trailAgeStep) {
+  _renderWebGL(video, mode, time, step, dtMs, trailAgeStep) {
     const gl = this._glRenderer;
     // Video element → GPU texture; no readback, nothing kept on the JS heap.
     if (!gl.captureVideo(video)) return;
 
-    const {
-      frameOffset,
-      threshold,
-      channelSpread,
-      algorithm,
-      blurEnabled,
-      ageColorEnabled,
-      rgbTintR,
-      rgbTintG,
-      rgbTintB,
-      ageColorNew,
-      ageColorOld,
-    } = this.params;
-
-    // Each channel compares against the stored frame nearest its lookback
-    // time, considering only frames older than this one. While the ring is
-    // still filling the gap is shorter than asked for, never longer.
-    const ring = this._ring;
-    const ageR = ring.nearest(lookbackTime(time, frameOffset, channelSpread, 0), time);
-    const ageG = ring.nearest(lookbackTime(time, frameOffset, channelSpread, 1), time);
-    const ageB = ring.nearest(lookbackTime(time, frameOffset, channelSpread, 2), time);
-
-    if (ageR < 0 || ageG < 0 || ageB < 0) {
-      // Nothing to compare against yet — show blank
-      gl.renderBlank(algorithm, ageColorEnabled);
+    if (mode.needsFloat && !gl.floatTargets) {
+      gl.renderBlank('raw', false);
       this._hasMagnitude = false;
+      this._reportUnavailable(`${mode.label} needs float render targets, which this GPU lacks`);
     } else {
-      const layers = this._ringLayers;
-      layers[0] = ring.slotAt(ageR);
-      layers[1] = ring.slotAt(ageG);
-      layers[2] = ring.slotAt(ageB);
-
-      // Run diff shader → _diffFB
-      gl.renderDiff({ threshold, algorithm, rgbTintR, rgbTintG, rgbTintB, layers });
-
-      // Optional blur
-      if (blurEnabled) {
-        gl.renderBlur();
-      }
-
-      // Advance the trail by this diff → trail image. The same frame
-      // rendered again (a parameter change while paused) is recomputed from
-      // the state before it rather than stacked on top.
-      gl.renderTrail({
-        isPosy: algorithm === 'posy',
-        ageStep: trailAgeStep,
-        hold: TRAIL_HOLD,
-        refresh: TRAIL_REFRESH,
-        repeat: step === 'repeat',
-        ageColorEnabled,
-        ageColorNew,
-        ageColorOld,
-      });
-
-      // Composite to canvas
-      gl.renderComposite(this._currentMode || 'diff', algorithm, ageColorEnabled);
-      this._hasMagnitude = true;
+      const frame = this._frame;
+      frame.gl = gl;
+      frame.ring = this._ring;
+      frame.time = time;
+      frame.step = step;
+      frame.dtMs = dtMs;
+      frame.trailAgeStep = trailAgeStep;
+      frame.params = this.params;
+      frame.display = this._currentMode;
+      this._hasMagnitude = mode.render(frame) !== false;
+      if (this._hasMagnitude && this._currentMode === 'data') gl.renderDataView(mode.data.kind);
     }
 
-    this._storeCurrentFrame(time, step);
+    // Keep the ring warm in every mode so switching modes has history.
+    this._storeCurrentFrame(time, step, mode);
   }
 
   /** Keep the frame just captured as history for the frames that follow. */
-  _storeCurrentFrame(time, step) {
+  _storeCurrentFrame(time, step, mode) {
     if (step === 'repeat') return;
+    // How far back the mode reads decides how densely history is kept.
     const { frameOffset, channelSpread } = this.params;
-    const interval = storeInterval(frameOffset, channelSpread, this._ring.capacity);
+    const [shortest, longest] = mode.lookback
+      ? mode.lookback(this.params)
+      : [frameOffset, frameOffset + channelSpread * 2];
+    const interval = storeInterval(shortest, (longest - shortest) / 2, this._ring.capacity);
     if (!shouldStore(this._lastStoredTime, time, interval)) return;
 
     this._glRenderer.storeCurrent(this._ring.push(time));
@@ -672,45 +630,28 @@ export class Pipeline {
   }
 
   /**
-   * Set the current display mode for WebGL composite.
-   * Called from main.js to keep the mode in sync.
-   * @param {string} mode - 'diff' | 'overlay' | 'glow'
+   * Display mode: 'diff' | 'overlay' | 'glow', or 'data' to look at the
+   * active mode's data output instead of its picture (WebGL only).
+   * @param {string} mode
    */
   setMode(mode) {
     this._currentMode = mode;
   }
 
-  // ── Magnify: WebGL path ─────────────────────────────────────
-
-  _processMagnifyWebGL(video, time, step, dtMs) {
-    const gl = this._glRenderer;
-    if (!gl.captureVideo(video)) return;
-
-    // Keep the lookback ring warm so switching back to Posy/Raw behaves.
-    this._storeCurrentFrame(time, step);
-    this._hasMagnitude = false;
-
-    if (!gl.magnifySupported) {
-      // The UI disables the magnify option when unsupported; if we still
-      // get here, show a blank frame rather than rendering garbage.
-      gl.renderBlank(this.params.algorithm, false);
-      return;
-    }
-
-    // dtMs is media time, so the pass band is in Hz of the scene at any
-    // playback rate; a repeated frame advances the filters by nothing.
-    const ok = gl.renderMagnify({
-      alphaFast: emaAlpha(this.params.magFreqHigh, dtMs),
-      alphaSlow: emaAlpha(this.params.magFreqLow, dtMs),
-      amp: this.params.magAmp,
-      chroma: this.params.magChroma,
-      downsample: this.params.magDownsample,
-      blurEnabled: this.params.blurEnabled,
-    });
-    if (!ok) {
-      gl.renderBlank(this.params.algorithm, false);
-    }
-    this._hasMagnitude = ok;
+  /**
+   * The active mode's result as data: one RGBA float per pixel at the data
+   * target's size, row 0 at the top. R is the mode's magnitude (0..1), G and
+   * B are mode-specific (see the mode's `data`). WebGL only; reads back from
+   * the GPU, so it is for tools and experiments, not per-frame use.
+   *
+   * @returns {{kind: string, what: string, width: number, height: number, values: Float32Array}|null}
+   */
+  readData() {
+    if (!this._useWebGL || !this._glRenderer || !this._hasMagnitude) return null;
+    const field = this._glRenderer.readDataField();
+    if (!field) return null;
+    const { kind, what } = getMode(this.params.algorithm).data;
+    return { kind, what, ...field };
   }
 
   // ── Magnify: Worker path (fallback) ─────────────────────────
@@ -756,6 +697,7 @@ export class Pipeline {
       time,
       step,
       trailAgeStep,
+      ringBudgetBytes: this._ringOptions?.budgetBytes,
       params: { ...this.params },
       width: this.width,
       height: this.height,
@@ -763,336 +705,4 @@ export class Pipeline {
       energyRows: this._energyRows,
     }, [pixels.buffer]);
   }
-}
-
-/**
- * Dev-only parity probe for the diff and blur shaders against core/diff.js
- * and core/blur.js. Runs Posy and Raw, with and without threshold and blur,
- * on a pair of pseudo-random frames and reports the largest per-channel
- * difference per case. Everything except the tinted case is expected to be
- * exactly 0: the shader does the same whole-number arithmetic as the core.
- *
- * Like debugEnergyParity it resizes the renderer and clears the pipeline —
- * run it on an idle page.
- *
- * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
- * @returns {{cases: {name: string, maxDiff: number}[], pass: boolean}|null}
- */
-export function debugDiffParity(pipeline) {
-  const gl = pipeline?._glRenderer;
-  if (!gl) return null;
-
-  const width = 32;
-  const height = 16;
-  let seed = 12345;
-  const random = () => {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    return seed / 4294967296;
-  };
-  const prev = new Uint8ClampedArray(width * height * 4);
-  const next = new Uint8ClampedArray(width * height * 4);
-  for (let i = 0; i < prev.length; i += 4) {
-    for (let c = 0; c < 3; c++) {
-      prev[i + c] = Math.floor(random() * 256);
-      // Mostly small differences so the threshold has pixels on both sides.
-      next[i + c] = Math.min(255, Math.max(0, prev[i + c] + Math.round((random() - 0.5) * (random() < 0.3 ? 200 : 30))));
-    }
-    prev[i + 3] = next[i + 3] = 255;
-  }
-
-  const restoreWidth = gl.width;
-  const restoreHeight = gl.height;
-  const restoreFrames = gl.ringFrames;
-  gl.setSize(width, height, 2);
-  gl.uploadPixels(new ImageData(prev, width, height));
-  gl.storeCurrent(0);
-  gl.uploadPixels(new ImageData(next, width, height));
-
-  const tint = (hex) => {
-    const rgb = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16));
-    const sum = rgb[0] + rgb[1] + rgb[2];
-    return rgb.map((v) => v / sum);
-  };
-
-  const CASES = [
-    { name: 'posy t=0', algorithm: 'posy', threshold: 0 },
-    { name: 'posy t=14', algorithm: 'posy', threshold: 14 },
-    { name: 'raw t=0', algorithm: 'raw', threshold: 0 },
-    { name: 'raw t=14', algorithm: 'raw', threshold: 14 },
-    { name: 'posy t=14 blur', algorithm: 'posy', threshold: 14, blur: true },
-    { name: 'raw t=14 blur', algorithm: 'raw', threshold: 14, blur: true },
-    { name: 'posy t=14 tinted', algorithm: 'posy', threshold: 14, tints: ['#ff8800', '#00ff40', '#2040ff'], tolerance: 1 },
-  ];
-
-  const cases = CASES.map(({ name, algorithm, threshold, blur = false, tints = ['#ff0000', '#00ff00', '#0000ff'], tolerance = 0 }) => {
-    // Core reference, built the way the worker builds it.
-    const weights = tints.map(tint);
-    const old = new Uint8ClampedArray(prev.length);
-    for (let i = 0; i < prev.length; i += 4) {
-      for (let c = 0; c < 3; c++) {
-        old[i + c] = Math.round(prev[i] * weights[c][0] + prev[i + 1] * weights[c][1] + prev[i + 2] * weights[c][2]);
-      }
-      old[i + 3] = 255;
-    }
-    const core = new Uint8ClampedArray(prev.length);
-    (algorithm === 'posy' ? posyBlend : rawDiff)(next, old, core, threshold);
-    if (blur) boxBlur(core, width, height);
-
-    gl.renderDiff({
-      threshold,
-      algorithm,
-      rgbTintR: tints[0],
-      rgbTintG: tints[1],
-      rgbTintB: tints[2],
-      layers: [0, 0, 0],
-    });
-    if (blur) gl.renderBlur();
-    const gpu = gl.readDiffPixels();
-
-    let maxDiff = 0;
-    for (let i = 0; i < core.length; i++) {
-      if ((i & 3) === 3) continue;
-      maxDiff = Math.max(maxDiff, Math.abs(core[i] - gpu[i]));
-    }
-    return { name, maxDiff, pass: maxDiff <= tolerance };
-  });
-
-  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
-  pipeline.clearState();
-
-  return { cases, pass: cases.every((c) => c.pass) };
-}
-
-/**
- * Dev-only parity probe for the trail shader against core/trails.js
- * trailStep. Runs a short sequence of pseudo-random frames through diff and
- * trail on both sides — Posy, Raw and colour-by-age — including one
- * re-rendered frame, and reports the largest per-channel difference.
- *
- * It resizes the renderer and clears the pipeline — run it on an idle page.
- *
- * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
- * @returns {{cases: {name: string, maxDiff: number}[], floatAges: boolean, pass: boolean}|null}
- */
-export function debugTrailParity(pipeline) {
-  const gl = pipeline?._glRenderer;
-  if (!gl) return null;
-
-  const width = 32;
-  const height = 16;
-  let seed = 4242;
-  const random = () => {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    return seed / 4294967296;
-  };
-  // Frames that change in patches, so peaks of different ages overlap.
-  const frames = [];
-  let last = new Uint8ClampedArray(width * height * 4).fill(120);
-  for (let k = 0; k < 7; k++) {
-    const frame = new Uint8ClampedArray(last);
-    for (let i = 0; i < frame.length; i += 4) {
-      const x = (i / 4) % width;
-      if (Math.floor(x / 4) % 7 === k % 7 || random() < 0.08) {
-        for (let c = 0; c < 3; c++) frame[i + c] = Math.min(255, Math.max(0, frame[i + c] + Math.round((random() - 0.5) * 160)));
-      }
-      frame[i + 3] = 255;
-    }
-    frames.push(frame);
-    last = frame;
-  }
-  const AGE_STEPS = [0, 0.22, 0.31, 0.18, 0.4, 0.27];
-  const hexToUnit = (hex) => [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16) / 255);
-
-  const restoreWidth = gl.width;
-  const restoreHeight = gl.height;
-  const restoreFrames = gl.ringFrames;
-  gl.setSize(width, height, 2);
-
-  const CASES = [
-    { name: 'posy', algorithm: 'posy' },
-    { name: 'raw', algorithm: 'raw' },
-    { name: 'posy colour by age', algorithm: 'posy', ageColor: true },
-  ];
-  const ageNew = '#ff4400';
-  const ageOld = '#0044ff';
-
-  const cases = CASES.map(({ name, algorithm, ageColor = false }) => {
-    const isPosy = algorithm === 'posy';
-    let prev = createTrailState(width * height);
-    let next = createTrailState(width * height);
-    const shown = new Uint8ClampedArray(width * height * 4);
-    gl.clearTrails();
-    let maxDiff = 0;
-
-    for (let k = 1; k < frames.length; k++) {
-      const ageStep = AGE_STEPS[k - 1];
-      const diff = new Uint8ClampedArray(width * height * 4);
-      (isPosy ? posyBlend : rawDiff)(frames[k], frames[k - 1], diff, 10);
-
-      gl.uploadPixels(new ImageData(frames[k - 1], width, height));
-      gl.storeCurrent(0);
-      gl.uploadPixels(new ImageData(frames[k], width, height));
-      const drawDiff = () => gl.renderDiff({
-        threshold: 10, algorithm, rgbTintR: '#ff0000', rgbTintG: '#00ff00', rgbTintB: '#0000ff', layers: [0, 0, 0],
-      });
-      const trailOpts = { isPosy, ageStep, hold: TRAIL_HOLD, refresh: TRAIL_REFRESH, ageColorEnabled: ageColor, ageColorNew: ageNew, ageColorOld: ageOld };
-      const coreOpts = { isPosy, ageStep, hold: TRAIL_HOLD };
-      if (ageColor) Object.assign(coreOpts, { ageColorNew: hexToUnit(ageNew), ageColorOld: hexToUnit(ageOld) });
-
-      drawDiff();
-      gl.renderTrail({ ...trailOpts, repeat: false });
-      trailStep(prev, next, diff, shown, coreOpts);
-      if (k === 3) {
-        // Render frame 3 a second time, as a parameter change while paused would.
-        drawDiff();
-        gl.renderTrail({ ...trailOpts, repeat: true });
-        trailStep(prev, next, diff, shown, coreOpts);
-      }
-      [prev, next] = [next, prev];
-
-      const gpu = gl.readTrailPixels();
-      for (let i = 0; i < shown.length; i++) {
-        if ((i & 3) === 3) continue;
-        maxDiff = Math.max(maxDiff, Math.abs(shown[i] - gpu[i]));
-      }
-    }
-    return { name, maxDiff, pass: maxDiff <= 1 };
-  });
-
-  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
-  pipeline.clearState();
-
-  return { cases, floatAges: gl._trailAgesFloat, pass: cases.every((c) => c.pass) };
-}
-
-/**
- * Synthetic frame pairs for the magnitude parity probe.
- *
- * - `wedge`: only the second frame carries a brightness wedge, so every cell
- *   lands on a different magnitude and every deviation has the same sign.
- * - `signed`: a bright square moves 6 px inside one cell (a positive band
- *   where it arrives, a negative band where it left) and a checkerboard
- *   inverts (alternate pixels deviate up and down). Averaging the signed
- *   Posy values over a cell cancels both to ~0; only a per-pixel unsigned
- *   magnitude sees them.
- */
-function buildParityPatterns(width, height) {
-  const base = 96;
-  const make = (fn) => {
-    const data = new Uint8ClampedArray(width * height * 4);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const i = (y * width + x) * 4;
-        data[i] = data[i + 1] = data[i + 2] = fn(x, y);
-        data[i + 3] = 255;
-      }
-    }
-    return data;
-  };
-  const square = (x0) => (x, y) => {
-    if (x >= 64 && y >= 32) return 0; // checkerboard region, filled below
-    return x >= x0 && x < x0 + 6 && y >= 20 && y < 28 ? 216 : base;
-  };
-  const checker = (phase) => (x, y) => ((x + y + phase) % 2 === 0 ? 136 : 56);
-  const signed = (x0, phase) => (x, y) => (x >= 64 && y >= 32 ? checker(phase)(x, y) : square(x0)(x, y));
-
-  return {
-    wedge: {
-      prev: make(() => base),
-      // Motion grows to the right and is strongest at the top.
-      next: make((x, y) => base + Math.round((x / (width - 1)) * 120 * (1 - y / (height - 1)))),
-    },
-    signed: {
-      prev: make(signed(34, 0)),
-      next: make(signed(40, 1)),
-    },
-  };
-}
-
-/**
- * Dev-only parity probe for the shared motion magnitude (originally
- * SPEC-sonification A6).
- *
- * Feeds synthetic frame pairs through the CPU core math
- * (posyBlend → diffMagnitude → poolMagnitude) and through the WebGL diff,
- * magnitude and pooling programs, and returns both grids per pattern. Only
- * ever called behind `import.meta.env.DEV`, so production builds tree-shake
- * it away.
- *
- * For the signed pattern it also reports `signedMean`: what pooling the
- * signed diff first would have measured, to show the cancellation the
- * unsigned magnitude avoids.
- *
- * It resizes the renderer to the synthetic frame size and clears the pipeline
- * afterwards — run it on an idle page, not mid-playback.
- *
- * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
- * @param {number} [cols]
- * @param {number} [rows]
- * @returns {object|null} { cols, rows, core, webgl, maxDiff } for the wedge
- *   pattern, the same fields plus signedMean under `signed`, and `pass`
- *   (every cell of both patterns within 0.05)
- */
-export function debugEnergyParity(pipeline, cols = 8, rows = 4) {
-  const gl = pipeline?._glRenderer;
-  if (!gl) return null;
-
-  const width = 128;
-  const height = 64;
-  const patterns = buildParityPatterns(width, height);
-
-  const restoreWidth = gl.width;
-  const restoreHeight = gl.height;
-  const restoreFrames = gl.ringFrames;
-  gl.setSize(width, height, 2);
-
-  const run = ({ prev, next }) => {
-    const diff = new Uint8ClampedArray(width * height * 4);
-    posyBlend(next, prev, diff, 0);
-    const magnitude = diffMagnitude(diff, true, new Float32Array(width * height));
-    const core = Array.from(poolMagnitude(magnitude, width, height, cols, rows));
-
-    // Previous frame into ring layer 0, then the frame under test as current.
-    gl.uploadPixels(new ImageData(prev, width, height));
-    gl.storeCurrent(0);
-    gl.uploadPixels(new ImageData(next, width, height));
-    gl.renderDiff({
-      threshold: 0,
-      algorithm: 'posy',
-      rgbTintR: '#ff0000',
-      rgbTintG: '#00ff00',
-      rgbTintB: '#0000ff',
-      layers: [0, 0, 0],
-    });
-    const grid = gl.readEnergyGrid(cols, rows);
-    const webgl = grid ? Array.from(grid) : [];
-
-    // Pool the signed values first, then take the deviation (the wrong order).
-    const signedValues = new Float32Array(width * height);
-    for (let p = 0; p < signedValues.length; p++) signedValues[p] = diff[p * 4] / 255;
-    const signedMean = Array.from(poolMagnitude(signedValues, width, height, cols, rows))
-      .map((mean) => Math.abs(mean * 255 - 128) / 127);
-
-    let maxDiff = webgl.length === core.length ? 0 : Infinity;
-    for (let i = 0; i < core.length && i < webgl.length; i++) {
-      maxDiff = Math.max(maxDiff, Math.abs(core[i] - webgl[i]));
-    }
-    return { core, webgl, signedMean, maxDiff };
-  };
-
-  const wedge = run(patterns.wedge);
-  const signed = run(patterns.signed);
-
-  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
-  pipeline.clearState();
-
-  return {
-    cols,
-    rows,
-    core: wedge.core,
-    webgl: wedge.webgl,
-    maxDiff: wedge.maxDiff,
-    signed,
-    pass: wedge.maxDiff < 0.05 && signed.maxDiff < 0.05,
-  };
 }

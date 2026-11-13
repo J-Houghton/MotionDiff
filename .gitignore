@@ -25,3 +25,7 @@ dist-ssr
 
 # Design review screenshots (regenerate from docs/design/mockups)
 docs/design/shots/
+
+# Reference clips and rendered filmstrips (see scripts/README.md)
+ref-clips/
+filmstrips/

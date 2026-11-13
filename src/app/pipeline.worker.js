@@ -42,9 +42,9 @@ let ringHeight = 0;
 // Stamp of the newest frame kept as history
 let lastStoredTime = NaN;
 
-function ensureRing(width, height) {
+function ensureRing(width, height, budgetBytes) {
   if (ring && ringWidth === width && ringHeight === height) return;
-  ring = new FrameRing(ringCapacity(width, height));
+  ring = new FrameRing(ringCapacity(width, height, budgetBytes ? { budgetBytes } : undefined));
   ringFrames = new Array(ring.capacity);
   ringWidth = width;
   ringHeight = height;
@@ -242,7 +242,7 @@ self.onmessage = function (e) {
     return;
   }
 
-  ensureRing(width, height);
+  ensureRing(width, height, msg.ringBudgetBytes);
 
   const k = frameOffset;
   const spread = channelSpread;

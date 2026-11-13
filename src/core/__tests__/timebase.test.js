@@ -79,10 +79,21 @@ describe('classifyStep', () => {
     expect(classifyStep(1, 1 + MAX_CONTINUOUS_GAP + 0.01)).toBe('jump');
   });
 
-  it('any backward step is a rewind: loop, seek back, or step back', () => {
+  it('a backward step is a rewind: loop, seek back, or step back', () => {
     expect(classifyStep(9.97, 0.0)).toBe('rewind');
     expect(classifyStep(5, 2)).toBe('rewind');
-    expect(classifyStep(5, 5 - 1 / 30)).toBe('rewind');
+    // A one-frame step back comes from a seek.
+    expect(classifyStep(5, 5 - 1 / 30, true)).toBe('rewind');
+    // Even a very short clip looping is further than clock jitter.
+    expect(classifyStep(0.5, 0)).toBe('rewind');
+  });
+
+  it('a small backward step with no seek is clock jitter, not a rewind', () => {
+    // A frame stamped from currentTime followed by one stamped with its
+    // (slightly earlier) mediaTime.
+    expect(classifyStep(5.02, 5.0)).toBe('repeat');
+    expect(classifyStep(5, 5 - 1 / 30)).toBe('repeat');
+    expect(classifyStep(5, 4.89)).toBe('rewind');
   });
 
   it('after a seek, a frame step still advances', () => {
