@@ -38,11 +38,6 @@ export class Pipeline {
     // A seek completed since the last processed frame
     this._seeked = false;
 
-    // ── Magnify mode ──
-    // Downsampled capture canvas for the worker magnify path
-    this._magCapCanvas = null;
-    this._magCapCtx = null;
-
     // ── Frame history ──
     // WebGL: the pixels live in the renderer's texture-array ring and this
     // FrameRing tracks which layer holds which frame. Worker fallback: the
@@ -698,36 +693,10 @@ export class Pipeline {
 
   // ── Magnify: Worker path (fallback) ─────────────────────────
 
-  /**
-   * Capture the current frame at the magnify processing size. The
-   * downsampling is the spatial pooling; the worker path is capped at
-   * 320 px wide (correctness over speed on the CPU fallback).
-   */
-  _captureMagnifyFrame(video) {
-    if (!this.width || !this.height) return null;
-    const ds = this.params.magDownsample || 1;
-    const w = Math.max(2, Math.min(320, Math.round(this.width / ds)));
-    const h = Math.max(2, Math.round(this.height * (w / this.width)));
-
-    if (!this._magCapCanvas) {
-      this._magCapCanvas = document.createElement('canvas');
-      this._magCapCtx = this._magCapCanvas.getContext('2d', { willReadFrequently: true });
-    }
-    if (this._magCapCanvas.width !== w || this._magCapCanvas.height !== h) {
-      this._magCapCanvas.width = w;
-      this._magCapCanvas.height = h;
-    }
-
-    try {
-      this._magCapCtx.drawImage(video, 0, 0, w, h);
-      return this._magCapCtx.getImageData(0, 0, w, h);
-    } catch {
-      return null;
-    }
-  }
-
   _processMagnifyWorker(video, time, step, dtMs) {
-    const frame = this._captureMagnifyFrame(video);
+    // The worker gets the frame at the processing size and does the
+    // spatial pooling itself, in floats.
+    const frame = this.captureFrame(video);
     if (!frame) return;
     this._workerBusy = true;
 

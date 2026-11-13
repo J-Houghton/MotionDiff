@@ -15,7 +15,15 @@
  *   - Magnify (EMA update + add-back)
  */
 
-import { magnifyFrame, seedStates } from '../core/magnify.js';
+import {
+  addBand,
+  boxPool,
+  emaStep,
+  magnifyFrame,
+  pooledSize,
+  seedStates,
+  seedStatesFloat,
+} from '../core/magnify.js';
 import { bandMagnitude, poolMagnitude } from '../core/magnitude.js';
 
 // ── Shader sources ──────────────────────────────────────────────
@@ -228,9 +236,45 @@ void main() {
   fragColor = vec4(best, 1.0);
 }`;
 
-// Plain copy — scales the uploaded video frame to the processing size,
-// downsamples the current frame into the magnify working size and seeds
-// the EMA state textures.
+// True box average of the current frame into the magnify working grid.
+// Mirrors core/magnify.js boxPool: every texel of each factor x factor block
+// is fetched and weighted equally (a single bilinear tap only covers 2x2, so
+// at 4x it would skip three quarters of the block), and the result goes to a
+// float target so the sub-8-bit precision the averaging buys is kept.
+const BOX_POOL_FRAG = `#version 300 es
+precision highp float;
+
+uniform sampler2D uInput;
+uniform int uFactor;
+
+out vec4 fragColor;
+
+void main() {
+  ivec2 size = textureSize(uInput, 0);
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  int pooledHeight = (size.y + uFactor - 1) / uFactor;
+  // Frames are stored bottom-up. Blocks are anchored at the image's top-left
+  // like boxPool's, so index image rows from the top.
+  int row0 = (pooledHeight - 1 - p.y) * uFactor;
+  int col0 = p.x * uFactor;
+
+  vec3 sum = vec3(0.0);
+  float count = 0.0;
+  for (int dy = 0; dy < uFactor; dy++) {
+    int row = row0 + dy;
+    if (row >= size.y) break;
+    for (int dx = 0; dx < uFactor; dx++) {
+      int col = col0 + dx;
+      if (col >= size.x) break;
+      sum += texelFetch(uInput, ivec2(col, size.y - 1 - row), 0).rgb;
+      count += 1.0;
+    }
+  }
+  fragColor = vec4(sum / max(count, 1.0), 1.0);
+}`;
+
+// Plain copy — scales the uploaded video frame to the processing size and
+// seeds the EMA state textures.
 const COPY_FRAG = `#version 300 es
 precision highp float;
 
@@ -263,9 +307,9 @@ void main() {
 }`;
 
 // Magnify add-back: current full-res frame + amp * band, with the
-// Rec.709 luma/chroma split. The float states sit at the downsampled
-// size; linear texture sampling performs the upsample for free.
-// Mirrors core/magnify.js magnifyPixel exactly, including clamping.
+// Rec.709 luma/chroma split. The float states sit on the pooled grid;
+// linear texture sampling performs the upsample. Mirrors core/magnify.js
+// addBand, including the block geometry and clamping.
 const MAG_COMPOSITE_FRAG = `#version 300 es
 precision highp float;
 
@@ -274,6 +318,7 @@ uniform sampler2D uFast;
 uniform sampler2D uSlow;
 uniform float uAmp;
 uniform float uChroma;
+uniform vec2 uBandScale;  // frame size / (pooled grid size * factor), <= 1
 
 in vec2 vUV;
 out vec4 fragColor;
@@ -282,7 +327,12 @@ const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
 void main() {
   vec3 cur = texture(uCurrent, vUV).rgb;
-  vec3 band = texture(uFast, vUV).rgb - texture(uSlow, vUV).rgb;
+  // When the frame is not a multiple of the factor the last block overhangs
+  // it, so the grid spans slightly more than the frame. Blocks are anchored
+  // at the image's top-left: scale in image space (y down), then flip back.
+  vec2 uvImage = vec2(vUV.x, 1.0 - vUV.y) * uBandScale;
+  vec2 uvBand = vec2(uvImage.x, 1.0 - uvImage.y);
+  vec3 band = texture(uFast, uvBand).rgb - texture(uSlow, uvBand).rgb;
   float bandLuma = dot(band, LUMA);
   vec3 result = cur + uAmp * bandLuma + uAmp * uChroma * (band - vec3(bandLuma));
   fragColor = vec4(clamp(result, 0.0, 1.0), 1.0);
@@ -485,6 +535,7 @@ export class WebGLRenderer {
 
     // ── Magnify resources (allocated lazily at the downsampled size) ──
     this._copyProg = null;
+    this._boxPoolProg = null;
     this._emaProg = null;
     this._magCompositeProg = null;
     this._magW = 0;
@@ -541,6 +592,7 @@ export class WebGLRenderer {
     this._accumProg = createProgram(gl, vs, ACCUM_FRAG, { uAccum: 0, uTrail: 1 });
     this._compositeProg = createProgram(gl, vs, COMPOSITE_FRAG, { uDiff: 0, uOriginal: 1 });
     this._copyProg = createProgram(gl, vs, COPY_FRAG, { uInput: 0 });
+    this._boxPoolProg = createProgram(gl, vs, BOX_POOL_FRAG, { uInput: 0 });
     this._emaProg = createProgram(gl, vs, EMA_FRAG, { uState: 0, uFrame: 1 });
     this._magCompositeProg = createProgram(gl, vs, MAG_COMPOSITE_FRAG, { uCurrent: 0, uFast: 1, uSlow: 2 });
     this._magnitudeDiffProg = createProgram(gl, vs, MAGNITUDE_DIFF_FRAG, { uDiff: 0 });
@@ -732,12 +784,14 @@ export class WebGLRenderer {
     this._magW = w;
     this._magH = h;
 
+    // The pooled frame and its blurred copy are float like the states:
+    // an 8-bit target here would round the pooled means back to 1/255.
     this._cleanupTexFB(this._magFrameTex, this._magFrameFB);
-    this._magFrameTex = this._createSizedTexture(w, h);
+    this._magFrameTex = this._createFloatTexture(w, h);
     this._magFrameFB = createFramebuffer(gl, this._magFrameTex);
 
     this._cleanupTexFB(this._magBlurTex, this._magBlurFB);
-    this._magBlurTex = this._createSizedTexture(w, h);
+    this._magBlurTex = this._createFloatTexture(w, h);
     this._magBlurFB = createFramebuffer(gl, this._magBlurTex);
 
     for (let i = 0; i < 2; i++) {
@@ -1030,9 +1084,9 @@ export class WebGLRenderer {
   }
 
   /**
-   * Run the full magnify pass for the frame already uploaded to the
-   * 'current' slot: downsample (+ optional blur), update both EMA state
-   * textures, then composite current + amp·band to the canvas.
+   * Run the full magnify pass for the current frame: box-pool into float
+   * (+ optional blur), update both EMA state textures, then composite
+   * current + amp·band to the canvas.
    *
    * Magnify deliberately bypasses the diff/trail/composite programs —
    * their uAlgorithm uniform only distinguishes Posy from Raw, so a third
@@ -1045,15 +1099,15 @@ export class WebGLRenderer {
     const gl = this.gl;
     if (!this.magnifySupported) return false;
 
-    const ds = opts.downsample || 1;
-    const w = Math.max(1, Math.round(this.width / ds));
-    const h = Math.max(1, Math.round(this.height / ds));
+    const ds = Math.max(1, Math.floor(opts.downsample) || 1);
+    const { width: w, height: h } = pooledSize(this.width, this.height, ds);
     if (!this._ensureMagResources(w, h)) return false;
 
-    // 1. Downsample the current frame (linear sampling = spatial pooling)
-    gl.useProgram(this._copyProg.prog);
+    // 1. Pool the current frame: true ds x ds box mean into a float target
+    gl.useProgram(this._boxPoolProg.prog);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this._curTex);
+    gl.uniform1i(this._boxPoolProg.u.uFactor, ds);
     this._drawQuadTo(this._magFrameFB, w, h);
     let frameTex = this._magFrameTex;
 
@@ -1109,6 +1163,7 @@ export class WebGLRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this._magSlowTex[write]);
     gl.uniform1f(u.uAmp, opts.amp);
     gl.uniform1f(u.uChroma, opts.chroma);
+    gl.uniform2f(u.uBandScale, this.width / (w * ds), this.height / (h * ds));
 
     this._drawQuadTo(null, this.width, this.height);
 
@@ -1301,7 +1356,7 @@ export class WebGLRenderer {
 
     // Delete programs
     [this._diffProg, this._blurProg, this._accumProg, this._compositeProg,
-     this._copyProg, this._emaProg, this._magCompositeProg, this._magnitudeDiffProg, this._magnitudeBandProg,
+     this._copyProg, this._boxPoolProg, this._emaProg, this._magCompositeProg, this._magnitudeDiffProg, this._magnitudeBandProg,
      this._poolProg].forEach(p => {
       if (p) gl.deleteProgram(p.prog);
     });
@@ -1336,19 +1391,15 @@ export class WebGLRenderer {
 
 // ── Dev-only shader/core parity harness ─────────────────────────
 // core/magnify.js is the source of truth; the magnify shaders must match
-// it. Feeds the same 3-frame synthetic sequence through magnifyFrame and
-// through the WebGL magnify path (readPixels) and reports the max
-// per-channel difference (acceptance: < 3/255).
+// it. Each case feeds the same synthetic sequence through the core pooled
+// pipeline (boxPool → emaStep → addBand) and through the WebGL magnify path
+// (readPixels) and reports the max per-channel difference (acceptance:
+// < 3/255). The 1x case is also checked against magnifyFrame, the original
+// single-resolution loop.
 
-export function runMagnifyParityHarness() {
-  const W = 16;
-  const H = 12;
-  const AMP = 15;
-  const CHROMA = 1.0;
-  const ALPHA_FAST = 0.342; // ≈ emaAlpha(2.0 Hz, 1000/30 ms)
-  const ALPHA_SLOW = 0.136; // ≈ emaAlpha(0.7 Hz, 1000/30 ms)
-
-  // Synthetic sequence: spatial ramps with a temporal wobble.
+function parityFrames(W, H) {
+  // Spatial ramps with a temporal wobble, plus a fine checker so pooling
+  // has something to average.
   const frames = [];
   for (let k = 0; k < 3; k++) {
     const data = new Uint8ClampedArray(W * H * 4);
@@ -1356,23 +1407,29 @@ export function runMagnifyParityHarness() {
       for (let x = 0; x < W; x++) {
         const i = (y * W + x) * 4;
         const wobble = Math.round(6 * Math.sin((k / 3) * 2 * Math.PI + x * 0.5));
-        data[i]     = Math.min(255, Math.max(0, 40 + x * 12 + wobble));
+        const checker = ((x + y + k) & 1) * 9;
+        data[i]     = Math.min(255, Math.max(0, 40 + x * 10 + wobble + checker));
         data[i + 1] = Math.min(255, Math.max(0, 60 + y * 14 - wobble));
-        data[i + 2] = Math.min(255, Math.max(0, 128 + wobble * 2));
+        data[i + 2] = Math.min(255, Math.max(0, 128 + wobble * 2 - checker));
         data[i + 3] = 255;
       }
     }
     frames.push(new ImageData(data, W, H));
   }
+  return frames;
+}
 
-  // CPU reference — the exact loop the worker fallback runs.
-  const fast = new Float32Array(W * H * 4);
-  const slow = new Float32Array(W * H * 4);
-  seedStates(frames[0].data, fast, slow);
-  const cpuOut = frames.map(() => new Uint8ClampedArray(W * H * 4));
-  for (let k = 0; k < 3; k++) {
-    magnifyFrame(frames[k].data, fast, slow, cpuOut[k], ALPHA_FAST, ALPHA_SLOW, AMP, CHROMA);
-  }
+export function runMagnifyParityHarness() {
+  const AMP = 15;
+  const CHROMA = 1.0;
+  const ALPHA_FAST = 0.342; // ≈ emaAlpha(2.0 Hz, 1000/30 ms)
+  const ALPHA_SLOW = 0.136; // ≈ emaAlpha(0.7 Hz, 1000/30 ms)
+  const CASES = [
+    { name: '1x 16x12', W: 16, H: 12, factor: 1 },
+    { name: '2x 16x12', W: 16, H: 12, factor: 2 },
+    { name: '4x 16x12', W: 16, H: 12, factor: 4 },
+    { name: '4x 18x10 (partial blocks)', W: 18, H: 10, factor: 4 },
+  ];
 
   // GPU path on an isolated renderer instance.
   const canvas = document.createElement('canvas');
@@ -1381,50 +1438,89 @@ export function runMagnifyParityHarness() {
     renderer.dispose();
     return { supported: false, maxDiff: null, pass: false };
   }
-  renderer.setSize(W, H);
-  renderer.resetMagnifyState();
   const useFullFloat = renderer._magUseFullFloat;
-
   const gl = renderer.gl;
-  const px = new Uint8Array(W * H * 4);
-  let maxDiff = 0;
-  for (let k = 0; k < 3; k++) {
-    renderer.uploadPixels(frames[k]);
-    renderer.renderMagnify({
-      alphaFast: ALPHA_FAST,
-      alphaSlow: ALPHA_SLOW,
-      amp: AMP,
-      chroma: CHROMA,
-      downsample: 1,
-      blurEnabled: false,
-    });
-    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
 
-    // readPixels rows come back bottom-up relative to the image.
-    for (let y = 0; y < H; y++) {
-      const gpuRow = (H - 1 - y) * W * 4;
-      const cpuRow = y * W * 4;
-      for (let b = 0; b < W * 4; b++) {
-        if ((b & 3) === 3) continue; // alpha
-        const d = Math.abs(px[gpuRow + b] - cpuOut[k][cpuRow + b]);
-        if (d > maxDiff) maxDiff = d;
+  const cases = [];
+  let magnitudeMaxDiff = 0;
+  for (const { name, W, H, factor } of CASES) {
+    const frames = parityFrames(W, H);
+    const grid = pooledSize(W, H, factor);
+
+    // CPU reference — the exact steps the worker fallback runs.
+    const pooled = new Float32Array(grid.width * grid.height * 4);
+    const fast = new Float32Array(pooled.length);
+    const slow = new Float32Array(pooled.length);
+    seedStatesFloat(boxPool(frames[0].data, W, H, factor, pooled), fast, slow);
+    const cpuOut = frames.map((frame) => {
+      const out = new Uint8ClampedArray(W * H * 4);
+      emaStep(boxPool(frame.data, W, H, factor, pooled), fast, slow, ALPHA_FAST, ALPHA_SLOW);
+      addBand(frame.data, W, H, fast, slow, factor, AMP, CHROMA, out);
+      return out;
+    });
+
+    // At 1x the pooled pipeline must also agree with magnifyFrame.
+    let legacyDiff = 0;
+    if (factor === 1) {
+      const legacyFast = new Float32Array(W * H * 4);
+      const legacySlow = new Float32Array(W * H * 4);
+      seedStates(frames[0].data, legacyFast, legacySlow);
+      frames.forEach((frame, k) => {
+        const out = new Uint8ClampedArray(W * H * 4);
+        magnifyFrame(frame.data, legacyFast, legacySlow, out, ALPHA_FAST, ALPHA_SLOW, AMP, CHROMA);
+        for (let i = 0; i < out.length; i++) legacyDiff = Math.max(legacyDiff, Math.abs(out[i] - cpuOut[k][i]));
+      });
+    }
+
+    renderer.setSize(W, H, 2);
+    renderer.resetMagnifyState();
+    const px = new Uint8Array(W * H * 4);
+    let maxDiff = legacyDiff;
+    for (let k = 0; k < frames.length; k++) {
+      renderer.uploadPixels(frames[k]);
+      renderer.renderMagnify({
+        alphaFast: ALPHA_FAST,
+        alphaSlow: ALPHA_SLOW,
+        amp: AMP,
+        chroma: CHROMA,
+        downsample: factor,
+        blurEnabled: false,
+      });
+      gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+
+      // readPixels rows come back bottom-up relative to the image.
+      for (let y = 0; y < H; y++) {
+        const gpuRow = (H - 1 - y) * W * 4;
+        const cpuRow = y * W * 4;
+        for (let b = 0; b < W * 4; b++) {
+          if ((b & 3) === 3) continue; // alpha
+          const d = Math.abs(px[gpuRow + b] - cpuOut[k][cpuRow + b]);
+          if (d > maxDiff) maxDiff = d;
+        }
       }
     }
-  }
-  // The magnify mode's contribution to the shared motion magnitude: the
-  // GPU grid for the last frame against core bandMagnitude + poolMagnitude.
-  const coreGrid = poolMagnitude(bandMagnitude(fast, slow, AMP, new Float32Array(W * H)), W, H, 4, 3);
-  const gpuGrid = renderer.readEnergyGrid(4, 3);
-  let magnitudeMaxDiff = gpuGrid ? 0 : Infinity;
-  for (let i = 0; gpuGrid && i < coreGrid.length; i++) {
-    magnitudeMaxDiff = Math.max(magnitudeMaxDiff, Math.abs(coreGrid[i] - gpuGrid[i]));
+    cases.push({ name, maxDiff });
+
+    // The magnify mode's contribution to the shared motion magnitude: the
+    // GPU grid for the last frame against core bandMagnitude + poolMagnitude.
+    const coreGrid = poolMagnitude(
+      bandMagnitude(fast, slow, AMP, new Float32Array(grid.width * grid.height)),
+      grid.width, grid.height, 2, 2,
+    );
+    const gpuGrid = renderer.readEnergyGrid(2, 2);
+    if (!gpuGrid) magnitudeMaxDiff = Infinity;
+    for (let i = 0; gpuGrid && i < coreGrid.length; i++) {
+      magnitudeMaxDiff = Math.max(magnitudeMaxDiff, Math.abs(coreGrid[i] - gpuGrid[i]));
+    }
   }
 
   renderer.dispose();
+  const maxDiff = Math.max(...cases.map((c) => c.maxDiff));
   return {
     supported: true,
     useFullFloat,
     maxDiff,
+    cases,
     magnitudeMaxDiff,
     pass: maxDiff < 3 && magnitudeMaxDiff < 0.05,
   };

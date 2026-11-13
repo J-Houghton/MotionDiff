@@ -1,7 +1,7 @@
 import { posyBlend, rawDiff } from '../core/diff.js';
-import { boxBlur } from '../core/blur.js';
+import { boxBlur, boxBlurFloat } from '../core/blur.js';
 import { accumulate } from '../core/trails.js';
-import { emaAlpha, seedStates, magnifyFrame } from '../core/magnify.js';
+import { addBand, boxPool, emaAlpha, emaStep, pooledSize, seedStatesFloat } from '../core/magnify.js';
 import { bandMagnitude, diffMagnitude, poolMagnitude } from '../core/magnitude.js';
 import { CircularBuffer, FrameRing, ringCapacity } from '../core/buffer.js';
 import { lookbackTime, shouldStore, storeInterval } from '../core/timebase.js';
@@ -62,8 +62,12 @@ function applyStep(step, time) {
 }
 
 // ── Magnify EMA state (Float32, normalized 0..1, RGBA layout) ──
+// The states live on the pooled grid, which on this CPU path is never wider
+// than MAG_MAX_GRID_WIDTH (correctness over speed, but not unboundedly slow).
+const MAG_MAX_GRID_WIDTH = 320;
 let magFast = null;
 let magSlow = null;
+let magPooled = new Float32Array(0);
 
 function magClear() {
   magFast = null;
@@ -187,40 +191,44 @@ self.onmessage = function (e) {
   applyStep(step, time);
 
   if (params.algorithm === 'magnify') {
+    // Pool the frame with a true box average into floats. Rounding the
+    // pooled means to 8 bits (as a small 2D canvas would) discards exactly
+    // the precision the pooling is for.
+    const factor = Math.max(params.magDownsample || 1, Math.ceil(width / MAG_MAX_GRID_WIDTH));
+    const grid = pooledSize(width, height, factor);
+    const gridLength = grid.width * grid.height * 4;
+    if (magPooled.length !== gridLength) magPooled = new Float32Array(gridLength);
+    boxPool(curData, width, height, factor, magPooled);
+
     // Blur applies pre-EMA only; the band is added onto the unblurred frame.
-    let emaInput = curData;
-    if (params.blurEnabled) {
-      emaInput = new Uint8ClampedArray(curData);
-      boxBlur(emaInput, width, height);
-    }
+    if (params.blurEnabled) boxBlurFloat(magPooled, grid.width, grid.height);
 
     // Re-seed on first frame or size change so the first magnified
     // frame equals the input (no flash). Seed from the EMA input (the
-    // blurred frame when blur is on) so the band starts at exactly zero.
-    if (!magFast || magFast.length !== curData.length) {
-      magFast = new Float32Array(curData.length);
-      magSlow = new Float32Array(curData.length);
-      seedStates(emaInput, magFast, magSlow);
+    // blurred grid when blur is on) so the band starts at exactly zero.
+    if (!magFast || magFast.length !== gridLength) {
+      magFast = new Float32Array(gridLength);
+      magSlow = new Float32Array(gridLength);
+      seedStatesFloat(magPooled, magFast, magSlow);
     }
 
-    const magnified = new Uint8ClampedArray(curData.length);
-    magnifyFrame(
-      emaInput,
+    emaStep(
+      magPooled,
       magFast,
       magSlow,
-      magnified,
       emaAlpha(params.magFreqHigh, msg.dtMs),
       emaAlpha(params.magFreqLow, msg.dtMs),
-      params.magAmp,
-      params.magChroma,
-      curData
     );
+
+    // Full-resolution output: the frame plus the upsampled, amplified band.
+    const magnified = new Uint8ClampedArray(curData.length);
+    addBand(curData, width, height, magFast, magSlow, factor, params.magAmp, params.magChroma, magnified);
 
     // Magnify's motion magnitude is the strength of the amplified band.
     let energyBuffer = null;
     if (energyCols > 0 && energyRows > 0) {
-      const magnitude = bandMagnitude(magFast, magSlow, params.magAmp, magnitudeBuffer(width * height));
-      energyBuffer = pooledEnergy(magnitude, width, height, energyCols, energyRows);
+      const magnitude = bandMagnitude(magFast, magSlow, params.magAmp, magnitudeBuffer(grid.width * grid.height));
+      energyBuffer = pooledEnergy(magnitude, grid.width, grid.height, energyCols, energyRows);
     }
 
     const magnifiedBuffer = magnified.buffer;
