@@ -252,3 +252,59 @@ itself (inherent: the model had learnt the object); ragged edges while something
 being absorbed (pixels cross the threshold one by one); on `traffic`, soft blobby
 edges and faint patches on the road beside the cars (their shadows and reflections
 are not background either).
+
+### I1. Interface — judged from screenshots
+Rules from `CLAUDE.md`. Measured by `scripts/page/audit.js` on 23 states (desktop
+1440×900 and 1280×720, light and dark, every mode family, split, empty, keys sheet;
+fullscreen, awake and idle; phone 390×844 with a clip, with the fake camera, with
+the parameter sheet, the source sheet, empty and idle; tablet 820×1180), then by a
+fresh critic given the screenshots and the brief.
+
+| Rule | Measured | Critic |
+|---|---|---|
+| Picture is the largest element | Plate 51–54% of the viewport with 16:9 footage (49% with a 1366×720 clip); Viewfinder 100% | Pass, "thin margin in Plate" |
+| Text contrast at least 4.5:1 | Lowest 5.6 (light), 7.0 (dark), 10.7 (Viewfinder) | Pass |
+| Nothing overlapping or clipped | None in any state | Pass, bar a half-cut row at the foot of the phone sheet (since anchored to the edge) |
+| Focus visible | 2 px accent outline on every stop of the tab order | — |
+| Touch targets at least 44 px | None smaller on phone or tablet (a slider's target is its 44 px row) | Pass for buttons, "borderline" for slider thumbs (since widened) |
+| Overlays hide when idle in the Viewfinder | `data-idle` true after 2.5 s of playback, all chrome at opacity 0 | Pass, "cleanly" |
+| Distinct, not a generic dashboard | — | Pass: "neither layout looks like a component-library dashboard"; "the dark theme is a navy blueprint grid with a coral accent, not an inversion" |
+
+The first critique (before the fixes in `d524b4c`) failed the phone layout: solid bars
+top and bottom made it "a conventional player", and slider thumbs, mode arrows and
+the scrub handle were too small. The second passed all seven. Its remaining points:
+the two layouts share little beyond type and square corners (roadmap item 12), and a
+landscape clip on an upright phone was cropped to a quarter (now shown whole).
+
+### Robustness — accepted on a demonstration of the case that broke
+| Change | The case | Before | After |
+|---|---|---|---|
+| Stale frame-callback time after a paused seek | Step or scrub while paused | The callback could deliver the previous frame's time; it read as a rewind and wiped the history | Metadata more than 0.25 s from `currentTime` is ignored; history survives (filmstrip stepping depends on it) |
+| Timer firing in the middle of a seek | Scrub while paused | A frame processed mid-seek with the old picture and the new time | Skipped while `video.seeking` |
+| Frame driver | A browser that stops delivering frame callbacks | Processing stopped | Falls back to the display clock after 120 ms without one, counted by decoded frames |
+| Modes that cannot run | `?renderer=canvas2d`; `?nofloat` | — (new modes) | Mask, history and background say "needs WebGL2"; history, background and magnify say "needs float render targets"; the mask still runs without float |
+| Target creation order | First frame of a mode with its own targets | The data target's first frame was drawn from the wrong texture (mask probe: 234 mismatches in the first case, none after) | Targets are requested before textures are bound |
+
+### Performance — accepted on measured numbers
+Per-frame cost during playback of `traffic` (1920×1080, 30 fps), one pixel read back
+after each frame to make the GPU finish; median of about 75 frames; one machine
+(Windows, Intel GPU, headless Chrome), modes measured in turn in the same run.
+
+| Mode | 640×360 | 1920×1080 | Frames per second |
+|---|---|---|---|
+| Posy | 3.6 ms | 6.1 ms | 30 |
+| Raw | 4.5 ms | 6.1 ms | 30 |
+| Magnify | 5.1 ms | 6.3 ms | 30 |
+| Motion mask | 4.2 ms | 9.8 ms | 30 |
+| Motion history | 4.2 ms | 10.9 ms | 30 |
+| Background model | 4.5 ms | 12.8 ms | 30 |
+
+Every mode keeps the source's frame rate at both sizes. No before/after here: the new
+modes have no earlier version, and the session's other changes were not made for
+speed. The comparison against master is in the session 2 report (1080p: about 53 ms
+to 12.5 ms a frame; JS heap 851 MB to 6 MB).
+
+### Deferred for having no visible effect
+Nothing built this session was dropped by the "no visible effect" rule: every visual
+change was told apart by its judge. Deferred before building, for the same reason
+(see `ROADMAP.md`): the luma-only branch.

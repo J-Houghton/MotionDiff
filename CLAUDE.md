@@ -8,17 +8,19 @@ Pages by `.github/workflows/deploy.yml` on push to `master`.
 - `npm run dev` — dev server at http://localhost:5173/MotionDiff/
 - `npm test` — vitest run (node environment, no DOM/WebGL)
 - `npm run build` — production build (must pass before any PR)
+- `npm run filmstrip` — visual tooling against the running dev server: reference
+  clips, filmstrips, numeric guard, screenshots (see `scripts/README.md`)
 
 ## Architecture — layer rules are strict, never violate them
 ```
 core/  <- imports nothing (pure functions + ring buffers; all unit-testable in node)
-app/   <- imports core/ only (Pipeline orchestration, WebGL renderer, Canvas2D worker fallback, audio)
+app/   <- imports core/ only (Session, Pipeline, the mode registry in app/modes/, WebGL renderer, Canvas2D worker fallback, audio)
 ui/    <- imports app/ only (DOM bindings)
 main.js <- app/ + ui/, and core/ directly for pure helpers (wiring + render loop)
 ```
 These rules govern imports between `src/` layers only. Third-party npm packages may be
-imported at any layer (`ui/controls.js` imports `@simonwep/pickr`, `app/loader.js`
-imports `hls.js`, `app/audio.js` lazy-imports `tone`). Test files are also exempt —
+imported at any layer (`ui/panel.js` imports `tweakpane`, `app/loader.js` imports
+`hls.js`, `app/audio.js` lazy-imports `tone`). Test files are also exempt —
 `core/__tests__/core.test.js` imports `app/source-profile.js` and `app/clips.js`.
 
 Core modules do not import each other either: each is self-contained, and a constant
@@ -27,20 +29,39 @@ two of them need (`REFERENCE_FPS`, the luma weights) is repeated with a comment.
 `core/` and `app/` stay framework-free whatever the UI is built with.
 
 ## Modes
-`pipeline.params.algorithm` selects the mode: `posy`, `raw` (frame differencing with
-trails and diff/overlay/glow compositing) or `magnify` (Eulerian magnification, shows
-the amplified frame directly, no trails/compositing). Planned modes: three-frame
-differencing, motion history, background subtraction, optical flow.
+`pipeline.params.algorithm` selects the mode. Modes are a registry: one module in
+`app/modes/` plus one entry in `MODES` (`app/modes/index.js`, which documents the
+shape of a mode). The pipeline calls its `render`, the panel builds its controls from
+its `params`, the help sheet prints its `help`.
+
+| id | what it is | fallback |
+|---|---|---|
+| `posy`, `raw` | frame differencing with trails and diff/overlay/glow | worker |
+| `magnify` | Eulerian magnification; shows the amplified frame, no trails | worker; needs float targets on WebGL |
+| `mask` | motion mask: three-frame differencing, pre-blur, 3×3 vote | WebGL only |
+| `history` | motion history: age and direction of what moved | WebGL with float targets |
+| `background` | background model: running mean and variance, gated by motion | WebGL with float targets |
+
+Every mode also exposes its result as data (a mask, a scalar field or a vector
+field) in the renderer's data target: `pipeline.readData()`, display mode `data`.
+Next: optical flow (`docs/optical-flow.md`).
 
 ## Key conventions
 - **Core is the source of truth.** Every visual algorithm exists twice: pure JS in
-  `core/` (tested) and a GLSL mirror in `app/renderer.webgl.js`. The shader must match
-  it, exactly where the data is 8-bit: the diff and blur shaders work on whole 0..255
-  values for that reason. Dev builds expose parity probes that run the same synthetic
-  frames through both: `__motionDiffDiffParity()`, `__motionDiffTrailParity()`,
-  `__motionDiffEnergyParity()`, `__magnifyParityHarness()`. Run them after touching a
-  shader or its core function. A new mode gets a core function with tests first, then
-  its shader mirror and a probe.
+  `core/` (tested) and a GLSL mirror. Posy, Raw, trails and Magnify have theirs in
+  `app/renderer.webgl.js`; a mode added through the registry keeps its shaders in its
+  own module (`app/modes/mask.js`, `history.js`, `background.js`). The shader must
+  match the core, exactly where the data is 8-bit: the diff, blur and mask shaders
+  work on whole 0..255 values for that reason. Dev builds expose parity probes that
+  run the same synthetic frames through both (`app/probes.js`):
+  `__motionDiffDiffParity()`, `__motionDiffTrailParity()`,
+  `__motionDiffEnergyParity()`, `__magnifyParityHarness()`,
+  `__motionDiffMaskParity()`, `__motionDiffHistoryParity()`,
+  `__motionDiffBackgroundParity()`. Run them after touching a shader or its core
+  function. A new mode gets a core function with tests first, then its shader mirror
+  and a probe. State kept in half floats cannot match a Float32 core bit for bit: such
+  a probe counts mismatches (background: under 0.1% of decisions) instead of
+  demanding none.
 - **Posy space:** 128 (`128.0 / 255.0` in shaders, never `0.5`) = "no motion" baseline.
   Motion = deviation from 128. Raw mode baseline is 0. New math must respect the
   mode's baseline.
@@ -58,7 +79,16 @@ differencing, motion history, background subtraction, optical flow.
 - **Trails** (`core/trails.js`). One feedback state per pixel and channel: the
   strongest recent diff value and its age in trail windows, shown under a
   hold-then-fade envelope. No ring of past diffs. Two states are ping-ponged so a
-  frame re-rendered while paused is recomputed from the state before it.
+  frame re-rendered while paused is recomputed from the state before it. Colour-by-age
+  has two styles: `latest` (time since the pixel last moved) and `mixed`, which also
+  tracks the age and typical strength of the current burst of motion to give the
+  new-and-old look the old ring had.
+- **Mode feedback state.** A mode with state of its own (history, background) follows
+  the trail's pattern: two targets from `renderer.target()`, a per-renderer record of
+  which is current, recompute rather than advance when `frame.step === 'repeat'`
+  (use `frame.stepMs`, which keeps its value on a repeat), and start over when
+  `renderer.epoch` changes (it counts every seek, source change, mode change and
+  resize).
 - **Frame history** (`core/buffer.js`). `FrameRing` tracks slots and stamps, no pixels.
   WebGL: the video element is uploaded straight to a texture and past frames live in a
   `TEXTURE_2D_ARRAY` (slot = layer); nothing is read back or kept on the JS heap.
@@ -71,8 +101,9 @@ differencing, motion history, background subtraction, optical flow.
   one unsigned value per pixel, 0..1. Anything that wants "how much motion, where"
   (the sonification grid today) pools from that with `poolMagnitude` /
   `renderer.readEnergyGrid`, never from a mode's own signed output: pooling a signed
-  diff cancels a moving edge to zero. A new mode adds one fill function in
-  `core/magnitude.js`, its GLSL mirror, and sets `_magnitudeSource` in its render path.
+  diff cancels a moving edge to zero. The built-in modes have a fill function in
+  `core/magnitude.js` and set `_magnitudeSource`; a registry mode draws its data into
+  `renderer.dataFramebuffer()` itself, with the magnitude in R.
 - **Magnify** pools with a true box average into float (`boxPool` → `emaStep` →
   `addBand`) on both paths. Don't route the pooled frame through an 8-bit target.
 - **Dual render paths:** WebGL2 preferred, Canvas2D + `pipeline.worker.js` fallback.
@@ -98,17 +129,20 @@ differencing, motion history, background subtraction, optical flow.
 - **Research before design:** [docs/research.md](docs/research.md) records what other
   implementations do and which of their ideas we adopted. Borrow ideas, not code,
   unless the licence allows it and the source is noted.
-- **UI decisions:** Tweakpane is the parameter panel, generated from each mode's
-  schema, with the ARIA/focus patch from `docs/research.md` §5 and keyboard shortcuts
-  for everything. One output stage with split compare against the original. Light and
-  dark only, no accent themes. Plain DOM shell (no Lit). Layouts from `docs/design/`:
-  **Plate** (B) is the default, with its time ruler and a designed dark theme;
-  **Viewfinder** (A) is the fullscreen mode and the primary layout on phones, where
-  the phone camera is the main source.
+- **UI, as built** (`ui/shell.js`, `ui/panel.js`, `ui/ruler.js`, `ui/keys.js`,
+  `styles/main.css`): Tweakpane is the parameter panel, generated from each mode's
+  schema, with the ARIA/focus patch from `docs/research.md` §5 and a key for
+  everything. One output stage with split compare against the original. Light and
+  dark only. Plain DOM shell (no Lit): one DOM, two layouts chosen by
+  `#app[data-layout]`. **Plate** is the desktop default, with its time ruler and the
+  dark "cyanotype" theme; **Viewfinder** is fullscreen and every touch or narrow
+  device, where the phone camera is the main source. All interface state lives in
+  `app/session.js`; the shell calls its methods and redraws on its events.
 - **Colour-by-age keeps both looks, selectable.** Magnify band-gain normalisation is deferred.
-- **Modes will be a registry:** one module plus one entry per mode, and each mode
-  exposes its result as data (a mask, a scalar field or a vector field), not only
-  display colours. Posy and Raw stay as they are.
+- **Modes are a registry** (see Modes above), and each exposes its result as data,
+  not only display colours. Posy and Raw stay as they are.
+- **`docs/verdicts.md` is the log** the acceptance rules ask for: the expectation
+  before building, the judge's result after.
 - **Audio engine is low priority**: keep it working, do not extend it.
 - Stop and report when something needs the owner's decision, especially anything
   that changes how existing output looks; show a before/after.
@@ -158,7 +192,20 @@ Tag every change as **visual**, **performance** or **robustness**.
   targets at least 44 px, overlays hide when idle in the Viewfinder layout.
 - A fresh subagent critiques it against the brief: distinct, not a generic dashboard.
 
-**Changes to these rules:** none yet.
+**Changes to these rules** (session 3):
+- *Picture share in the Plate layout is measured with 16:9 footage.* A wider clip
+  (1366×720) gets 49% with the panel open; that is the footage's shape, not the layout.
+- *"All of the viewport" in the Viewfinder means the frame.* A clip that would lose
+  more than half its picture to cropping (landscape footage on an upright phone) is
+  shown whole inside it; a double tap switches to filling.
+- *"Age rises steadily along the path" is measured on the median across the trail,*
+  not on single pixels: a flat synthetic object leaves stray specks that say nothing
+  about the trail.
+- *Parity "at about 2/255" applies to 8-bit and Float32 data.* For decisions made from
+  half-float state the probe allows a mismatch rate under 0.1%.
+- *A judge's "same look, with a caveat" counts as a match* for the purpose of the
+  colour-by-age decision (ring only if it does not match): three rounds gave that
+  verdict, and the caveat is recorded in `docs/verdicts.md`, V1.
 
 ## Gotchas
 - Web Audio / Tone.js cannot start without a user gesture — audio init must happen
@@ -172,6 +219,17 @@ Tag every change as **visual**, **performance** or **robustness**.
   buffers, so pixels reach a ring layer via `uploadPixels` + `storeCurrent`.
 - The WebGL canvas has `preserveDrawingBuffer: false`: read it back in the same task
   that rendered it, or you get a cleared buffer.
+- Do not hold a GLSL `bool` computed from a variable that is reassigned later in the
+  shader: one GPU compiler here evaluated it after the reassignment (53/255 off in
+  the trail probe). Compute a float instead.
+- Creating a texture binds it. A mode asks for all its `renderer.target()`s and the
+  `dataFramebuffer()` before binding textures for a draw, or the first frame draws
+  from the wrong texture.
+- `gl.finish()` does not wait for the GPU in Chrome. To time a frame, read one pixel
+  back after it.
+- Video decoders start slowly: give playback two or three seconds before counting
+  frames. Browser-recorded WebM cannot be seeked frame-accurately, which is why the
+  filmstrip tool draws synthetic scenes itself (`scripts/page/scene.js`).
 - `index.html` is a single hand-written shell. Keep additions to it minimal: one
   container div per feature, build the rest of the DOM from a JS module.
 - `specs/` holds the specs the sonification and magnification features were built

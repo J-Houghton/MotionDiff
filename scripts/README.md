@@ -73,13 +73,20 @@ static areas (mean change between consecutive frames where the source did not
 change), the share of clipped pixels, and each strip's mean colour (to tell a hue
 or brightness shift from a change of shape).
 
+The scenes used for this session's verdicts are in `scripts/scenes/` (`age-colour`,
+`mask`, `history`, `background`): re-render them after touching those modes.
+
 ## Checks against known truth
 ```bash
 node scripts/truth-check.mjs --dir filmstrips --tag mask --scene truth-mask --gap 5
 ```
 For a scene on a synthetic clip rendered with `"readData": true`: reads the mode's
 data output for the last frame and reports where its marks lie relative to the known
-object outlines (current position, the position one gap ago, elsewhere).
+object outlines (current position, the position one gap ago, elsewhere) and how much
+of each outline is filled. `--box x,y,w,h` adds the share marked inside a box, for a
+place where something used to stand. For a vector field (motion history) it reports
+instead the mean heading over each object's trail against the known heading, and the
+age along the path behind it (`--history` is the history length in seconds).
 
 ## Interface screenshots and one-off checks
 ```bash

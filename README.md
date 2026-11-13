@@ -1,7 +1,19 @@
 # MotionDiff
-MotionDiff is a browser-based temporal frame differencing tool for revealing subtle motion in video.
+MotionDiff is a browser-based tool for revealing motion in video: frame differencing, a motion mask, motion history, a background model and Eulerian magnification, on files, URLs, the camera or the screen.
 
-## Algorithm
+## Modes
+Six modes, chosen with the keys 1 to 6 or in the parameter panel. Each also gives its result as data (display mode "data").
+
+| Key | Mode | Shows |
+|---|---|---|
+| 1 | Posy | Each frame over its own negative from a moment ago: stillness is grey, motion glows |
+| 2 | Raw diff | The plain difference: stillness is black. Every mover appears twice, where it is and where it was |
+| 3 | Magnify | A band of slow change amplified: pulse, breathing, sway |
+| 4 | Motion mask | What is moving, once, where it is now, in its own colours |
+| 5 | Motion history | A band along each mover's path, coloured by how long ago it passed or by its heading |
+| 6 | Background model | Whatever is not part of the usual scene, whole, moving or stopped |
+
+## How the modes work
 
 ### Posy Blend (default)
 Posy Blend compares the current frame against an older frame after inverting the old one:
@@ -20,6 +32,19 @@ Raw Diff uses absolute channel difference:
 `diff = |current - old|`
 
 Static regions go to black, and brighter pixels mean larger motion between the two samples. It is the more literal mode: high contrast, easy to read, and good for simple motion detection when you do not need Posy mode's gray-centered directional color.
+
+### Motion mask
+A pixel counts as moving only when it differs from two earlier moments, the gap and a longer second gap:
+
+`moving = min(|current - old1|, |current - old2|) >= threshold`
+
+The place an object has just left differs from the frame of one gap ago but looks like the older one again, so the second copy that Raw draws disappears. The frames are blurred first and the mask is cleaned by a 3 x 3 vote, so it speckles far less than Raw at the same threshold. An object has to move more than its own width between the two gaps, or part of its ghost survives. WebGL2 only.
+
+### Motion history
+One number per pixel: the time since the motion mask last fired there. Shown as a colour gradient from new to old along each path, or as a hue for the heading (right is red, down is yellow-green, left is cyan, up is violet). The heading is read from the slope of that field and averaged over patches about 56 pixels across. Needs float render targets.
+
+### Background model
+A running mean and variance of what is usually at each pixel. A pixel is foreground when it differs from the mean by more than the threshold and 2.5 standard deviations. Unlike differencing this marks the whole of an object and keeps marking it after it stops, until it has been absorbed ("Absorb after"). The model does not learn where something moved within the last half second. Whatever is in the picture at the start is taken for background and leaves a ghost for one absorb time when it moves. Needs float render targets.
 
 ### Frame offset (k)
 The frame offset chooses how far back in time the comparison reaches. One unit is 1/30 s of video time: frames are stamped with their media time and the comparison frame is looked up by time, so `k` means the same thing at any source frame rate, playback speed or processing fps cap.
@@ -67,6 +92,10 @@ Threshold suppresses noise before accumulation. It is the mean absolute channel 
 | Diff | Raw algorithm output only |
 | Overlay | Motion screen-blended onto original frame |
 | Glow | Original + amplified additive bloom from motion |
+| Data | The mode's result as data: a mask, a scalar field or a vector field |
+
+## Interface
+Two layouts share one design. **Plate** (desktop): the picture as a captioned plate, with a time ruler showing how far back each channel looks and how long trails last. **Viewfinder** (fullscreen with F, and always on phones and touch devices): the picture fills the screen and the controls are small plates that fade when idle. Light and dark themes (T). Split compare against the original with S. Every action has a key; press ? for the list.
 
 ## Project structure
 ```text
@@ -76,6 +105,9 @@ Threshold suppresses noise before accumulation. It is the mean absolute channel 
 ├── specs/                          Specs the sonification and magnification features were built from.
 ├── src/
 │   ├── app/
+│   │   ├── modes/                  The mode registry: one module per mode, plus index.js and shared params.
+│   │   ├── session.js              Everything the interface drives: sources, transport, recording, auto-configure.
+│   │   ├── probes.js               Dev-only shader-versus-core parity probes.
 │   │   ├── audio.js                Sonification engine (Tone.js, loaded lazily).
 │   │   ├── clips.js                Built-in preset clips and parameter presets.
 │   │   ├── exporter.js             MediaRecorder-based WebM export helper.
@@ -88,18 +120,22 @@ Threshold suppresses noise before accumulation. It is the mean absolute channel 
 │   ├── core/
 │   │   ├── __tests__/              Unit tests (vitest, node).
 │   │   ├── analyze.js              Auto-configuration: noise floor, threshold and gap from frame bursts.
+│   │   ├── background.js           Background model: running mean and variance, gated by motion.
 │   │   ├── blur.js                 3 x 3 box blur.
 │   │   ├── buffer.js               Frame ring bookkeeping and memory budgeting.
 │   │   ├── diff.js                 Posy Blend and Raw Diff pixel math.
 │   │   ├── energy.js               Motion energy grid and pitch/pan mapping for sonification.
+│   │   ├── history.js              Motion history: age per pixel, heading from its slope.
 │   │   ├── magnify.js              Eulerian magnification math.
 │   │   ├── magnitude.js            Shared unsigned motion magnitude and grid pooling.
+│   │   ├── mask.js                 Motion mask: three-frame differencing and the clean-up vote.
 │   │   ├── timebase.js             Media-time base: frame stamps, seek/loop detection, lookback.
 │   │   └── trails.js               Trails: one decaying feedback state per pixel.
-│   ├── styles/main.css             Application stylesheet and theme variables.
-│   ├── ui/                         DOM bindings: controls, timeline, presets, audio panel, help, theme, status.
-│   └── main.js                     App wiring and render loop control.
-├── docs/                           Examples, parameter recipes, research notes, design mockups.
+│   ├── styles/main.css             Both layouts and both themes.
+│   ├── ui/                         shell.js (the DOM), panel.js (Tweakpane, built from mode schemas), ruler.js, keys.js.
+│   └── main.js                     Wiring.
+├── scripts/                        Dev-only visual tooling: reference clips, filmstrips, checks. See scripts/README.md.
+├── docs/                           Research notes, design mockups, the verdict log, the optical flow design note.
 ├── ROADMAP.md                      What is done, in progress, planned and deferred.
 ├── index.html                      Single-page shell.
 └── vite.config.js                  Vite base-path configuration.
@@ -133,6 +169,8 @@ On the WebGL path frames never leave the GPU: the video element is uploaded with
 Magnify implements the simplest real-time variant of Eulerian video magnification (Wu et al., SIGGRAPH 2012) from the published description; it contains no MIT code. The method itself is covered by MIT patents (US 9,811,901 and related), which MIT licenses for commercial use. This project is a personal, non-commercial demo. If you want to use magnify mode commercially, ask MIT's Technology Licensing Office or a lawyer first. See `docs/research.md`.
 
 ## Tests
-Tests cover the pure functions under `src/core/`: diff math, blur, ring buffers, the time base, trails, analysis, the shared motion magnitude, the sonification grid mapping, and the magnification math. Run them with `npm test`.
+Tests cover the pure functions under `src/core/`: diff math, blur, ring buffers, the time base, trails, analysis, the shared motion magnitude, the sonification grid mapping, the magnification math, the motion mask, motion history and the background model. Run them with `npm test`.
 
-The shaders are checked against those functions in a real browser: in a dev build, `__motionDiffDiffParity()`, `__motionDiffTrailParity()`, `__motionDiffEnergyParity()` and `__magnifyParityHarness()` in the console run the same synthetic frames through core and GPU and report the largest difference.
+The shaders are checked against those functions in a real browser: in a dev build, `__motionDiffDiffParity()`, `__motionDiffTrailParity()`, `__motionDiffEnergyParity()`, `__magnifyParityHarness()`, `__motionDiffMaskParity()`, `__motionDiffHistoryParity()` and `__motionDiffBackgroundParity()` in the console run the same synthetic frames through core and GPU and report the difference.
+
+Visual results are checked with filmstrips of fixed moments from reference clips, a numeric guard, and checks against synthetic scenes whose motion is known (`scripts/README.md`). What was expected and what a blind judge saw is logged in `docs/verdicts.md`.
