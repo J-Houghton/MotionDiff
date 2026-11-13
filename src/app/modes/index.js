@@ -39,8 +39,9 @@ import magnify from './magnify.js';
 import mask from './mask.js';
 import history from './history.js';
 import background from './background.js';
+import flow from './flow.js';
 
-export const MODES = [posy, raw, magnify, mask, history, background];
+export const MODES = [posy, raw, magnify, mask, history, background, flow];
 
 const BY_ID = new Map(MODES.map((mode) => [mode.id, mode]));
 

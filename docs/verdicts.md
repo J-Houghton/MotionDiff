@@ -309,3 +309,78 @@ to 12.5 ms a frame; JS heap 851 MB to 6 MB).
 Nothing built this session was dropped by the "no visible effect" rule: every visual
 change was told apart by its judge. Deferred before building, for the same reason
 (see `ROADMAP.md`): the luma-only branch.
+
+---
+
+## Session 4
+
+Two ideas from the owner: wind-map particles as a display for motion, and schlieren
+(making hot air visible). Both stand on dense optical flow, so that is built first.
+Research in `research.md` §6 and §7; designs in `optical-flow.md`, `particles.md`
+and `schlieren.md`.
+
+### V5. Optical flow mode — visual (new mode)
+**What it is.** Between two frames one gap apart, how far and which way each small
+patch of the picture moved: pyramidal Lucas–Kanade on luma (`core/flow.js`), with a
+confidence beside every vector. Shown as colour (hue = heading, brightness = speed)
+or as particle traces (V6).
+
+**Expected effect, written before building** (the numbers are those set in advance
+in `optical-flow.md`, checked on a new synthetic scene `flow` with textured movers,
+because the flat objects of `truth` carry flow only at their rims):
+- *Heading, on `flow`:* within 10° of the truth, as the mean over each mover: a
+  band sliding right (0°), a block sliding down-left (135°), and around a turning
+  disc the heading at each point square to its radius. From one frame pair; no trail
+  is needed, unlike motion history.
+- *Speed, on `flow`:* within 20% of the truth (band 90 px/s, block 60 px/s, the
+  disc's rim 75 px/s falling to zero at its centre).
+- *Still background:* speed under 5 px/s over 99% of it; with the heavy noise of
+  `truth-noisy`, over 95%.
+- *Flat areas:* the inside of a flat object (`truth`'s square) reads as "nothing
+  measured" (dark), not as noise. Its rim carries the flow.
+- *On real footage:* `traffic` shows the two carriageways in two opposite hues;
+  `river` one dominant hue along the water's course.
+- *Blind judge* names what it shows that motion history does not: speed, and a
+  heading without waiting for a trail.
+- *Known limits for the help text:* nothing is measured where the picture is flat;
+  along a straight edge only the motion across the edge is seen; motion of more than
+  about a twentieth of the picture width per gap is beyond its reach and comes out
+  wrong, so fast things need a short gap; a moving camera colours everything.
+- No regression: other modes untouched.
+
+### V6. Particle traces — visual (new display)
+**What it is.** A wind-map display for a velocity field: a few thousand particles,
+each carried along by the measured flow for a second or two and drawing its path.
+Stepped on media time in plain JavaScript (`core/particles.js`), drawn as lines on
+the GPU with a fading trail. Used by the optical flow mode and by schlieren (V7).
+
+**What the picture means, fixed before building.** Each trace is the path a point of
+the picture followed while the particle lived; its direction and (at gain 1) its
+length are the measured movement. Where traces start is random, and how many there
+are in a place is not a measurement: particles that land where nothing is measured
+are re-seeded at once, so traces gather on whatever moves.
+
+**Expected effect:**
+- *On `flow`:* straight level traces along the band, slanted ones on the block,
+  arcs around the disc's centre that are longer towards its rim; under 2% of all
+  trace brightness on the still background.
+- *Direction readable from one still frame:* with heading colours, the band, block
+  and the two sides of the disc are in visibly different hues; without colour, a
+  judge can still say which way each region moves from the traces' bright heads.
+- *Length means speed:* on the disc, traces near the rim are about three times as
+  long as those a third of the way out.
+- *The same at any frame rate:* `sixty` (60 fps) gives traces as long as the same
+  motion at 30 fps.
+- *On real footage:* `river` reads as streams along the current; `traffic` as two
+  opposed streams; `trees` as short traces that swing back and forth. A judge shown
+  one frame of each of Raw, motion history and particles says the particles show
+  direction and speed at a glance and names the picture as the pleasantest to watch,
+  or the display has not earned its place.
+- *Known limits for the help text:* the density of traces is not a measurement; a
+  flat surface carries no traces even when it moves; at gain above 1 the lengths are
+  exaggerated; traces are drawn at the processing size, so they are soft when shown
+  large.
+- **Performance** (its own tag): the flow passes, the readback of the field and the
+  particle step measured per frame on this machine, on both a desktop and a throttled
+  phone profile; the target is 30 frames a second at the phone's 480 px processing
+  width. A real phone cannot be measured here and will be reported as such.

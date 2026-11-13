@@ -15,6 +15,8 @@ import { HISTORY_CELL, HISTORY_SPREAD, renderHistory } from './modes/history.js'
 import { backgroundStep, createBackgroundState } from '../core/background.js';
 import { renderBackground } from './modes/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH, createTrailState, trailStep } from '../core/trails.js';
+import { flowLuma as coreFlowLuma, pyramidFlow, reducedSize, smoothFlow, smoothedVector } from '../core/flow.js';
+import { flowBetween, flowLuma, flowSmooth, readField } from './flow.js';
 
 /**
  * Dev-only parity probe for the diff and blur shaders against core/diff.js
@@ -665,4 +667,139 @@ export function debugBackgroundParity(pipeline) {
     // Proves nothing unless the block was foreground for a while and then absorbed.
     pass: mismatches <= compared * 0.001 && strengthDiff <= 0.01 && foregroundSeen > 500 && lastForeground === 0,
   };
+}
+
+/**
+ * Dev-only parity probe for the optical flow shaders (app/flow.js) against
+ * core/flow.js: a textured frame pair in which one region shifts by a few
+ * pixels and the rest stays still, on a size that does not halve evenly,
+ * through luma → pyramid → solve on both sides, then twice through the
+ * running average (the second time as a repeated frame).
+ *
+ * The GPU keeps every intermediate in half floats, so vectors are not
+ * expected to match bit for bit: the probe reports the largest difference,
+ * counts the trusted vectors that differ by more than 0.05 px (under 0.1%
+ * allowed), and counts the vectors of a quarter pixel or more that one side
+ * trusts and the other does not.
+ *
+ * It resizes the renderer and clears the pipeline — run it on an idle page.
+ *
+ * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
+ * @returns {{cases: object[], pass: boolean}|null}
+ */
+export function debugFlowParity(pipeline) {
+  const gl = pipeline?._glRenderer;
+  if (!gl || !gl.floatTargets) return null;
+
+  const width = 180;
+  const height = 102;
+  let seed = 4242;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  // A texture that can be drawn shifted by a fraction of a pixel.
+  const waves = Array.from({ length: 22 }, () => {
+    const length = 5 + random() * 50;
+    const angle = random() * Math.PI;
+    return { kx: (Math.cos(angle) * 2 * Math.PI) / length, ky: (Math.sin(angle) * 2 * Math.PI) / length, phase: random() * 7, gain: length * 0.5 };
+  });
+  const texture = (x, y) => waves.reduce((sum, w) => sum + w.gain * Math.sin(w.kx * x + w.ky * y + w.phase), 128);
+  const frame = (dx, dy) => {
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const moving = x > 70 && y > 20 && y < 80;
+        const value = (moving ? texture(x - dx + 400, y - dy) : texture(x, y)) + (random() - 0.5) * 4;
+        const i = (y * width + x) * 4;
+        data[i] = value;
+        data[i + 1] = value * 0.9 + 10;
+        data[i + 2] = value * 0.8 + 20;
+        data[i + 3] = 255;
+      }
+    }
+    return data;
+  };
+  const olderFrame = frame(0, 0);
+  const currentFrame = frame(4.6, -2.2);
+
+  const restoreWidth = gl.width;
+  const restoreHeight = gl.height;
+  const restoreFrames = gl.ringFrames;
+  gl.setSize(width, height, 2);
+  gl.uploadPixels(new ImageData(olderFrame, width, height));
+  gl.storeCurrent(0);
+  gl.uploadPixels(new ImageData(currentFrame, width, height));
+
+  const TRUSTED = 4;
+  const cases = [1, 2].map((factor) => {
+    const w = reducedSize(width, factor);
+    const h = reducedSize(height, factor);
+    const levels = 3;
+    const expected = pyramidFlow(
+      coreFlowLuma(olderFrame, width, height, factor, new Float32Array(w * h)),
+      coreFlowLuma(currentFrame, width, height, factor, new Float32Array(w * h)),
+      w, h, { levels },
+    );
+    const key = `probe${factor}`;
+    const current = flowLuma(gl, `${key}:current`, factor);
+    const older = flowLuma(gl, `${key}:older`, factor, 0);
+    const flow = flowBetween(gl, key, older, current, { levels });
+    const got = readField(gl, flow).values;
+
+    let maxDiff = 0;
+    let sumDiff = 0;
+    let trusted = 0;
+    let mismatches = 0;
+    let trustMismatches = 0;
+    let moving = 0;
+    for (let p = 0; p < w * h; p++) {
+      const sure = expected[p * 3 + 2] >= TRUSTED;
+      // Whether a vector is trusted only matters where there is a vector:
+      // on a still patch the test for "nothing moved" hovers around its
+      // threshold on noise alone, and falls either way with rounding.
+      const matters = Math.hypot(expected[p * 3], expected[p * 3 + 1]) > 0.25 || Math.hypot(got[p * 4], got[p * 4 + 1]) > 0.25;
+      if (matters && sure !== (got[p * 4 + 2] >= TRUSTED) && Math.abs(expected[p * 3 + 2] - got[p * 4 + 2]) > 0.1 * TRUSTED) trustMismatches++;
+      if (!sure) continue;
+      trusted++;
+      if (Math.hypot(expected[p * 3], expected[p * 3 + 1]) > 1 / factor) moving++;
+      const diff = Math.hypot(expected[p * 3] - got[p * 4], expected[p * 3 + 1] - got[p * 4 + 1]);
+      maxDiff = Math.max(maxDiff, diff);
+      sumDiff += diff;
+      if (diff > 0.05) mismatches++;
+    }
+
+    // The running average: one step, then the same frame again (a repeat must not advance it).
+    let state = smoothFlow(new Float32Array(w * h * 3), expected, 1, TRUSTED, new Float32Array(w * h * 3));
+    state = smoothFlow(state, expected, 0.4, TRUSTED, state);
+    flowSmooth(gl, key, flow, { alpha: 1, trusted: TRUSTED, floor: 0.25 });
+    flowSmooth(gl, key, flow, { alpha: 0.4, trusted: TRUSTED, floor: 0.25 });
+    const smoothed = readField(gl, flowSmooth(gl, key, flow, { alpha: 0.4, trusted: TRUSTED, floor: 0.25, repeat: true })).values;
+    let smoothDiff = 0;
+    const vector = [0, 0, 0];
+    for (let p = 0; p < w * h; p++) {
+      smoothedVector(state, p * 3, 0.25, vector);
+      // A presence within rounding of the floor may fall either way.
+      if (Math.abs(vector[2] - 0.25) < 0.02 || Math.abs(smoothed[p * 4 + 2] - 0.25) < 0.02) continue;
+      if (expected[p * 3 + 2] < TRUSTED) continue;
+      smoothDiff = Math.max(smoothDiff, Math.hypot(vector[0] - smoothed[p * 4], vector[1] - smoothed[p * 4 + 1]));
+    }
+
+    const share = trusted ? mismatches / trusted : 0;
+    return {
+      name: `reduced ${factor}x: ${w}x${h}`,
+      trusted, moving,
+      maxDiff: +maxDiff.toFixed(4),
+      meanDiff: +(sumDiff / Math.max(1, trusted)).toFixed(5),
+      mismatches,
+      mismatchShare: +(share * 100).toFixed(3),
+      trustMismatches,
+      smoothDiff: +smoothDiff.toFixed(4),
+      pass: trusted > 500 && moving > 100 && share < 0.001 && trustMismatches <= trusted * 0.001 && smoothDiff < 0.06,
+    };
+  });
+
+  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
+  pipeline.clearState();
+  return { cases, pass: cases.every((c) => c.pass) };
 }

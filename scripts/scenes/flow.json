@@ -1,0 +1,8 @@
+{ "scenes": [
+  { "name": "flow-colour", "clip": "flow", "at": 2.0, "frames": 6, "every": 6, "display": "diff", "readData": true,
+    "params": { "algorithm": "flow", "flowShow": "colour", "flowGap": 2, "flowRange": 25, "flowSmoothing": 6 } },
+  { "name": "flow-particles", "clip": "flow", "at": 2.0, "frames": 6, "every": 6, "display": "diff", "readData": true,
+    "params": { "algorithm": "flow", "flowShow": "particles", "flowGap": 2, "flowRange": 25, "flowSmoothing": 6, "traceColour": "heading" } },
+  { "name": "flow-particles-plain", "clip": "flow", "at": 2.0, "frames": 6, "every": 6, "display": "diff",
+    "params": { "algorithm": "flow", "flowShow": "particles", "flowGap": 2, "flowRange": 25, "flowSmoothing": 6, "traceColour": "plain" } }
+] }

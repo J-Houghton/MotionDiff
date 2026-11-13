@@ -1474,15 +1474,53 @@ export class WebGLRenderer {
    * @param {string} key
    * @param {string} fragSrc - GLSL ES 3.00 fragment shader; gets `in vec2 vUV`
    * @param {Record<string, number>} [samplers] - sampler uniform → texture unit
+   * @param {string} [vertSrc] - A vertex shader of its own, for drawLines: its
+   *   one attribute must be `in vec4 aPosition`
    * @returns {{prog: WebGLProgram, u: Record<string, WebGLUniformLocation>}}
    */
-  program(key, fragSrc, samplers) {
+  program(key, fragSrc, samplers, vertSrc) {
     let program = this._modePrograms.get(key);
     if (!program) {
-      program = createProgram(this.gl, this._vertexShader, fragSrc, samplers);
+      const gl = this.gl;
+      const vs = vertSrc ? compileShader(gl, gl.VERTEX_SHADER, vertSrc) : this._vertexShader;
+      program = createProgram(gl, vs, fragSrc, samplers);
+      if (vertSrc) gl.deleteShader(vs);
       this._modePrograms.set(key, program);
     }
     return program;
+  }
+
+  /**
+   * Draw line segments with the program in use (one made with a vertex
+   * shader of its own), added onto what the framebuffer already holds.
+   *
+   * @param {Float32Array} vertices - 4 values per vertex (the shader's
+   *   aPosition), two vertices per segment
+   * @param {number} vertexCount
+   * @param {WebGLFramebuffer|null} framebuffer
+   * @param {number} [width]
+   * @param {number} [height]
+   */
+  drawLines(vertices, vertexCount, framebuffer, width = this.width, height = this.height) {
+    const gl = this.gl;
+    if (!this._lineVAO) {
+      this._lineVAO = gl.createVertexArray();
+      this._lineBuffer = gl.createBuffer();
+      gl.bindVertexArray(this._lineVAO);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this._lineBuffer);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.viewport(0, 0, width, height);
+    gl.bindVertexArray(this._lineVAO);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._lineBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices.subarray(0, vertexCount * 4), gl.DYNAMIC_DRAW);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE);
+    gl.drawArrays(gl.LINES, 0, vertexCount);
+    gl.disable(gl.BLEND);
+    gl.bindVertexArray(null);
   }
 
   /**
@@ -1643,6 +1681,8 @@ export class WebGLRenderer {
 
     // VAO
     if (this._quadVAO) gl.deleteVertexArray(this._quadVAO);
+    if (this._lineVAO) gl.deleteVertexArray(this._lineVAO);
+    if (this._lineBuffer) gl.deleteBuffer(this._lineBuffer);
   }
 }
 

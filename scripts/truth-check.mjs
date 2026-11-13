@@ -17,6 +17,12 @@
 // For a vector field (motion history) it prints instead, per object: the mean
 // heading over its trail against the known heading, and the age sampled along
 // the path behind it, which should only rise.
+//
+// With --flow 1 (optical flow: data G, B = velocity in pixels per second) it
+// prints, per mover of the `flow` scene, the heading and speed measured
+// against the truth, and for any scene how much of the still background reads
+// under 5 px/s.
+//   node scripts/truth-check.mjs --dir filmstrips --tag flow --scene flow-colour --flow 1
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -56,6 +62,66 @@ function outlines(state, dt, grow) {
     shapes.push((x, y) => Math.hypot(x - (d.cx + dx), y - (d.cy + dy)) <= d.r + grow);
   }
   return (x, y) => shapes.some((inside) => inside(x, y));
+}
+
+// ── Optical flow: velocity against the truth ─────────────────────
+if (args.flow) {
+  // Velocity in scene pixels per second at a data pixel.
+  const unit = 1 / scale;
+  const regions = {};
+  const add = (name, vx, vy, tx, ty) => {
+    const r = (regions[name] ||= { n: 0, sumX: 0, sumY: 0, tX: 0, tY: 0, speed: 0, truth: 0, angle: 0, within10: 0, within20pct: 0 });
+    const speed = Math.hypot(vx, vy);
+    const truth = Math.hypot(tx, ty);
+    const error = Math.abs((((Math.atan2(vy, vx) - Math.atan2(ty, tx)) * 180) / Math.PI + 540) % 360 - 180);
+    r.n++; r.sumX += vx; r.sumY += vy; r.tX += tx; r.tY += ty; r.speed += speed; r.truth += truth; r.angle += error;
+    if (error <= 10) r.within10++;
+    if (Math.abs(speed / truth - 1) <= 0.2) r.within20pct++;
+  };
+  const still = { n: 0, slow: 0 };
+  const movers = now.band ? null : outlines(now, 0, 14);
+  for (let y = 0; y < data.height; y++) {
+    for (let x = 0; x < data.width; x++) {
+      const i = (y * data.width + x) * 4;
+      const vx = data.values[i + 1] * unit;
+      const vy = data.values[i + 2] * unit;
+      const sx = (x + 0.5) / scale;
+      const sy = (y + 0.5) / scale;
+      if (now.band) {
+        const { band, block, disc } = now;
+        const rx = sx - disc.cx;
+        const ry = sy - disc.cy;
+        const radius = Math.hypot(rx, ry);
+        const dir = (o) => [Math.cos((o.angle * Math.PI) / 180) * o.speed, Math.sin((o.angle * Math.PI) / 180) * o.speed];
+        const margin = 10;
+        if (sy >= band.y + margin && sy < band.y + band.h - margin) add('band', vx, vy, ...dir(band));
+        else if (sx >= block.x + margin && sx < block.x + block.w - margin && sy >= block.y + margin && sy < block.y + block.h - margin) add('block', vx, vy, ...dir(block));
+        else if (radius <= disc.r - margin && radius >= 20) add(radius >= disc.r * 0.6 ? 'discOuter' : 'discInner', vx, vy, -disc.omega * ry, disc.omega * rx);
+        else if (!(sy >= band.y - 14 && sy < band.y + band.h + 14) && radius > disc.r + 14
+          && !(sx >= block.x - 14 && sx < block.x + block.w + 14 && sy >= block.y - 14 && sy < block.y + block.h + 14)) {
+          still.n++;
+          if (Math.hypot(vx, vy) < 5) still.slow++;
+        }
+      } else if (!movers(sx, sy)) {
+        still.n++;
+        if (Math.hypot(vx, vy) < 5) still.slow++;
+      }
+    }
+  }
+  const report = { scene: args.scene, t: now.t, stillUnder5: +((100 * still.slow) / still.n).toFixed(2), regions: {} };
+  for (const [name, r] of Object.entries(regions)) {
+    report.regions[name] = {
+      meanAngleError: +(r.angle / r.n).toFixed(1),
+      within10deg: +((100 * r.within10) / r.n).toFixed(1),
+      speed: +(r.speed / r.n).toFixed(1),
+      knownSpeed: +(r.truth / r.n).toFixed(1),
+      speedRatio: +(r.speed / r.truth).toFixed(3),
+      within20pct: +((100 * r.within20pct) / r.n).toFixed(1),
+      meanVectorHeadingError: +Math.abs((((Math.atan2(r.sumY, r.sumX) - Math.atan2(r.tY, r.tX)) * 180) / Math.PI + 540) % 360 - 180).toFixed(1),
+    };
+  }
+  console.log(JSON.stringify(report, null, 1));
+  process.exit(0);
 }
 
 // ── Vector fields: heading and age along each object's path ──────

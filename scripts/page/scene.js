@@ -13,7 +13,15 @@
 // sixty: the square (never stopping) and the first disc at 60 fps, 5 s.
 // pulse: a still skin-toned patch whose brightness swings by ±1.2 levels at
 //   1.2 Hz (72 bpm), 12 s. Invisible to the eye.
+// flow (8 s at 30 fps): textured movers on a still textured background, for
+//   optical flow and particle traces (the flat objects of `truth` carry flow
+//   only at their rims):
+//   - a band across the top (y = 30..110) sliding right at 90 px/s
+//   - a 120x90 block heading down-left (135 degrees) at 60 px/s
+//   - a disc of radius 75 at (150, 245) turning clockwise at 1 rad/s: 75 px/s
+//     at its rim, nothing at its centre
 function makeScene(kind) {
+  if (kind === 'flow') return makeFlowScene();
   const width = 640;
   const height = 360;
   const fps = kind === 'sixty' ? 60 : 30;
@@ -75,6 +83,82 @@ function makeScene(kind) {
       }
       ctx.putImageData(img, 0, 0);
     }
+  }
+
+  return { width, height, fps, seconds, draw, truth };
+}
+
+/** A canvas of overlapping blobs and specks: texture at every scale, like a natural surface. */
+function textureCanvas(width, height, seed, tone) {
+  let s = seed >>> 0;
+  const random = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+  const canvas = Object.assign(document.createElement('canvas'), { width, height });
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = `rgb(${tone[0]}, ${tone[1]}, ${tone[2]})`;
+  ctx.fillRect(0, 0, width, height);
+  const blobs = Math.round((width * height) / 90);
+  for (let n = 0; n < blobs; n++) {
+    const size = 2 + random() * random() * 34;
+    const shade = (random() - 0.5) * 150;
+    ctx.fillStyle = `rgba(${tone[0] + shade | 0}, ${tone[1] + shade * 0.9 | 0}, ${tone[2] + shade * 0.8 | 0}, 0.75)`;
+    ctx.beginPath();
+    ctx.ellipse(random() * width, random() * height, size, size * (0.4 + random() * 0.6), random() * 3.2, 0, 7);
+    ctx.fill();
+  }
+  return canvas;
+}
+
+function makeFlowScene() {
+  const width = 640;
+  const height = 360;
+  const fps = 30;
+  const seconds = 8;
+  const lcg = (seed) => { let s = seed >>> 0; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; };
+
+  const BAND = { y: 30, h: 80, angle: 0, speed: 90, period: 1024 };
+  const BLOCK = { x0: 500, y0: 120, w: 120, h: 90, angle: 135, speed: 60 };
+  const DISC = { cx: 150, cy: 245, r: 75, omega: 1 };
+  const bg = textureCanvas(width, height, 11, [92, 100, 108]);
+  const band = textureCanvas(BAND.period, BAND.h, 22, [120, 104, 88]);
+  const block = textureCanvas(BLOCK.w, BLOCK.h, 33, [84, 112, 96]);
+  const disc = textureCanvas(DISC.r * 2, DISC.r * 2, 44, [104, 92, 120]);
+
+  function truth(frame) {
+    const t = frame / fps;
+    const a = (BLOCK.angle * Math.PI) / 180;
+    return {
+      t,
+      band: { y: BAND.y, h: BAND.h, angle: BAND.angle, speed: BAND.speed },
+      block: { x: BLOCK.x0 + Math.cos(a) * BLOCK.speed * t, y: BLOCK.y0 + Math.sin(a) * BLOCK.speed * t, w: BLOCK.w, h: BLOCK.h, angle: BLOCK.angle, speed: BLOCK.speed },
+      disc: { ...DISC },
+    };
+  }
+
+  function draw(ctx, frame) {
+    const state = truth(frame);
+    ctx.drawImage(bg, 0, 0);
+    const shift = (BAND.speed * state.t) % BAND.period;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, BAND.y, width, BAND.h); ctx.clip();
+    ctx.drawImage(band, shift - BAND.period, BAND.y);
+    ctx.drawImage(band, shift, BAND.y);
+    ctx.restore();
+    ctx.drawImage(block, state.block.x, state.block.y);
+    ctx.save();
+    ctx.translate(DISC.cx, DISC.cy);
+    ctx.rotate(DISC.omega * state.t);
+    ctx.beginPath(); ctx.arc(0, 0, DISC.r, 0, 7); ctx.clip();
+    ctx.drawImage(disc, -DISC.r, -DISC.r);
+    ctx.restore();
+
+    const rnd = lcg(977 + frame * 7919);
+    const img = ctx.getImageData(0, 0, width, height);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const n = (rnd() - 0.5) * 6;
+      d[i] += n; d[i + 1] += n; d[i + 2] += n;
+    }
+    ctx.putImageData(img, 0, 0);
   }
 
   return { width, height, fps, seconds, draw, truth };
