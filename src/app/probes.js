@@ -12,6 +12,8 @@ import { MASK_VOTES_STRICT, majority3x3, thresholdMask, threeFrameDifference } f
 import { HISTORY_MAX_DELTA, historyGradient, historyStep, poolDirection } from '../core/history.js';
 import { maskDifference, maskDraw, renderMask } from './modes/mask.js';
 import { HISTORY_CELL, HISTORY_SPREAD, renderHistory } from './modes/history.js';
+import { backgroundStep, createBackgroundState } from '../core/background.js';
+import { renderBackground } from './modes/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH, createTrailState, trailStep } from '../core/trails.js';
 
 /**
@@ -553,5 +555,114 @@ export function debugHistoryParity(pipeline) {
     withDirection,
     // The probe proves nothing unless there is a trail with headings in it.
     pass: recencyDiff <= 0.002 && directionDiff <= 0.02 && live > 200 && withDirection > 100,
+  };
+}
+
+/**
+ * Dev-only parity probe for the background model shaders
+ * (app/modes/background.js) against core/background.js: a block that
+ * appears, moves and stops over a textured scene, with a hand-made motion
+ * mask, one frame rendered twice. Compares the foreground decision and the
+ * strength frame by frame. The GPU keeps the model in half floats, so a
+ * pixel sitting exactly on the threshold may fall the other way: a handful
+ * of mismatches is allowed.
+ *
+ * It resizes the renderer and clears the pipeline — run it on an idle page.
+ *
+ * @param {Pipeline} pipeline - A pipeline whose init() picked the WebGL path
+ * @returns {{mismatches: number, compared: number, strengthDiff: number, foregroundSeen: number, absorbed: boolean, pass: boolean}|null}
+ */
+export function debugBackgroundParity(pipeline) {
+  const gl = pipeline?._glRenderer;
+  if (!gl) return null;
+  if (!gl.floatTargets) return { skipped: 'no float render targets', pass: true };
+
+  const width = 48;
+  const height = 32;
+  const count = width * height;
+  const THRESHOLD = 14;
+  const ALPHA = 0.22;
+  const HOLD_STEP = 0.4;
+  // The block appears at frame 2, moves until frame 7, then stands still.
+  const blockX = (k) => 4 + Math.min(k, 7) * 4;
+  const inBlock = (k, x, y) => k >= 2 && x >= blockX(k) && x < blockX(k) + 10 && y >= 8 && y < 22;
+  const frameAt = (k) => {
+    const frame = new Uint8ClampedArray(count * 4);
+    for (let p = 0; p < count; p++) {
+      const x = p % width;
+      const y = Math.floor(p / width);
+      for (let c = 0; c < 3; c++) frame[p * 4 + c] = inBlock(k, x, y) ? 170 + ((x * 5 + y * 3 + c * 20) % 60) : 50 + ((x * 3 + y * 7 + c * 11) % 30) + ((k * 7 + p * 13 + c) % 5);
+      frame[p * 4 + 3] = 255;
+    }
+    return frame;
+  };
+  // The motion mask by hand: the block's cells while it is moving.
+  const maskAt = (k) => {
+    const mask = new Uint8Array(count);
+    if (k >= 2 && k <= 7) for (let p = 0; p < count; p++) if (inBlock(k, p % width, Math.floor(p / width))) mask[p] = 1;
+    return mask;
+  };
+
+  const restoreWidth = gl.width;
+  const restoreHeight = gl.height;
+  const restoreFrames = gl.ringFrames;
+  gl.setSize(width, height, 2);
+  gl.clearTrails();
+  const maskTarget = gl.target('background:mask', width, height);
+  const maskTexture = maskTarget.tex;
+  const context = gl.gl;
+
+  let prev = createBackgroundState(count);
+  let next = createBackgroundState(count);
+  const foreground = new Uint8Array(count);
+  const strength = new Float32Array(count);
+  const opts = { alpha: ALPHA, holdStep: HOLD_STEP, threshold: THRESHOLD };
+  let mismatches = 0;
+  let compared = 0;
+  let strengthDiff = 0;
+  let foregroundSeen = 0;
+  let lastForeground = 0;
+
+  for (let k = 0; k < 26; k++) {
+    const frame = frameAt(k);
+    const mask = maskAt(k);
+    backgroundStep(prev, next, frame, mask, opts, foreground, strength);
+
+    // Upload the mask into the mask target's texture (rows flipped by the
+    // context's UNPACK_FLIP_Y, like every other upload).
+    const maskPixels = new Uint8Array(count * 4);
+    for (let p = 0; p < count; p++) { maskPixels[p * 4] = mask[p] * 255; maskPixels[p * 4 + 3] = 255; }
+    context.activeTexture(context.TEXTURE0);
+    context.bindTexture(context.TEXTURE_2D, maskTexture);
+    context.texSubImage2D(context.TEXTURE_2D, 0, 0, 0, width, height, context.RGBA, context.UNSIGNED_BYTE, maskPixels);
+    gl.uploadPixels(new ImageData(frame, width, height));
+
+    const draw = (repeat) => renderBackground(gl, { mask: maskTexture, ...opts, repeat, clean: false, show: 'solid' });
+    draw(false);
+    if (k === 5) draw(true); // must not learn the same frame twice
+    const data = gl.readDataField();
+
+    lastForeground = 0;
+    for (let p = 0; p < count; p++) {
+      compared++;
+      foregroundSeen += foreground[p];
+      lastForeground += foreground[p];
+      if (Math.round(data.values[p * 4]) !== foreground[p]) mismatches++;
+      strengthDiff = Math.max(strengthDiff, Math.abs(data.values[p * 4 + 1] - strength[p]));
+    }
+    [prev, next] = [next, prev];
+  }
+
+  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
+  pipeline.clearState();
+
+  return {
+    mismatches,
+    compared,
+    strengthDiff: +strengthDiff.toFixed(4),
+    foregroundSeen,
+    absorbed: lastForeground === 0,
+    // Proves nothing unless the block was foreground for a while and then absorbed.
+    pass: mismatches <= compared * 0.001 && strengthDiff <= 0.01 && foregroundSeen > 500 && lastForeground === 0,
   };
 }

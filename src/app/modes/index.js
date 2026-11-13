@@ -38,8 +38,9 @@ import raw from './raw.js';
 import magnify from './magnify.js';
 import mask from './mask.js';
 import history from './history.js';
+import background from './background.js';
 
-export const MODES = [posy, raw, magnify, mask, history];
+export const MODES = [posy, raw, magnify, mask, history, background];
 
 const BY_ID = new Map(MODES.map((mode) => [mode.id, mode]));
 

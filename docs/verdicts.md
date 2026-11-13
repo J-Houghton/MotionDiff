@@ -210,4 +210,45 @@ second: moving things neither blur into the background nor inflate its variance.
   marks everything.
 - No regression: other modes untouched.
 
-**Result:** pending.
+**Result: accepted.**
+
+Built as `app/modes/background.js` on `core/background.js` (12 unit tests); shader
+parity `__motionDiffBackgroundParity()`: 22 of 39,936 decisions differ (0.06%: the
+GPU keeps the model in half floats, so a pixel exactly on the threshold can fall the
+other way), strength within 1/255, and the test object is absorbed on both sides.
+WebGL with float render targets only; elsewhere the mode reports that it cannot run.
+
+All checks with "Absorb after" at 2 s, on `truth` (`scripts/truth-check.mjs`):
+
+| Check | When | Result |
+|---|---|---|
+| Filled silhouette | square moving (3.0 s) | **100%** of the square's and the disc's outline marked, nothing elsewhere. Raw marks 32% of the square and 47% of the disc (two strips), the motion mask 34% and 50% (one) |
+| Stopped object is kept… | 0.5 s and 1.5 s after it stops | 100% marked |
+| …and absorbed in roughly the set time | 2.0 s after | 21% left |
+| | 2.5 s after | 0% |
+| The place it stood, after it moves on | 0.5 s to 2.0 s after | ghost, 100% marked |
+| No permanent ghost | 2.5 s after | 11% left |
+| | 3.0 s after | 0% |
+
+| Blind judge | Clip | Result |
+|---|---|---|
+| Filled where differencing gives an outline | truth | "One whole filled white square, drawn once, at its true position"; Raw and Posy: "two vertical bars... parts only"; the mask: "one bright white leading strip" |
+| Stopped object | truth | Visible in the three moments after stopping, "gone in 5 and 6"; in Raw, Posy and the mask "not visible in any of moments 2 to 6" |
+| Ghost | truth | A block of bare background at the vacated place for about three moments; "in moment 6 nothing remains" |
+| Real footage | traffic | "Whole filled blobs in their own colours... the most complete image" |
+| Shows something Posy and Raw don't | all | "The only method giving whole filled shapes in true colour, the only one that shows a stopped object... and the only one without doubling" |
+| Grouping | all | All ten images assigned to the right four methods |
+
+Changes made during the check:
+- The time constant went from half to a third of "Absorb after": with a half, the
+  stopped square took 2.3 to 3.0 s to go at a setting of 2 s.
+- Learning is gated by plain two-frame motion, not by the three-frame mask. For
+  gating, the place an object has just left should count as moving too, but only for
+  one gap; the mask's second gap kept it frozen a second longer for no benefit. The
+  mode has no "Second gap" control as a result.
+
+Defects the judge found, left as they are and listed in the mode's help: the ghost
+itself (inherent: the model had learnt the object); ragged edges while something is
+being absorbed (pixels cross the threshold one by one); on `traffic`, soft blobby
+edges and faint patches on the road beside the cars (their shadows and reflections
+are not background either).

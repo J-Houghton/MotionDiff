@@ -10,7 +10,9 @@
 //   current   inside an object's outline now (grown by 2 px for blur)
 //   ghost     inside its outline `gap` frames ago, outside the current one
 //   elsewhere anywhere else (noise)
-// and how much of each region is covered.
+// and how much of each region is covered. With --box x,y,w,h (scene pixels)
+// it also says how much of that box is marked: for a place where something
+// used to stand.
 //
 // For a vector field (motion history) it prints instead, per object: the mean
 // heading over its trail against the known heading, and the age sampled along
@@ -140,6 +142,39 @@ for (let y = 0; y < data.height; y++) {
   }
 }
 const pct = (a, b) => (b ? +((100 * a) / b).toFixed(2) : 0);
+
+// How much of each object's own outline is marked (shrunk by 2 px: its inside).
+const filled = {};
+for (const key of ['square', 'disc', 'disc2']) {
+  if (!now[key]) continue;
+  const inside = outlines({ [key]: now[key] }, 0, -2);
+  let area = 0;
+  let marked = 0;
+  for (let y = 0; y < data.height; y++) {
+    for (let x = 0; x < data.width; x++) {
+      if (!inside((x + 0.5) / scale, (y + 0.5) / scale)) continue;
+      area++;
+      const value = data.values[(y * data.width + x) * 4];
+      if (isMask ? value > 0.5 : value > 0) marked++;
+    }
+  }
+  if (area) filled[key] = pct(marked, area);
+}
+let box;
+if (args.box) {
+  const [bx, by, bw, bh] = args.box.split(',').map(Number);
+  let area = 0;
+  let marked = 0;
+  for (let y = Math.floor(by * scale); y < (by + bh) * scale; y++) {
+    for (let x = Math.floor(bx * scale); x < (bx + bw) * scale; x++) {
+      if (x < 0 || y < 0 || x >= data.width || y >= data.height) continue;
+      area++;
+      const value = data.values[(y * data.width + x) * 4];
+      if (isMask ? value > 0.5 : value > 0) marked++;
+    }
+  }
+  box = pct(marked, area);
+}
 console.log(JSON.stringify({
   scene: args.scene,
   kind: data.kind,
@@ -147,4 +182,6 @@ console.log(JSON.stringify({
   marked: count.marked,
   shareOfMarks: { current: pct(count.current, count.marked), ghost: pct(count.ghost, count.marked), elsewhere: pct(count.elsewhere, count.marked) },
   coverage: { current: pct(count.current, area.current), ghost: pct(count.ghost, area.ghost), elsewhere: pct(count.elsewhere, area.elsewhere) },
+  filled,
+  box,
 }));
