@@ -1,6 +1,6 @@
 # Dev scripts
 
-Visual tooling for the acceptance rules in `CLAUDE.md`. Dev-only: nothing here
+Visual tooling for the acceptance rules in `docs/development.md`. Dev-only: nothing here
 ships. No dependencies beyond Node 22 and an installed Chrome or Edge
 (`CHROME_PATH` overrides where to find it).
 

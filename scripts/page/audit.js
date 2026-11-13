@@ -1,5 +1,5 @@
 // Runs inside the app page: `npm run filmstrip eval -- --run scripts/page/audit.js`.
-// Measures the interface acceptance rules in CLAUDE.md on whatever state the
+// Measures the interface acceptance rules in docs/development.md on whatever state the
 // page is in. `args.touch` adds the 44 px touch-target rule.
 const app = document.getElementById('app');
 const vw = window.innerWidth;

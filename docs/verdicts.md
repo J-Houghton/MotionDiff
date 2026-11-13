@@ -1,9 +1,10 @@
 # Verdicts
 
-The log the acceptance rules in `CLAUDE.md` ask for. Every change is tagged
+The log the acceptance rules in [development.md](development.md#how-changes-are-accepted) ask for. Every change is tagged
 **visual**, **performance** or **robustness**. For a visual change the expectation
 is written here *before* it is built; the result is filled in after a blind judge
-(a fresh subagent given two unlabeled filmstrips in random order) has looked.
+(a reviewer that has not seen the work, here a fresh AI agent, given two unlabeled
+filmstrips in random order) has looked.
 
 Filmstrips are rendered with `npm run filmstrip` on the reference clips
 (`scripts/README.md`) and kept in `filmstrips/` (not tracked in git).
@@ -254,7 +255,7 @@ edges and faint patches on the road beside the cars (their shadows and reflectio
 are not background either).
 
 ### I1. Interface — judged from screenshots
-Rules from `CLAUDE.md`. Measured by `scripts/page/audit.js` on 23 states (desktop
+Rules from [development.md](development.md#how-changes-are-accepted). Measured by `scripts/page/audit.js` on 23 states (desktop
 1440×900 and 1280×720, light and dark, every mode family, split, empty, keys sheet;
 fullscreen, awake and idle; phone 390×844 with a clip, with the fake camera, with
 the parameter sheet, the source sheet, empty and idle; tablet 820×1180), then by a

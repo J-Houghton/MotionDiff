@@ -7,7 +7,7 @@ Last updated: 2026-11-13 (end of session 3: new interface, three new modes, visu
 tooling).
 
 The governing rule for every item: lightweight, and easy to maintain and debug by hand.
-Visual work is accepted under the rules in `CLAUDE.md`; results are logged in
+Visual work is accepted under the rules in `docs/development.md`; results are logged in
 `docs/verdicts.md`.
 
 ## Planned, in order
@@ -50,7 +50,7 @@ is deferred, not planned.
 ### Session 3
 | Item | Commit | Notes |
 |---|---|---|
-| Acceptance rules and decisions recorded | `f5ed9a0` | `CLAUDE.md` |
+| Acceptance rules and decisions recorded | `f5ed9a0` | Now in `docs/development.md` |
 | Mode registry with data outputs; session module; new interface (Plate and Viewfinder, light and dark, phone layout); Tweakpane panel from mode schemas with the ARIA and focus patch; keyboard map; old UI, Pickr and accent themes removed; phone defaults; no-float fallback exercised | `2414314` | |
 | Visual tooling: reference clips, filmstrips, numeric guard, interface audit, checks against known truth | `cd98ae7`, `a0ff53c` | `scripts/README.md` |
 | Colour-by-age: both looks from the feedback buffer | `cd98ae7` | V1. Same look as the old ring, with a hue caveat |

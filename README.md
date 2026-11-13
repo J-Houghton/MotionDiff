@@ -1,176 +1,74 @@
 # MotionDiff
-MotionDiff is a browser-based tool for revealing motion in video: frame differencing, a motion mask, motion history, a background model and Eulerian magnification, on files, URLs, the camera or the screen.
+
+See what moves. MotionDiff is a browser tool that takes a video (a file, a URL, your camera or your screen) and shows only the motion in it, six different ways, in real time on the GPU.
+
+**[Open the live demo](https://j-houghton.github.io/MotionDiff/)** · no install, and the video never leaves your browser.
+
+![MotionDiff showing the heading of traffic on a dual carriageway as colour](docs/screenshots/plate-motion-history.png)
 
 ## Modes
-Six modes, chosen with the keys 1 to 6 or in the parameter panel. Each also gives its result as data (display mode "data").
 
-| Key | Mode | Shows |
+| Key | Mode | What you see |
 |---|---|---|
-| 1 | Posy | Each frame over its own negative from a moment ago: stillness is grey, motion glows |
-| 2 | Raw diff | The plain difference: stillness is black. Every mover appears twice, where it is and where it was |
-| 3 | Magnify | A band of slow change amplified: pulse, breathing, sway |
-| 4 | Motion mask | What is moving, once, where it is now, in its own colours |
-| 5 | Motion history | A band along each mover's path, coloured by how long ago it passed or by its heading |
-| 6 | Background model | Whatever is not part of the usual scene, whole, moving or stopped |
+| 1 | **Posy** | Each frame laid over its own negative from a moment ago. Stillness cancels to grey; motion glows, with colour fringes that show direction when the RGB channels look back by different amounts |
+| 2 | **Raw diff** | The plain difference between now and a moment ago. Stillness is black; every mover appears twice, where it is and where it was |
+| 3 | **Magnify** | Slow, small changes amplified until they are visible: a pulse in a face, breathing, a building swaying |
+| 4 | **Motion mask** | Whatever is moving, cut out once, where it is now, in its own colours |
+| 5 | **Motion history** | A band along each mover's path, coloured by how long ago it passed, or by which way it was heading |
+| 6 | **Background model** | Whatever is not part of the usual scene, whole, whether it is moving or has stopped |
 
-## How the modes work
+| ![Posy mode on trees in wind](docs/screenshots/plate-posy.png) | ![Background model on traffic](docs/screenshots/plate-background-model.png) | ![The viewfinder layout on a phone](docs/screenshots/phone-viewfinder.png) |
+|---|---|---|
+| Posy, dark theme | Background model | Viewfinder layout on a phone |
 
-### Posy Blend (default)
-Posy Blend compares the current frame against an older frame after inverting the old one:
+How each mode works, and what its controls mean, is in **[docs/modes.md](docs/modes.md)**.
 
-`blend = (current + invert(old)) / 2`
+## Using it
 
-For a static pixel, the math always collapses to the same midpoint:
+1. Open a video file, paste a video or HLS URL, or choose the camera or the screen. There are three sample clips to start from.
+2. Pick a mode (keys **1** to **6**) and press **A** to let MotionDiff measure the clip and set the gap and threshold for you.
+3. Adjust from there in the parameter panel (**P**), or drag the markers on the time ruler under the picture.
 
-`static pixel: (V + (255 - V)) / 2 = 128`
+A few more keys: **Space** play and pause, **← →** step a frame, **S** split the picture against the original, **D** cycle the display (diff, overlay, glow, data), **F** fullscreen viewfinder, **T** light and dark, **R** record the output as WebM, **?** the full list.
 
-That is true for every possible input value `V`. The consequence is the signature MotionDiff look: the background cancels to gray, and motion glows away from gray. With RGB time-shift enabled, the color of that glow depends on which channel is comparing against which moment in time, so direction and speed become visible as colored fringes instead of plain luminance.
+On a phone or tablet the picture fills the screen and the controls are small plates that fade while you watch; tap the picture to bring them back.
 
-### Raw Diff
-Raw Diff uses absolute channel difference:
+Recipes for particular kinds of footage are in [docs/examples/examples.md](docs/examples/examples.md), and advice on choosing the gap, threshold and trail in [docs/examples/parameter-guide.md](docs/examples/parameter-guide.md).
 
-`diff = |current - old|`
+## Run it locally
 
-Static regions go to black, and brighter pixels mean larger motion between the two samples. It is the more literal mode: high contrast, easy to read, and good for simple motion detection when you do not need Posy mode's gray-centered directional color.
-
-### Motion mask
-A pixel counts as moving only when it differs from two earlier moments, the gap and a longer second gap:
-
-`moving = min(|current - old1|, |current - old2|) >= threshold`
-
-The place an object has just left differs from the frame of one gap ago but looks like the older one again, so the second copy that Raw draws disappears. The frames are blurred first and the mask is cleaned by a 3 x 3 vote, so it speckles far less than Raw at the same threshold. An object has to move more than its own width between the two gaps, or part of its ghost survives. WebGL2 only.
-
-### Motion history
-One number per pixel: the time since the motion mask last fired there. Shown as a colour gradient from new to old along each path, or as a hue for the heading (right is red, down is yellow-green, left is cyan, up is violet). The heading is read from the slope of that field and averaged over patches about 56 pixels across. Needs float render targets.
-
-### Background model
-A running mean and variance of what is usually at each pixel. A pixel is foreground when it differs from the mean by more than the threshold and 2.5 standard deviations. Unlike differencing this marks the whole of an object and keeps marking it after it stops, until it has been absorbed ("Absorb after"). The model does not learn where something moved within the last half second. Whatever is in the picture at the start is taken for background and leaves a ghost for one absorb time when it moves. Needs float render targets.
-
-### Frame offset (k)
-The frame offset chooses how far back in time the comparison reaches. One unit is 1/30 s of video time: frames are stamped with their media time and the comparison frame is looked up by time, so `k` means the same thing at any source frame rate, playback speed or processing fps cap.
-
-| k value | Best for |
-|---------|----------|
-| 1-3 | Fast motion, people walking, hand gestures |
-| 5-15 | General nature footage, moderate motion |
-| 20-40 | Slow drift, clouds, fog, rising steam |
-| 50-90 | Imperceptibly slow motion, moonrise, tide |
-
-### RGB channel time-shift
-Instead of comparing all channels to the same old frame, MotionDiff can offset them in time:
-
-- Red samples `k`
-- Green samples `k + spread`
-- Blue samples `k + spread x 2`
-
-That stagger turns time into color. When an edge moves, each channel sees it at a slightly different temporal position, so the merged result becomes a directional smear rather than a white outline.
-
-```text
-time:     now  <- current frame
-R old:    t - k
-G old:    t - (k + spread)
-B old:    t - (k + spread x 2)
-```
-
-### Trails
-A trail keeps a pixel's motion on screen for a while after it happened. For every pixel and channel MotionDiff remembers the strongest recent diff value and how long ago it was written, holds it at full strength for the first half of the trail length, then fades it out.
-
-- Posy mode measures strength as deviation from 128 and fades back to grey.
-- Raw Diff measures it as the channel value and fades to black.
-
-Trail length is in the same 1/30 s units as the frame offset and is measured in video time, so a trail lasts the same at any frame rate, playback speed or processing fps cap. Short trails show immediate movement. Long trails turn motion into persistent streaks and ghosted silhouettes.
-
-### Threshold
-Threshold suppresses noise before accumulation. It is the mean absolute channel difference between the two frames (0-255) and means the same in Posy and Raw mode.
-
-- Low threshold: more sensitive, more noise.
-- High threshold: cleaner image, but subtle motion can disappear.
-
-### Display modes
-| Mode | Description |
-|------|-------------|
-| Diff | Raw algorithm output only |
-| Overlay | Motion screen-blended onto original frame |
-| Glow | Original + amplified additive bloom from motion |
-| Data | The mode's result as data: a mask, a scalar field or a vector field |
-
-## Interface
-Two layouts share one design. **Plate** (desktop): the picture as a captioned plate, with a time ruler showing how far back each channel looks and how long trails last. **Viewfinder** (fullscreen with F, and always on phones and touch devices): the picture fills the screen and the controls are small plates that fade when idle. Light and dark themes (T). Split compare against the original with S. Every action has a key; press ? for the list.
-
-## Project structure
-```text
-.
-├── .github/workflows/deploy.yml    Build and GitHub Pages deploy on push to master.
-├── public/                         Favicon and shared SVG icon sheet.
-├── specs/                          Specs the sonification and magnification features were built from.
-├── src/
-│   ├── app/
-│   │   ├── modes/                  The mode registry: one module per mode, plus index.js and shared params.
-│   │   ├── session.js              Everything the interface drives: sources, transport, recording, auto-configure.
-│   │   ├── probes.js               Dev-only shader-versus-core parity probes.
-│   │   ├── audio.js                Sonification engine (Tone.js, loaded lazily).
-│   │   ├── clips.js                Built-in preset clips and parameter presets.
-│   │   ├── exporter.js             MediaRecorder-based WebM export helper.
-│   │   ├── loader.js               URL source detection and HLS attachment.
-│   │   ├── pipeline.js             Runtime orchestration for capture, buffering, and renderer selection.
-│   │   ├── pipeline.worker.js      Canvas fallback worker for diff, blur, trails, and magnify.
-│   │   ├── renderer.js             Canvas 2D compositing for the fallback path.
-│   │   ├── renderer.webgl.js       WebGL2 renderer and shader pipeline.
-│   │   └── source-profile.js       Per-source capture settings (file, URL, HLS, camera, screen).
-│   ├── core/
-│   │   ├── __tests__/              Unit tests (vitest, node).
-│   │   ├── analyze.js              Auto-configuration: noise floor, threshold and gap from frame bursts.
-│   │   ├── background.js           Background model: running mean and variance, gated by motion.
-│   │   ├── blur.js                 3 x 3 box blur.
-│   │   ├── buffer.js               Frame ring bookkeeping and memory budgeting.
-│   │   ├── diff.js                 Posy Blend and Raw Diff pixel math.
-│   │   ├── energy.js               Motion energy grid and pitch/pan mapping for sonification.
-│   │   ├── history.js              Motion history: age per pixel, heading from its slope.
-│   │   ├── magnify.js              Eulerian magnification math.
-│   │   ├── magnitude.js            Shared unsigned motion magnitude and grid pooling.
-│   │   ├── mask.js                 Motion mask: three-frame differencing and the clean-up vote.
-│   │   ├── timebase.js             Media-time base: frame stamps, seek/loop detection, lookback.
-│   │   └── trails.js               Trails: one decaying feedback state per pixel.
-│   ├── styles/main.css             Both layouts and both themes.
-│   ├── ui/                         shell.js (the DOM), panel.js (Tweakpane, built from mode schemas), ruler.js, keys.js.
-│   └── main.js                     Wiring.
-├── scripts/                        Dev-only visual tooling: reference clips, filmstrips, checks. See scripts/README.md.
-├── docs/                           Research notes, design mockups, the verdict log, the optical flow design note.
-├── ROADMAP.md                      What is done, in progress, planned and deferred.
-├── index.html                      Single-page shell.
-└── vite.config.js                  Vite base-path configuration.
-```
-
-Layer dependencies are intentionally strict:
-
-```text
-core/ <- no imports
-app/  <- core/ only
-ui/   <- app/ only
-main.js <- app/ + ui/ (and core/ for pure helpers)
-```
-
-## Development
 ```bash
-git clone <repo>
-cd motiondiff
+git clone https://github.com/J-Houghton/MotionDiff.git
+cd MotionDiff
 npm install
 npm run dev     # http://localhost:5173/MotionDiff/
-npm test        # run core unit tests
-npm run build   # production build
 ```
 
-## Renderer
-MotionDiff detects WebGL2 at runtime and uses it when available; otherwise it falls back to a Canvas 2D + Worker pipeline. The console logs which renderer is active, so you can confirm the path immediately on load.
+`npm test` runs the unit tests and `npm run build` makes the production build.
 
-On the WebGL path frames never leave the GPU: the video element is uploaded with `texImage2D`, scaled to the processing size, and past frames are kept in a `TEXTURE_2D_ARRAY` ring. Diff, blur, accumulation, and composite passes all run as shaders. The ring is sized from a memory budget (192 MiB), so it holds 120 frames at 640px, 54 at 1280x720 and 24 at 1920x1080. The Canvas 2D fallback still captures through `getImageData`, but keeps its frame history inside the worker. Append `?renderer=canvas2d` to the URL to run the fallback on a machine that has WebGL2.
+## Browser support
 
-## Magnify mode and patents
-Magnify implements the simplest real-time variant of Eulerian video magnification (Wu et al., SIGGRAPH 2012) from the published description; it contains no MIT code. The method itself is covered by MIT patents (US 9,811,901 and related), which MIT licenses for commercial use. This project is a personal, non-commercial demo. If you want to use magnify mode commercially, ask MIT's Technology Licensing Office or a lawyer first. See `docs/research.md`.
+MotionDiff uses WebGL2 where it is available and falls back to a Canvas 2D worker where it is not. Posy, Raw diff and Magnify run on both; the motion mask needs WebGL2, and motion history and the background model also need float render targets. A mode that cannot run on your device says so instead of showing a blank picture.
 
-## Tests
-Tests cover the pure functions under `src/core/`: diff math, blur, ring buffers, the time base, trails, analysis, the shared motion magnitude, the sonification grid mapping, the magnification math, the motion mask, motion history and the background model. Run them with `npm test`.
+It has been developed and tested in Chrome on desktop. Other browsers and real phones are not yet tested.
 
-The shaders are checked against those functions in a real browser: in a dev build, `__motionDiffDiffParity()`, `__motionDiffTrailParity()`, `__motionDiffEnergyParity()`, `__magnifyParityHarness()`, `__motionDiffMaskParity()`, `__motionDiffHistoryParity()` and `__motionDiffBackgroundParity()` in the console run the same synthetic frames through core and GPU and report the difference.
+## Documentation
 
-Visual results are checked with filmstrips of fixed moments from reference clips, a numeric guard, and checks against synthetic scenes whose motion is known (`scripts/README.md`). What was expected and what a blind judge saw is logged in `docs/verdicts.md`.
+| | |
+|---|---|
+| [docs/modes.md](docs/modes.md) | How each mode works and what every control does |
+| [docs/examples/](docs/examples/) | Settings for common footage, and how to choose them |
+| [docs/development.md](docs/development.md) | Project layout, conventions, tests, how changes are checked |
+| [ROADMAP.md](ROADMAP.md) | What is done, what is next, what is deferred and why |
+| [docs/verdicts.md](docs/verdicts.md) | What each visual change was expected to do, and what was measured |
+| [docs/research.md](docs/research.md) | What other implementations do, and which ideas were adopted |
+| [docs/optical-flow.md](docs/optical-flow.md) | Design note for the next mode |
+| [scripts/README.md](scripts/README.md) | Dev tooling: reference clips, filmstrips, checks against known motion |
+
+## Licence
+
+[MIT](LICENSE) for the code.
+
+- The bundled fonts (Fraunces, IBM Plex Mono, Barlow Condensed) are not MIT: each is under the SIL Open Font License 1.1.
+- Sample and reference clips are loaded from their original hosts and are not part of this repository.
+- Magnify implements a published method that is covered by patents held by the Massachusetts Institute of Technology. This is a personal, non-commercial project; see [the note in docs/modes.md](docs/modes.md#magnify) before using that mode commercially.

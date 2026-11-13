@@ -40,7 +40,7 @@ if (import.meta.env.DEV) {
     setParams: (params) => session.setParams(params),
     stepTo: (time) => session.stepTo(time),
   };
-  // Shader-vs-core parity probes (see CLAUDE.md).
+  // Shader-vs-core parity probes (see docs/development.md).
   import('./app/probes.js').then((probes) => {
     window.__motionDiffDiffParity = () => probes.debugDiffParity(session.pipeline);
     window.__motionDiffTrailParity = () => probes.debugTrailParity(session.pipeline);
