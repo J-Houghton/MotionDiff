@@ -114,7 +114,7 @@ export class Pipeline {
     this._videoEl = videoEl;
     this._outputCanvas = outputCanvasEl;
     // 2D capture canvas: the worker fallback's frame source, and how
-    // sampleFrames reads pixels for auto-configure on either path.
+    // sampleBursts reads pixels for auto-configure on either path.
     this._capCanvas = document.createElement('canvas');
     this._capCtx = this._capCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -401,27 +401,89 @@ export class Pipeline {
     }
   }
 
-  async sampleFrames(video, sampleCount = 30) {
+  /**
+   * Sample short bursts of consecutive frames for auto-configure.
+   *
+   * A seekable source is sampled by seeking: `burstCount` bursts spread
+   * over the clip, each `framesPerBurst` frames one source-frame interval
+   * apart (aimed at the middle of each frame so a seek cannot straddle two).
+   * A live source (camera, screen, live stream) cannot be seeked, so one
+   * burst is taken from the frames as they arrive.
+   *
+   * Pixels are read through the 2D capture canvas at the processing size.
+   *
+   * @param {HTMLVideoElement} video
+   * @param {{burstCount?: number, framesPerBurst?: number, fps?: number}} [options]
+   *   fps is the source frame rate; defaults to 30
+   * @returns {Promise<{bursts: Uint8ClampedArray[][], fps: number}>} fps is
+   *   the rate the returned frames are actually spaced at
+   */
+  async sampleBursts(video, options = {}) {
+    const burstCount = Math.max(1, options.burstCount ?? 4);
+    const framesPerBurst = Math.max(2, options.framesPerBurst ?? 6);
+    const sourceFps = Number.isFinite(options.fps) && options.fps > 0 ? options.fps : 30;
+    if (!this.width || !this.height) return { bursts: [], fps: sourceFps };
+
     const duration = Number.isFinite(video.duration) ? video.duration : 0;
-    if (!duration || !this.width || !this.height) return [];
+    if (!duration) return this._sampleLiveBurst(video, framesPerBurst * 2, sourceFps);
 
-    const frames = [];
-    const totalSamples = Math.max(2, sampleCount);
-    const finalTime = Math.max(duration - 0.05, 0);
+    const step = 1 / sourceFps;
+    const burstSpan = framesPerBurst * step;
+    const lastStart = Math.max(duration - burstSpan - 0.05, 0);
     const originalTime = video.currentTime;
+    const bursts = [];
 
-    for (let index = 0; index < totalSamples; index++) {
-      const ratio = totalSamples === 1 ? 0 : index / (totalSamples - 1);
-      const targetTime = finalTime * ratio;
-      await this._seekVideo(video, targetTime);
-      const frame = this.captureFrame(video);
-      if (frame) {
-        frames.push(new Uint8ClampedArray(frame.data));
+    try {
+      for (let b = 0; b < burstCount; b++) {
+        // Burst b starts at the centre of the b-th of burstCount equal slices.
+        const start = lastStart * ((b + 0.5) / burstCount);
+        const frames = [];
+        for (let i = 0; i < framesPerBurst; i++) {
+          await this._seekVideo(video, start + (i + 0.5) * step);
+          const frame = this.captureFrame(video);
+          if (frame) frames.push(frame.data);
+        }
+        if (frames.length >= 2) bursts.push(frames);
       }
+    } finally {
+      await this._seekVideo(video, originalTime);
+    }
+    return { bursts, fps: sourceFps };
+  }
+
+  /**
+   * Capture `count` consecutive frames from a playing, unseekable source
+   * and measure the rate they actually arrived at.
+   */
+  async _sampleLiveBurst(video, count, fallbackFps) {
+    const frames = [];
+    const times = [];
+    const nextFrame = () => new Promise((resolve) => {
+      if (HAS_RVFC) {
+        video.requestVideoFrameCallback((_now, meta) => resolve(meta.mediaTime));
+      } else {
+        requestAnimationFrame(() => resolve(video.currentTime));
+      }
+    });
+
+    // Give up if frames stop arriving (a paused or ended stream).
+    const deadline = performance.now() + 3000;
+    while (frames.length < count && performance.now() < deadline) {
+      const time = await Promise.race([
+        nextFrame(),
+        new Promise((resolve) => setTimeout(() => resolve(null), 500)),
+      ]);
+      if (time === null) continue;
+      if (times.length && time <= times[times.length - 1]) continue; // same frame again
+      const frame = this.captureFrame(video);
+      if (!frame) continue;
+      frames.push(frame.data);
+      times.push(time);
     }
 
-    await this._seekVideo(video, originalTime);
-    return frames;
+    const span = times.length >= 2 ? times[times.length - 1] - times[0] : 0;
+    const fps = span > 0 ? (times.length - 1) / span : fallbackFps;
+    return { bursts: frames.length >= 2 ? [frames] : [], fps };
   }
 
   _seekVideo(video, targetTime) {

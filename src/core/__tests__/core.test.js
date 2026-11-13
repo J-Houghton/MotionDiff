@@ -512,31 +512,133 @@ describe('ringCapacity', () => {
   });
 });
 
+// ─────────────────────────────────────
+//  analyze.js — analyzeSample
+// ─────────────────────────────────────
+
+/** Deterministic pseudo-random generator so noise tests are repeatable. */
+function makeRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+/**
+ * A burst of `count` consecutive W x H frames: a flat background with
+ * uniform noise of the given amplitude and, optionally, a bright block that
+ * moves `speed` px per frame.
+ */
+function makeBurst({ width = 64, height = 32, count = 6, noise = 0, speed = 0, block = 8, seed = 1 }) {
+  const random = makeRandom(seed);
+  const frames = [];
+  for (let n = 0; n < count; n++) {
+    const data = new Uint8ClampedArray(width * height * 4);
+    const x0 = 4 + Math.floor(n * speed);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        const inBlock = speed > 0 && x >= x0 && x < x0 + block && y >= 8 && y < 8 + block;
+        const base = inBlock ? 220 : 90;
+        for (let c = 0; c < 3; c++) {
+          data[i + c] = base + Math.round((random() - 0.5) * 2 * noise);
+        }
+        data[i + 3] = 255;
+      }
+    }
+    frames.push(data);
+  }
+  return frames;
+}
+
 describe('analyzeSample', () => {
-  it('suggests a low threshold and long offset for near-zero motion', () => {
-    const frames = [
-      makePixels([10, 20, 30, 255], [40, 50, 60, 255]),
-      makePixels([10, 20, 30, 255], [40, 50, 60, 255]),
-      makePixels([10, 20, 30, 255], [40, 50, 60, 255]),
-    ];
+  it('returns the defaults when there is nothing to analyse', () => {
+    expect(analyzeSample([], 30)).toMatchObject({ frameOffset: 5, threshold: 10 });
+    expect(analyzeSample(null, 30)).toMatchObject({ frameOffset: 5, threshold: 10 });
+    expect(analyzeSample([[makePixels([1, 2, 3, 255])]], 30)).toMatchObject({ frameOffset: 5, threshold: 10 });
+  });
 
-    const result = analyzeSample(frames, 30);
+  it('a clean static scene gets the minimum threshold and a long gap', () => {
+    const result = analyzeSample([makeBurst({}), makeBurst({ seed: 2 })], 30);
 
-    expect(result.threshold).toBe(5);
+    expect(result.noiseFloor).toBe(0);
+    expect(result.threshold).toBe(3);
     expect(result.frameOffset).toBe(15);
   });
 
-  it('suggests a high threshold and short offset for strong motion', () => {
-    const frames = [
-      makePixels([0, 0, 0, 255], [0, 0, 0, 255]),
-      makePixels([255, 255, 255, 255], [255, 255, 255, 255]),
-      makePixels([0, 0, 0, 255], [0, 0, 0, 255]),
-    ];
+  it('the noise floor follows the noise level, and the threshold sits above it', () => {
+    const quiet = analyzeSample([makeBurst({ noise: 2 })], 30);
+    const noisy = analyzeSample([makeBurst({ noise: 12 })], 30);
 
-    const result = analyzeSample(frames, 30);
+    expect(noisy.noiseFloor).toBeGreaterThan(quiet.noiseFloor * 3);
+    expect(quiet.threshold).toBeGreaterThan(quiet.noiseFloor);
+    expect(noisy.threshold).toBeGreaterThan(noisy.noiseFloor * 2);
+    expect(noisy.threshold).toBeGreaterThan(quiet.threshold);
+  });
 
-    expect(result.threshold).toBe(40);
-    expect(result.frameOffset).toBe(2);
+  it('noise alone does not read as motion', () => {
+    const result = analyzeSample([makeBurst({ noise: 10 }), makeBurst({ noise: 10, seed: 7 })], 30);
+
+    expect(result.activeFraction).toBeLessThan(0.01);
+    expect(result.frameOffset).toBeGreaterThanOrEqual(15);
+  });
+
+  it('the noise floor is the median, so a moving object does not raise it', () => {
+    const still = analyzeSample([makeBurst({ noise: 3 })], 30);
+    const moving = analyzeSample([makeBurst({ noise: 3, speed: 4 })], 30);
+
+    expect(moving.noiseFloor).toBeCloseTo(still.noiseFloor, 0);
+    expect(moving.threshold).toBe(still.threshold);
+  });
+
+  it('fast motion gets the shortest gap', () => {
+    // 8 px/frame: 2 x 64 changed pixels out of 2048 at a gap of one frame.
+    const result = analyzeSample([makeBurst({ noise: 2, speed: 8 })], 30);
+    expect(result.frameOffset).toBe(1);
+  });
+
+  it('slow motion gets a longer gap than fast motion', () => {
+    // 0.5 px/frame on a 64x32 frame: one column of 8 pixels every 2 frames.
+    const slow = analyzeSample([makeBurst({ noise: 2, speed: 0.5 })], 30);
+    const fast = analyzeSample([makeBurst({ noise: 2, speed: 8 })], 30);
+
+    expect(slow.frameOffset).toBeGreaterThan(fast.frameOffset);
+  });
+
+  it('uses fps to convert the gap to 1/30 s units', () => {
+    const burst = makeBurst({ noise: 2, speed: 0.5, count: 8 });
+    const at30 = analyzeSample([burst], 30);
+    const at60 = analyzeSample([burst], 60);
+    const at15 = analyzeSample([burst], 15);
+
+    // The same frames sampled twice as fast cover half the time.
+    expect(at60.frameOffset).toBe(Math.max(1, Math.round(at30.frameOffset / 2)));
+    expect(at15.frameOffset).toBe(at30.frameOffset * 2);
+    expect(at30.gapSeconds).toBeCloseTo(at30.frameOffset / 30, 9);
+  });
+
+  it('ignores duplicated frames when measuring the noise floor', () => {
+    const burst = makeBurst({ noise: 6 });
+    // Every frame twice: half the neighbouring pairs are identical.
+    const doubled = burst.flatMap((frame) => [frame, frame]);
+
+    const clean = analyzeSample([burst], 30);
+    const withDuplicates = analyzeSample([doubled], 30);
+
+    expect(withDuplicates.noiseFloor).toBeCloseTo(clean.noiseFloor, 5);
+  });
+
+  it('accepts a flat array of frames as one burst', () => {
+    const burst = makeBurst({ noise: 2, speed: 8 });
+    expect(analyzeSample(burst, 30)).toEqual(analyzeSample([burst], 30));
+  });
+
+  it('clamps the threshold and the gap to the control ranges', () => {
+    const wild = analyzeSample([makeBurst({ noise: 120 })], 30);
+    expect(wild.threshold).toBeLessThanOrEqual(60);
+    expect(wild.frameOffset).toBeGreaterThanOrEqual(1);
+    expect(wild.frameOffset).toBeLessThanOrEqual(90);
   });
 });
 

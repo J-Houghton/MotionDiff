@@ -39,6 +39,8 @@ let fpsWindowStart = 0;
 let skippedFrameCount = 0;
 let cameraFacingMode = 'environment';
 let theaterActive = false;
+// Auto-configure seeks around the clip; those frames are for analysis only.
+let autoConfiguring = false;
 const recorder = new CanvasRecorder(canvas);
 const outputCanvasShell = document.getElementById('outputCanvasShell');
 const theaterBackdrop = document.getElementById('theaterBackdrop');
@@ -651,39 +653,66 @@ async function handleAutoConfigure() {
     setStatus('Load a video first', 'error');
     return;
   }
+  if (autoConfiguring) return;
 
+  // A live source cannot be seeked: it is sampled as it plays, so it must
+  // keep playing. A seekable one is paused and sampled by seeking.
+  const isLive = !Number.isFinite(videoEl.duration) || videoEl.duration <= 0;
   const wasPaused = videoEl.paused;
   const originalRate = videoEl.playbackRate;
 
+  autoConfiguring = true;
   controls.setAutoBusy(true);
+  setStatus('Analysing motion...', 'info');
   stopLoop();
-  if (!videoEl.paused) {
-    videoEl.pause();
+  if (!isLive) {
+    if (!videoEl.paused) videoEl.pause();
+    controls.setPaused();
+    timeline.setPaused();
+  } else if (videoEl.paused) {
+    await videoEl.play().catch(() => {});
   }
-  controls.setPaused();
-  timeline.setPaused();
 
   try {
-    const frames = await pipeline.sampleFrames(videoEl, 30);
-    const { frameOffset, threshold } = analyzeSample(frames, timeline.getFPS());
+    const { bursts, fps } = await pipeline.sampleBursts(videoEl, { fps: timeline.getFPS() });
+    if (bursts.length === 0) throw new Error('could not read any frames');
+
+    const analysis = analyzeSample(bursts, fps);
+    const { frameOffset } = analysis;
+    // analyzeSample works in raw difference units; Posy's threshold is
+    // still measured in half-differences.
+    const threshold = controls.state.algorithm === 'posy'
+      ? Math.max(1, Math.round(analysis.threshold / 2))
+      : analysis.threshold;
 
     controls.applyParams({ frameOffset, threshold });
     pipeline.setParams({ frameOffset, threshold });
-    processCurrentFrame();
+    // The sampling seeks left unrelated frames behind.
+    pipeline.clearState();
 
-    setStatus(`Auto-configured: offset=${frameOffset} threshold=${threshold}`, 'success');
-
-    if (!wasPaused) {
-      videoEl.playbackRate = originalRate;
-      await videoEl.play();
-      controls.setPlaying();
-      timeline.setPlaying();
-      startLoop();
-    }
+    setStatus(
+      `Auto-configured: offset=${frameOffset} threshold=${threshold} (noise floor ${analysis.noiseFloor.toFixed(1)})`,
+      'success',
+    );
   } catch (error) {
     setStatus(`Auto-config failed: ${error.message}`, 'error');
   } finally {
+    autoConfiguring = false;
     controls.setAutoBusy(false);
+
+    if (isLive || !wasPaused) {
+      videoEl.playbackRate = originalRate;
+      try {
+        await videoEl.play();
+        controls.setPlaying();
+        timeline.setPlaying();
+        startLoop();
+      } catch {
+        // Autoplay refused: stay paused, the play button still works.
+      }
+    } else {
+      processCurrentFrame();
+    }
     timeline.syncNow();
   }
 }
@@ -906,7 +935,7 @@ if (import.meta.env.DEV) {
 
 videoEl.addEventListener('seeked', () => {
   timeline.syncNow();
-  if (videoLoaded && videoEl.paused) {
+  if (videoLoaded && videoEl.paused && !autoConfiguring) {
     processSeekedFrame();
   }
 });
