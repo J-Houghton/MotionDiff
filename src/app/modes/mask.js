@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Motion mask: marks what is moving, once, where it is now.
  *
@@ -108,12 +109,12 @@ void main() {
 /**
  * Pass 1 for the frame in the renderer's current texture.
  *
- * @param {object} renderer - WebGLRenderer
+ * @param {*} renderer - WebGLRenderer
  * @param {object} opts
  * @param {number[]} opts.layers - Ring layers of the two older frames
  * @param {number} opts.threshold - Mean channel difference, 0..255
  * @param {boolean} opts.blur
- * @returns {object} The target holding R = raw decision, G = strength
+ * @returns {{tex: *, fb: *, width: number, height: number}} The target holding R = raw decision, G = strength
  */
 export function maskDifference(renderer, opts) {
   const gl = renderer.gl;
@@ -136,7 +137,7 @@ export function maskDifference(renderer, opts) {
  * Pass 2: draw a decision texture (R = 0 or 1, G = strength; pass 1's
  * output or another mode's) into a framebuffer, with or without the vote.
  *
- * @param {object} renderer
+ * @param {*} renderer
  * @param {WebGLTexture} decision
  * @param {WebGLFramebuffer} framebuffer
  * @param {object} opts
@@ -159,8 +160,8 @@ export function maskDraw(renderer, decision, framebuffer, opts) {
 /**
  * Both passes: fills the diff target with the picture and the data target
  * with the mask.
- * @param {object} renderer
- * @param {object} opts - maskDifference's, plus clean and show ('cutout' | 'solid')
+ * @param {*} renderer
+ * @param {{layers: number[], threshold: number, blur: boolean, clean: boolean, show: 'cutout'|'solid'}} opts - maskDifference's, plus clean and show
  */
 export function renderMask(renderer, opts) {
   const data = renderer.dataFramebuffer(renderer.width, renderer.height);
@@ -185,7 +186,7 @@ export const maskLookback = (params) => [params.frameOffset, secondGap(params)];
 /**
  * The ring layers of the two older frames for this frame, or null while
  * there is no history. While the ring is still filling both may be the same.
- * @param {object} frame - The per-frame context from Pipeline.process
+ * @param {import('./index.js').ModeFrame} frame - The per-frame context from Pipeline.process
  * @returns {number[]|null}
  */
 export function maskLayers(frame) {
@@ -195,7 +196,7 @@ export function maskLayers(frame) {
   return near < 0 || far < 0 ? null : [ring.slotAt(near), ring.slotAt(far)];
 }
 
-export default {
+export default /** @type {import('./index.js').Mode} */ ({
   id: 'mask',
   label: 'Motion mask',
   blurb: 'Whatever is moving, cut out where it is now. A pixel counts only if it differs from two earlier moments, so nothing is drawn where a thing used to be.',
@@ -244,4 +245,4 @@ export default {
     renderer.renderComposite(frame.display, 'raw', false);
     return true;
   },
-};
+});

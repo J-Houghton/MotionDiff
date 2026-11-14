@@ -1,3 +1,49 @@
+// @ts-check
+/**
+ * The messages between Pipeline (app/pipeline.js) and this worker — the
+ * whole protocol, checked on both sides by `npm run typecheck`.
+ *
+ * @typedef {{type: 'clear'}|{type: 'clearTrails'}|{type: 'magReset'}} WorkerControlMessage
+ *   clear: drop trails, ring and magnify state (new source or size).
+ *   clearTrails: drop trail state only. magReset: drop magnify state only.
+ *
+ * @typedef {object} WorkerProcessMessage One frame to process.
+ * @property {'process'} type
+ * @property {ArrayBuffer} currentFrameBuffer - RGBA pixels, transferred
+ * @property {number} time - The frame's media time, seconds
+ * @property {import('./modes/index.js').FrameStep} step
+ * @property {import('./modes/index.js').ModeParams} params
+ * @property {number} width
+ * @property {number} height
+ * @property {number} energyCols - 0 when nobody is listening for the grid
+ * @property {number} energyRows
+ * @property {number} [dtMs] - Magnify only: media time since the previous frame
+ * @property {number} [trailAgeStep] - Diff path only: trail age advance, in windows
+ * @property {number} [ringBudgetBytes] - Diff path only: frame-ring budget
+ *
+ * @typedef {WorkerControlMessage|WorkerProcessMessage} WorkerRequestMessage
+ *
+ * @typedef {object} WorkerResultMessage One frame's result.
+ * @property {'result'} type
+ * @property {ArrayBuffer|null} [accumulatedBuffer] - Diff path: the trail
+ *   picture, transferred; null while there is no older frame to compare with
+ * @property {ArrayBuffer} [magnifiedBuffer] - Magnify path, transferred
+ * @property {number} [magnifiedWidth]
+ * @property {number} [magnifiedHeight]
+ * @property {ArrayBuffer|null} [energyBuffer] - The pooled motion magnitude
+ *   grid, when asked for; absent means this frame had no measurement
+ * @property {number} [energyCols]
+ * @property {number} [energyRows]
+ */
+
+/**
+ * This file runs as a dedicated worker, but the DOM lib types `self` as a
+ * Window: one cast here gives postMessage its worker signature.
+ * @type {{postMessage: (msg: WorkerResultMessage, transfer?: Transferable[]) => void,
+ *   onmessage: ((e: MessageEvent<WorkerRequestMessage>) => void)|null}}
+ */
+const scope = /** @type {*} */ (self);
+
 import { posyBlend, rawDiff } from '../core/diff.js';
 import { boxBlur, boxBlurFloat } from '../core/blur.js';
 import { TRAIL_HOLD, clearTrailState, createTrailState, trailStep } from '../core/trails.js';
@@ -111,6 +157,7 @@ function pooledEnergy(magnitude, width, height, cols, rows) {
   return poolMagnitude(magnitude, width, height, cols, rows).buffer;
 }
 
+/** @returns {[number, number, number]} */
 function hexToRgb(hex, fallback) {
   const value = typeof hex === 'string' && /^#[0-9a-f]{6}$/i.test(hex) ? hex : fallback;
   return [
@@ -134,7 +181,7 @@ function tintChannel(frame, index, tint) {
   );
 }
 
-self.onmessage = function (e) {
+scope.onmessage = function (e) {
   const msg = e.data;
 
   if (msg.type === 'clear') {
@@ -227,7 +274,7 @@ self.onmessage = function (e) {
     }
 
     const magnifiedBuffer = magnified.buffer;
-    self.postMessage(
+    scope.postMessage(
       {
         type: 'result',
         magnifiedBuffer,
@@ -270,7 +317,7 @@ self.onmessage = function (e) {
   }
 
   if (!oldR || !oldG || !oldB) {
-    self.postMessage({ type: 'result', accumulatedBuffer: null });
+    scope.postMessage({ type: 'result', accumulatedBuffer: null });
     return;
   }
 
@@ -325,7 +372,7 @@ self.onmessage = function (e) {
   const transfers = [accBuffer];
   if (energyBuffer) transfers.push(energyBuffer);
 
-  self.postMessage(
+  scope.postMessage(
     { type: 'result', accumulatedBuffer: accBuffer, energyBuffer, energyCols, energyRows },
     transfers
   );

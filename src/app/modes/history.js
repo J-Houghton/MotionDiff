@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Motion history: where things moved, how long ago, and which way.
  *
@@ -210,7 +211,7 @@ const STATES = new WeakMap();
  * Advance the history with a mask and draw it. Fills the picture target and
  * the data target.
  *
- * @param {object} renderer - WebGLRenderer
+ * @param {*} renderer - WebGLRenderer
  * @param {object} opts
  * @param {WebGLTexture} opts.mask - R > 0.5 where moving
  * @param {number} opts.ageStep - Media time since the previous frame, in history lengths
@@ -294,7 +295,7 @@ export function renderHistory(renderer, opts) {
   renderer.draw(data, width, height);
 }
 
-export default {
+export default /** @type {import('./index.js').Mode} */ ({
   id: 'history',
   label: 'Motion history',
   blurb: 'Every mover leaves a band along its path: coloured by how long ago it passed, or by which way it was heading.',
@@ -342,4 +343,4 @@ export default {
     renderer.renderComposite(frame.display, 'raw', false);
     return true;
   },
-};
+});

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Optical flow: how fast, and which way, each patch of the picture is moving.
  *
@@ -92,8 +93,8 @@ const fullSpeed = (params, width) => (params.flowRange / 100) * width;
 
 /**
  * The velocity field for this frame, or null while there is no older frame.
- * @param {object} frame - The per-frame context from Pipeline.process
- * @returns {{tex, fb, width, height}|null} RG = picture pixels per second,
+ * @param {import('./index.js').ModeFrame} frame - The per-frame context from Pipeline.process
+ * @returns {VelocityField|null} RG = picture pixels per second,
  *   averaged over time by confidence, zero where nothing is measured;
  *   B = how present a measurement is, 0..1
  */
@@ -112,17 +113,22 @@ export function flowVelocity(frame) {
   flowPass(renderer, 'flow:velocity', VELOCITY_FRAG, { uFlow: 0 }, velocity, [flow.tex], (gl, u) => gl.uniform1f(u.uScale, factor / gapSeconds));
 
   const seconds = params.flowSmoothing / 30;
-  const smoothed = flowSmooth(renderer, 'flow', velocity, {
+  const smoothed = /** @type {VelocityField} */ (flowSmooth(renderer, 'flow', velocity, {
     alpha: seconds > 0 ? 1 - Math.exp(-(frame.stepMs / 1000) / seconds) : 1,
     trusted: FLOW_TRUSTED,
     floor: FLOW_PRESENT,
     repeat: frame.step === 'repeat',
-  });
+  }));
   // The fastest speed this gap and pyramid could have measured, in picture
   // pixels per second: carried with the field for the readouts.
   smoothed.ceiling = (flowReach(flowLevels(current.width)) * factor) / gapSeconds;
   return smoothed;
 }
+
+/**
+ * A smoothed velocity target with the measurable ceiling carried along.
+ * @typedef {{tex: *, fb: *, width: number, height: number, ceiling?: number}} VelocityField
+ */
 
 /** Reused readback buffers, per renderer. */
 const READ_BUFFERS = new WeakMap();
@@ -139,7 +145,7 @@ const sector = (heading) => SECTORS[Math.round(((heading + Math.PI * 2) % (Math.
  * the sentence and data they become. Speeds are reported as a share of the
  * picture's width per second, matching the Speed range control.
  *
- * @param {object} frame - The per-frame context
+ * @param {import('./index.js').ModeFrame} frame - The per-frame context
  * @param {{tex, width, height, ceiling?: number}} velocity - From flowVelocity
  * @param {number} full - Speed at full brightness, picture pixels per second
  */
@@ -184,7 +190,7 @@ export function reportReadings(frame, velocity, full) {
   }
 }
 
-export default {
+export default /** @type {import('./index.js').Mode} */ ({
   id: 'flow',
   label: 'Optical flow',
   blurb: 'How fast and which way each patch of the picture is moving, measured between two frames: as flowing traces, or as colour.',
@@ -258,4 +264,4 @@ export default {
     renderer.renderComposite(frame.display, 'raw', false);
     return true;
   },
-};
+});

@@ -1,7 +1,8 @@
+// @ts-check
 import { AGE_COLORS, BLUR, GAP, SPREAD, THRESHOLD, TINTS, TRAIL } from './params.js';
 import { renderDiff } from './diff.js';
 
-export default {
+export default /** @type {import('./index.js').Mode} */ ({
   id: 'posy',
   label: 'Posy',
   blurb: 'Each frame laid over its own negative from a moment ago. What has not moved cancels to grey.',
@@ -26,4 +27,4 @@ export default {
     ...AGE_COLORS.map((param) => ({ ...param, when: (p) => p.ageColorEnabled })),
   ],
   render: (frame) => renderDiff(frame, 'posy'),
-};
+});

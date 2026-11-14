@@ -1,7 +1,8 @@
+// @ts-check
 import { BLUR, GAP, SPREAD, THRESHOLD, TINTS, TRAIL } from './params.js';
 import { renderDiff } from './diff.js';
 
-export default {
+export default /** @type {import('./index.js').Mode} */ ({
   id: 'raw',
   label: 'Raw diff',
   blurb: 'The plain difference between now and a moment ago. Black is stillness, brightness is change.',
@@ -15,4 +16,4 @@ export default {
   worker: true,
   params: [GAP, SPREAD, THRESHOLD, TRAIL, BLUR, ...TINTS],
   render: (frame) => renderDiff(frame, 'raw'),
-};
+});

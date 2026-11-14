@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Schlieren: hot air and gas made visible by how they shift the background.
  *
@@ -137,6 +138,7 @@ const VIEWS = { knife: 0, strength: 1, direction: 2, check: 3 };
 /** What the grid said last time, per renderer. */
 const SETUPS = new WeakMap();
 
+/** @type {Record<'plain'|'moved'|'shaking'|'settling', (s?: *) => [string, 'info'|'error']>} */
 const NOTES = {
   // Little of the picture can be measured: that is a plain background, a pattern too fine for
   // the processing width, or a camera moving so much that no patch matches its reference.
@@ -148,11 +150,12 @@ const NOTES = {
 
 /**
  * Measure the shift field for this frame.
- * @param {object} frame - The per-frame context from Pipeline.process
+ * @param {import('./index.js').ModeFrame} frame - The per-frame context from Pipeline.process
  * @returns {{flow: object, factor: number, setup: object}} flow: RG = shift in
  *   working pixels, B = confidence; setup: camera shift (working pixels),
  *   usable share, noise floor (working pixels), frames seen
  */
+/** @returns {{flow: *, factor: number, setup: *}} */
 function measure(frame) {
   const { gl: renderer, params } = frame;
   const gl = renderer.gl;
@@ -210,7 +213,7 @@ function measure(frame) {
   return { flow, factor, setup };
 }
 
-export default {
+export default /** @type {import('./index.js').Mode} */ ({
   id: 'schlieren',
   label: 'Schlieren',
   blurb: 'Hot air and gas made visible: they bend light, so a textured background seen through them shifts by a fraction of a pixel, and that shift is measured and drawn.',
@@ -324,4 +327,4 @@ export default {
     renderer.renderComposite(frame.display, 'raw', false);
     return true;
   },
-};
+});

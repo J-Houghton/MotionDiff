@@ -16,6 +16,7 @@ npm run dev        # dev server at http://localhost:5173/MotionDiff/
 npm test           # unit tests (vitest, node environment, no DOM or WebGL)
 npm run build      # production build
 npm run filmstrip  # visual tooling against the running dev server, see scripts/README.md
+npm run typecheck  # JSDoc type check (tsc, no emit): the mode contract, worker messages, params
 ```
 
 Useful URL switches in a dev build: `?renderer=canvas2d` forces the Canvas 2D fallback, `?nofloat` pretends the GPU has no float render targets. The console logs which renderer is active.
@@ -109,6 +110,14 @@ main.js imports app/ and ui/, and core/ for pure helpers
 **Shared motion magnitude** (`core/magnitude.js`). Every mode reduces its result to one unsigned value per pixel, 0..1. Anything that wants "how much motion, where" (the sonification grid today) pools from that, never from a mode's own signed output: pooling a signed difference cancels a moving edge to zero. A registry mode draws its data into `renderer.dataFramebuffer()` with the magnitude in R.
 
 **Two render paths.** WebGL2 is preferred; Canvas 2D with `pipeline.worker.js` is the fallback. Posy, Raw and Magnify must keep working on both. A new mode may be WebGL-only, but must then report that through the status line on the fallback.
+
+**Types.** The code stays plain JavaScript; the contracts that cross module
+boundaries are written as JSDoc typedefs and held by `npm run typecheck`
+(TypeScript as a checker only, nothing is emitted). The mode contract lives in
+`app/modes/index.js` (`Mode`, `ModeFrame`, `FrameStep`), the param schema in
+`app/modes/params.js` (`ParamDef`), and the worker protocol in
+`app/pipeline.worker.js` (request and result messages, used by both sides). A
+new mode or message field starts with its typedef.
 
 **Params.** Every runtime setting lives on `pipeline.params`, defined by the modes' schemas. The interface changes them through `Session.setParams`. Saved presets carry a version (`PRESET_VERSION` in `app/clips.js`); changing what a param means needs a `migratePresetParams` step.
 

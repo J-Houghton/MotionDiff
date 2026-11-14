@@ -103,7 +103,7 @@ const STATES = new WeakMap();
 /**
  * Reduce a float texture by whole-block means until it is at most
  * `maxWidth` wide: small enough to read back every frame.
- * @param {object} renderer
+ * @param {*} renderer
  * @param {string} key - Names the target
  * @param {{tex, width, height}} source
  * @param {number} maxWidth
@@ -117,7 +117,7 @@ export function reduceField(renderer, key, source, maxWidth) {
 
 /**
  * Reduce a velocity texture to the size the particles read.
- * @param {object} renderer
+ * @param {*} renderer
  * @param {string} key
  * @param {{tex, width, height}} velocity - RG = picture pixels per second
  * @returns {{tex, fb, width, height}}
@@ -130,7 +130,7 @@ export function particleField(renderer, key, velocity) {
  * Step the particles through a velocity field and draw their traces into
  * the renderer's picture target.
  *
- * @param {object} renderer - WebGLRenderer
+ * @param {*} renderer - WebGLRenderer
  * @param {string} key - Names this caller's state and targets
  * @param {{tex, fb, width, height}} field - From particleField
  * @param {object} opts

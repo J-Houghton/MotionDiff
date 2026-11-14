@@ -1,16 +1,25 @@
+// @ts-check
 /**
  * Parameter definitions shared between modes.
  *
  * A param is plain data. The pipeline takes its `key` and `default`; the UI
- * builds one control per param from the rest (see ui/panel.js):
- *
- *   { key, label, type: 'range' | 'toggle' | 'select' | 'color',
- *     default, min, max, step, options, format, when }
- *
+ * builds one control per param from the rest (see ui/panel.js).
  * `when(params)` hides a control while it has no effect.
  *
  * Gap, spread and trail are in 1/30 s of media time (core/timebase.js) and
  * are shown in milliseconds.
+ *
+ * @typedef {object} ParamDef
+ * @property {string} key - Where the value lives on pipeline.params
+ * @property {string} label - Shown beside the control
+ * @property {'range'|'toggle'|'select'|'color'} type
+ * @property {number|string|boolean} default
+ * @property {number} [min] - range only
+ * @property {number} [max] - range only
+ * @property {number} [step] - range only
+ * @property {Record<string, number|string>} [options] - select only: label → value
+ * @property {(value: number) => string} [format] - range only: value → shown text
+ * @property {(params: import('./index.js').ModeParams) => boolean} [when]
  */
 
 /** Show a value in 1/30 s units as milliseconds. */
