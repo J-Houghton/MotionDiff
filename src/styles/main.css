@@ -176,6 +176,8 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .play #btnRate { min-width: 62px; text-align: center; }
 .play button:not(:disabled):hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 #app[data-recording='true'] #btnRec { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+#btnSplit[aria-pressed='true'] { background: var(--ink); color: var(--paper); }
+#app[data-layout='viewfinder'] #btnSplit[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: #000; }
 .clock { display: inline-flex; align-items: baseline; gap: 4px; color: var(--soft); margin: 0 4px; }
 /* a fixed box: the serif's digits differ in width and would nudge the buttons */
 .clock time { font: 400 30px/1 var(--serif); color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; display: inline-block; min-width: 3.75em; }
@@ -316,6 +318,12 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 #app[data-phone='true'] .clock time { font-size: 17px; min-width: 0; }
 #app[data-phone='true'] #timeTotal { display: none; }
 #app[data-phone='true'] .scrub { height: 44px; order: -1; }
+/* the split handle must be hittable with a thumb */
+#app[data-phone='true'] .split { width: 44px; margin-left: -22px; }
+#app[data-phone='true'] .split::before { left: 21px; }
+/* the transport row is full on a phone: split lives in the top action plate there */
+#app[data-phone='true'] #btnSplit { display: none; }
+#btnSplit2[aria-pressed='true'] { background: var(--accent) !important; color: #000 !important; }
 #app[data-phone='true'] .scrub::-webkit-slider-thumb { width: 24px; height: 24px; border-radius: 50%; }
 #app[data-phone='true'] .scrub::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; }
 #app[data-phone='true'] .status { top: calc(118px + env(safe-area-inset-top)); max-width: 92%; white-space: normal; text-align: center; }

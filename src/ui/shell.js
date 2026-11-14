@@ -59,6 +59,7 @@ const TEMPLATE = `
     <div class="vf vf-actions chrome">
       <button type="button" id="btnSource2">Source</button>
       <button type="button" id="btnParams">Params</button>
+      <button type="button" id="btnSplit2" aria-pressed="false" aria-label="Split compare against the original">Split</button>
     </div>
 
     <div class="empty" id="empty">
@@ -89,6 +90,7 @@ const TEMPLATE = `
     <button type="button" id="btnForward" aria-label="Step forward one frame">▸</button>
     <span class="clock"><time id="timeNow">0:00.00</time><span id="timeTotal"></span></span>
     <button type="button" id="btnRate" aria-label="Playback speed">1×</button>
+    <button type="button" id="btnSplit" aria-pressed="false" aria-label="Split compare against the original">◧<span class="btn-word"> Split</span></button>
     <button type="button" id="btnFlip" aria-label="Flip camera" hidden>⟲ Flip</button>
     <button type="button" id="btnRec" aria-pressed="false">● Rec</button>
     <button type="button" id="btnExit" class="immersive-only">✕ Exit</button>
@@ -213,6 +215,8 @@ export function initShell({ root, session }) {
     const on = view.split && session.loaded;
     split.hidden = !on;
     $('tagOriginal').hidden = $('tagMode').hidden = !on;
+    $('btnSplit').setAttribute('aria-pressed', String(on));
+    $('btnSplit2').setAttribute('aria-pressed', String(on));
     // The video lies over the canvas, transparent (see .frame video in
     // main.css). Showing the original is making it opaque, clipped to the
     // left of the split or not at all.
@@ -281,7 +285,7 @@ export function initShell({ root, session }) {
     scrub.hidden = session.loaded && session.isLive; // nothing to seek in a live source
     $('timeTotal').textContent = !session.loaded ? '' : session.isLive ? ' · live' : ` / ${formatTime(session.duration, false)}`;
     for (const id of ['btnBack', 'btnForward', 'btnRate']) $(id).disabled = !session.loaded || session.isLive;
-    $('btnPlay').disabled = $('btnRec').disabled = !session.loaded;
+    $('btnPlay').disabled = $('btnRec').disabled = $('btnSplit').disabled = $('btnSplit2').disabled = !session.loaded;
     applyLayout();
     applySplit();
   }
@@ -480,6 +484,8 @@ export function initShell({ root, session }) {
   click('btnForward', () => actions.step(1));
   click('btnRate', () => session.setRate(RATES[(RATES.indexOf(session.rate) + 1) % RATES.length] || 1));
   click('btnRec', actions.record);
+  click('btnSplit', actions.split);
+  click('btnSplit2', actions.split);
   click('btnFlip', () => session.flipCamera());
   const cycleMode = (direction) => actions.mode((MODES.indexOf(session.mode) + direction + MODES.length) % MODES.length);
   click('vfPrev', () => cycleMode(-1));
