@@ -3,8 +3,9 @@
 Status of everything planned for MotionDiff. Updated at the end of every working
 session. Statuses: **done**, **in progress**, **planned**, **deferred**.
 
-Last updated: 2026-11-14 (session 5, Session A small tier: display work — legend,
-ruler, paused traces, arrows, mirror, setup guide; Session B updates separately).
+Last updated: 2026-11-14 (session 5. Session A small tier: display work — legend,
+ruler, paused traces, arrows, mirror, setup guide. Session B small tier: flow
+readouts, too-fast warning, JSDoc type check, magnify sample).
 
 The governing rule for every item: lightweight, and easy to maintain and debug by hand.
 Visual work is accepted under the rules in `docs/development.md`; results are logged in
@@ -41,7 +42,7 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 | Asynchronous readback of the particle field | planned only if a phone needs it | No visible effect; a frame-rate measure | Small | The one per-frame readback; fine on desktop, unmeasured on phones |
 | Second-gap marker on the time ruler | **done**, session 5 (Session A) | The ruler shows the mask's second gap and the history length | | Verdict IA3 |
 | The time ruler in the Viewfinder layout | **done**, session 5 (Session A) | Gap and trail read as a ruler in fullscreen and on phones, as on the Plate | | Verdict IA3 |
-| A sample clip for Magnify that is not a face | planned | A locked-off shot of something nearly still with a small rhythm (a sleeping animal breathing, a slight sway) opens in Magnify and shows it | Small | One search was started and stopped unfinished |
+| A sample clip for Magnify that is not a face | **done**, Session B | A locked-off shot of something nearly still with a small rhythm (a sleeping animal breathing, a slight sway) opens in Magnify and shows it | | *Sleeping Kitten* sample and `kitten` reference clip, V-B3 |
 | Arrow grid for flow | **done**, session 5 (Session A) | Signed direction readable from one still, which particles were judged not to give | | Off the deferred list at the owner's decision. Verdict VA2 |
 
 ## Motion extraction
@@ -58,6 +59,14 @@ Ranked by visible effect for the effort.
 | 6 | Morphological open and close | planned | On `traffic`, mask and background-model cut-outs lose their holes and ragged rims | Small-medium | |
 | 7 | Magnify: pulse and motion presets, deeper pooling | planned | On `face`, one click gives a visible pulse | Small | |
 | 8 | Flow at moving edges | planned | The ragged outlines of movers in the flow colour view become clean | Medium | A median or an edge-aware window |
+
+### Session B (measurement; branch `session-b-measure`)
+| Item | Commit | Notes |
+|---|---|---|
+| Live readouts from the flow field (dominant heading, peak speed, share moving, camera motion) on the status line and as data (`pipeline.readings`); warning when motion is beyond the gap's reach | `289d17a` | V-B1 |
+| Type checking through JSDoc: `npm run typecheck` holds the mode contract, worker messages and params to their typedefs | `a24f191` | V-B2 |
+| Schlieren publishes its setup judgement as data (`pipeline.readings.setup`), for Session A's in-picture setup guide | `2f6520c` | |
+| Magnify sample that is not a face: *Sleeping Kitten*, plus the `kitten` reference clip | with this update | V-B3 |
 
 ## Deferred
 | Item | Why |

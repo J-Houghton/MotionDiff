@@ -915,3 +915,35 @@ Known limits, stated rather than hidden: the camera readout is the median shift 
 a zoom or rotation reads as near-still (its median is zero); and on footage where
 movers fill most of the measured area the dominant heading *is* the camera's
 drift, which is honest (everything does flow).
+
+### V-B2. Type checking through JSDoc — robustness
+The contracts that cross module boundaries are now JSDoc typedefs that
+`npm run typecheck` (tsc, no emit, no conversion: the code stays plain
+JavaScript) holds every implementation to: `Mode`, `ModeFrame` and `FrameStep`
+in `app/modes/index.js` with every mode's default export checked against
+`Mode`; `ParamDef` in `app/modes/params.js`; the worker protocol (request and
+result messages) in `app/pipeline.worker.js`, used by the worker body itself.
+
+Demonstration: the checker is clean at this commit; changing one mode's `id`
+to a number is caught at the export ("Type 'number' is not comparable to type
+'string'"). The only runtime change is the worker aliasing `self` to a typed
+scope; the Canvas2D fallback was demonstrated still working (posy and magnify
+render pictures with `?renderer=canvas2d`), and the build and all 296 tests pass.
+
+### V-B3. A sample clip for Magnify that is not a face — sample check, as I3
+**Chosen:** *Sleeping Kitten* (Pexels 13925469, 1920×1080, 30 fps, 13 s): a
+ginger kitten curled asleep indoors on a locked-off camera, flank and belly
+visible. Sample params: band 0.15–1.0 Hz, amplify 20×, pool 2×.
+
+As with I3, my own reading, no blind judge: in the magnified filmstrip the
+breathing shows as the flank edge swelling and sinking between frames; the
+band strength averaged over the frame oscillates with about a 1.5 s period
+(≈40 breaths/min, normal for a sleeping kitten) over four cycles before the
+kitten stirs once around 6.5 s — in the plain video the breathing is nearly
+invisible. Loaded from its host in headless Chrome the way the picker does
+it: comes up in Magnify with a picture (band strength in the data target)
+after about 1.6 s. Rejected after rendering: a chihuahua asleep on a quilt
+(Pexels 5994139 — it moves visibly, nothing for magnify to reveal) and a
+white dog outdoors (Pexels 5596930 — mostly a dog's face, and the head
+drifts). Added to the reference clips as `kitten` for future magnify work.
+Not checked: loading on a phone or a slow connection.
