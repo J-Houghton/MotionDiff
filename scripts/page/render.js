@@ -88,6 +88,13 @@ if (args.synthetic) {
 // Displays that keep moving while paused (particle traces) would advance on
 // the wall clock between steps and make the strip nondeterministic: off.
 if (md.session && 'pausedFlow' in md.session) md.session.pausedFlow = false;
+// Pin the canvas backing to the processing size: strips stay comparable
+// across machines and window sizes (the display layer would otherwise
+// follow this window's CSS box).
+if (md.session && 'displayScale' in md.session) {
+  md.session.displayScale = false;
+  md.session.syncDisplayScale();
+}
 if (args.width) { md.setWidth(args.width); await wait(200); }
 md.setDisplay(args.display || 'diff');
 md.setParams(args.params || {});

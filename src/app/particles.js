@@ -49,15 +49,31 @@ void main() {
   fragColor = vec4(floor(trail * 255.0 * uKeep) / 255.0, 1.0);
 }`;
 
+// The trail over the finished composite: sharp, or with a soft halo for the
+// glow display (the composite's own glow no longer sees the traces, which
+// draw after it; docs/display-layer.md).
 const SHOW_FRAG = `#version 300 es
 precision highp float;
 
 uniform sampler2D uTrail;
+uniform float uSpread;   // halo tap spacing in texels; 0 = sharp only
 
 out vec4 fragColor;
 
 void main() {
-  fragColor = vec4(texelFetch(uTrail, ivec2(gl_FragCoord.xy), 0).rgb, 1.0);
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  vec3 c = texelFetch(uTrail, p, 0).rgb;
+  if (uSpread > 0.0) {
+    ivec2 edge = textureSize(uTrail, 0) - 1;
+    vec3 halo = vec3(0.0);
+    for (int dy = -1; dy <= 1; dy++) {
+      for (int dx = -1; dx <= 1; dx++) {
+        halo += texelFetch(uTrail, clamp(p + ivec2(dx, dy) * int(uSpread), ivec2(0), edge), 0).rgb;
+      }
+    }
+    c += halo * (0.6 / 9.0);
+  }
+  fragColor = vec4(c, 1.0);
 }`;
 
 // A segment's end: picture pixels (y down) to clip space; colour from the
@@ -151,8 +167,13 @@ export function particleField(renderer, key, velocity) {
 export function renderParticles(renderer, key, field, opts) {
   const gl = renderer.gl;
   const { width, height } = renderer;
+  // The trail lives at the canvas size: the lines rasterise crisp there and
+  // the fade keeps them so (docs/display-layer.md). Particle maths stays in
+  // picture coordinates; only viewports change.
+  const cw = renderer.canvasWidth || width;
+  const ch = renderer.canvasHeight || height;
   // Targets before binds (creating one binds its texture).
-  const trails = [renderer.target(`${key}:trail0`, width, height), renderer.target(`${key}:trail1`, width, height)];
+  const trails = [renderer.target(`${key}:trail0`, cw, ch), renderer.target(`${key}:trail1`, cw, ch)];
 
   let states = STATES.get(renderer);
   if (!states) STATES.set(renderer, (states = new Map()));
@@ -203,23 +224,42 @@ export function renderParticles(renderer, key, field, opts) {
     gl.useProgram(fade.prog);
     renderer.bind(0, from.tex);
     gl.uniform1f(fade.u.uKeep, traceFade(dt, opts.seconds));
-    renderer.draw(to.fb, width, height);
+    renderer.draw(to.fb, cw, ch);
 
     const lines = renderer.program('particles:lines', LINE_FRAG, {}, LINE_VERT);
     gl.useProgram(lines.prog);
+    // Vertices stay in picture coordinates: the same clip space rasterises
+    // into the larger viewport as the crisp line wanted.
     gl.uniform2f(lines.u.uPicture, width, height);
     gl.uniform1i(lines.u.uHeadingColour, opts.colour === 'plain' ? 0 : 1);
     gl.uniform3fv(lines.u.uTint, hexToUnit(opts.tint, '#ffffff'));
-    renderer.drawLines(vertices, moving * 2, to.fb, width, height);
+    renderer.drawLines(vertices, moving * 2, to.fb, cw, ch);
 
     state.current = 1 - state.current;
     state.drawn = true;
     state.moving = moving;
   }
 
-  const show = renderer.program('particles:show', SHOW_FRAG, { uTrail: 0 });
-  gl.useProgram(show.prog);
-  renderer.bind(0, trails[state.current].tex);
-  renderer.draw(renderer.pictureFramebuffer, width, height);
+  // The picture target holds black where the traces used to be drawn: the
+  // composite runs first, then the registered overlay lands the trail on
+  // the canvas, the last and sharpest thing drawn.
+  gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.pictureFramebuffer);
+  gl.viewport(0, 0, width, height);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  const shown = trails[state.current].tex;
+  renderer.addOverlay((r, display) => {
+    const g = r.gl;
+    const show = r.program('particles:show', SHOW_FRAG, { uTrail: 0 });
+    g.useProgram(show.prog);
+    r.bind(0, shown);
+    // The halo spread follows how much larger the canvas is than the picture.
+    g.uniform1f(show.u.uSpread, display === 'glow' ? Math.max(1, Math.round((2 * cw) / width)) : 0);
+    g.enable(g.BLEND);
+    g.blendFunc(g.ONE, g.ONE);
+    r.draw(null, r.canvasWidth, r.canvasHeight);
+    g.disable(g.BLEND);
+  });
   return { moving: state.moving, count };
 }

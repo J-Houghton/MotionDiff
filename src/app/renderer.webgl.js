@@ -758,9 +758,9 @@ export class WebGLRenderer {
 
     const gl = this.gl;
 
-    // Canvas must match processing resolution
-    this.canvas.width = width;
-    this.canvas.height = height;
+    // The canvas backing follows the display (docs/display-layer.md): at
+    // least the processing size, up to the element's size in device pixels.
+    this._applyCanvasSize();
     gl.viewport(0, 0, width, height);
 
     // ── Current frame + frame ring ──
@@ -1189,8 +1189,8 @@ export class WebGLRenderer {
     gl.uniform1i(u.uAlgorithm, algorithm === 'posy' ? 0 : 1);
     gl.uniform1i(u.uAgeColorEnabled, ageColorEnabled ? 1 : 0);
 
-    // Draw to canvas (null framebuffer)
-    this._drawQuadTo(null, this.width, this.height);
+    // Draw to canvas (null framebuffer), at the canvas backing size
+    this._drawQuadTo(null, this.canvasWidth || this.width, this.canvasHeight || this.height);
   }
 
   /**
@@ -1578,6 +1578,57 @@ export class WebGLRenderer {
     return this._magnitudeFB;
   }
 
+  /**
+   * The canvas element's CSS box in device pixels. The backing store grows
+   * toward it at the picture's own aspect, capped, so the line work drawn
+   * after the composite is crisp on a large screen; every measurement stays
+   * at the processing size. Below the processing size nothing changes.
+   * @returns {boolean} Whether the backing size changed
+   */
+  setCanvasSize(cssWidth, cssHeight, cap = 2048) {
+    // Non-positive pins the backing to the processing size (tooling).
+    this._cssSize = cssWidth > 0 ? { w: Math.round(cssWidth), h: Math.max(1, Math.round(cssHeight)), cap } : null;
+    return this._applyCanvasSize();
+  }
+
+  _applyCanvasSize() {
+    const { width, height } = this;
+    let w = width || 1;
+    if (this._cssSize && width && height) {
+      // Cover the larger demand of the two axes: in the viewfinder's crop
+      // fit the element can be taller than the picture is wide.
+      const want = Math.max(this._cssSize.w, Math.round((this._cssSize.h * width) / height));
+      w = Math.max(width, Math.min(this._cssSize.cap, want));
+    }
+    const h = Math.max(1, Math.round((w * (height || 1)) / (width || 1)));
+    const changed = this.canvas.width !== w || this.canvas.height !== h;
+    if (changed) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+    }
+    this.canvasWidth = w;
+    this.canvasHeight = h;
+    return changed;
+  }
+
+  /**
+   * Register a draw to run over the finished composite: crisp line work at
+   * the canvas size (app/particles.js, app/arrows.js). Cleared every frame.
+   * @param {(renderer: WebGLRenderer, display: string) => void} draw
+   */
+  addOverlay(draw) {
+    (this._overlays ||= []).push(draw);
+  }
+
+  /** Run and clear this frame's overlays. The data display shows none. */
+  flushOverlays(display) {
+    const overlays = this._overlays;
+    if (!overlays || overlays.length === 0) return;
+    this._overlays = [];
+    if (display === 'data') return;
+    for (const draw of overlays) draw(this, display);
+  }
+
   /** Show the data target on the canvas (display mode 'data'). */
   renderDataView(kind) {
     if (!this._renderMagnitude()) return;
@@ -1586,7 +1637,7 @@ export class WebGLRenderer {
     gl.useProgram(prog);
     this.bind(0, this._magnitudeTex);
     gl.uniform1i(u.uVector, kind === 'vector' ? 1 : 0);
-    this._drawQuadTo(null, this.width, this.height);
+    this._drawQuadTo(null, this.canvasWidth || this.width, this.canvasHeight || this.height);
   }
 
   /**
@@ -1620,7 +1671,7 @@ export class WebGLRenderer {
   renderBlank(algorithm, ageColorEnabled) {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, this.width, this.height);
+    gl.viewport(0, 0, this.canvasWidth || this.width, this.canvasHeight || this.height);
     if (algorithm === 'posy' && !ageColorEnabled) {
       gl.clearColor(128 / 255, 128 / 255, 128 / 255, 1.0);
     } else {
