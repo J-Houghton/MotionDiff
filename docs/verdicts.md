@@ -997,63 +997,34 @@ one steady hue (the two opposed headings), and the near, faster carriageway's
 ribbons brighter than the far one at the same speed range — speed is what the
 direction view cannot show at all.
 
-### IA7. One preset list: the samples' looks join the Preset select — interface
-At the owner's request: the per-sample default settings and the panel's
-preset list were two separately maintained sets. Now `PARAMETER_PRESETS` is
-the one source of truth — the samples' looks are entries in it, named after
-their sample, and a `TEST_CLIPS` entry carries only `preset: '<name>'`.
-A preset may name a display; `Session.applyPreset` applies both, from the
-panel and from the sample buttons alike.
+### IA8. Readings panel — interface (owner's commission)
+Design and research in `docs/readings-panel.md` (observatory plate
+marginalia; strip-chart pen line). Desktop Plate only; the I key and a mast
+button; the readings and the parameters share the plate's margin, so on
+windows under 1800 px opening one closes the other — the picture never
+shrinks below the size rule for the panel's sake.
 
-**Result:** verified in the browser: the Motorway sample button opens flow
-with its preset (diff display, speed range 40), applying "Gulls Overhead"
-from the preset path switches any footage to motion history with its
-settings, and the select offers all 14 looks. 296 unit tests and the
-typecheck pass. No pixels change: the same settings apply as before, from
-one list instead of two.
-
-### VA3. Crisp drawing layer at display resolution — visual
-Design: `docs/display-layer.md` (the canvas backing grows to display
-resolution; traces and arrows draw last, after the composite, from the same
-geometry; measurement untouched at processing size).
-
-**Expected effect, written before building:**
-- *On `traffic`, flow traces and arrows at a 2048-wide canvas:* a blind judge
-  shown before/after strips names the after as the sharper (hairlines instead
-  of smeared lines) and finds the same geometry: same streams, same arrow
-  directions and lengths.
-- *The video and the mode pictures are unchanged* (bilinear upscale moves from
-  the compositor into the composite pass): numeric guard at equal canvas size.
-- *Glow display keeps glowing* (`clouds` preset look judged before/after).
-- *At or below processing size nothing changes:* backing equal to processing
-  gives byte-identical pixels.
-- *Recording carries the crisp lines*; split, Mirror, fullscreen unchanged.
-- *A real phone's frame rate* cannot be measured here (software GL): owner's list.
-
-**Result: accepted.**
+**Built in the owner's two steps.** The raw list first; watching it on the
+clips changed the design twice: the raw camera row showed 86 px/s on the
+synthetic scene's still camera (the median only speaks for the camera when
+at least half the frame is measured — the row now says so instead of
+showing a mover's number), and the full list proved too much to leave open
+(now behind an "All readings" disclosure). Promoted instruments: the peak
+speed numeral (px/s, 95th percentile of moving cells), the moving-share pen
+line over 60 s on ruled chart paper (every mode: pooled grid where the mode
+publishes no readings), and the direction rose (eight sectors in the
+legend's hues — commissioned because one averaged heading is wrong on
+`traffic`, and the observation confirmed it: 77% of moving cells head
+down/down-right with an opposed up-stream the mean hides).
 
 | Check | Result |
 |---|---|
-| Blind judge, before/after full-window traffic traces, unlabeled random names | Told apart "easily"; the after named the higher-resolution render at 95% confidence ("~1 px lines, smooth, continuous… individual streamlines separable" against "classic upscaled-low-res signs"); geometry "the same in both… no region with a genuine geometry difference" |
-| Glow keeps glowing (`clouds` preset, second blind judge) | After "reads as glowing: bright core + soft halo… clearly the better rendering"; before "flat marks… opaque marker scribbles". Caveats kept: streaks wash out over the brightest sky (a visibility trade-off), and a faint pre-existing top-left speck, much reduced in the after |
-| Numeric guard at the pinned size | All six strips (flow colour, both particle colourings, traffic particles, plume and dots traces) byte-identical to master: 0% changed, maxDiff 0 — which is also the at-or-below-processing-size invariant |
-| Arrows | Hairline shafts and clean heads at the display size (my reading of the full-window still; geometry unchanged by construction) |
-| Facts | Backing 878×494 follows a 1900-px window (processing 640×360); `displayScale` pin returns it to exactly 640×360 (`scripts/page/render.js` uses it, so every strip baseline stays valid); split clips the one canvas; a record start/stop ran through the display-res canvas |
-| Needs the owner's phone | Frame rate with canvas-sized trail buffers (cap 1280 there), and that recordings look right on a real GPU |
+| Known truth, synthetic `flow` scene | Peak 94 px/s against 90 known (95th pct over all movers); dominant heading → right 0°; rose East bin 77%; coherence 0.83; speed spread 24/76/0 against the range — all as the scene defines |
+| Rose orientation | A stubbed all-East reading draws one red bar pointing right: canvas y-down handled, hues match the legend |
+| `traffic` | Rose shows both carriageways (S-heavy group and opposed N/NE group); peak ~170 px/s; status line and panel agree |
+| No-readings mode (posy) | Pen line runs from the pooled grid; flow instruments dim with a plain sentence; no empty boxes |
+| Audit, panel open | Nothing clipped, overlapping, off screen; min contrast 5.97; picture share equal to the parameters-open baseline at the same window |
+| New measurement | One commit touching only reportReadings: rose and speeds bins over the field it already reads |
 
-### VA4. Motion-over-time strip — visual
-Design: `docs/motion-strip.md` (a strip under the scrub from the pooled
-magnitude grid: brightness = motion of that moment, vertical profile = where
-in the picture; empty means not measured; click to seek).
-
-**Expected effect, written before building:**
-- *On `truth` after one playthrough:* bright at both ends, visibly dimmer
-  between 3.5 s and 8.5 s; a blind judge told only "this shows motion over
-  time" points at the quiet spell within about a second.
-- *On `traffic`* continuously bright; *on `sunset`* faint but not empty.
-- *Vertical profile on `truth`:* the square's band and the discs' read as
-  separate bright rows before 3.5 s.
-- *Interface:* audit passes at both sizes; the strip seeks on click/drag with
-  44 px touch targets.
-
-**Result:** pending.
+Needs nothing from the owner's phone (desktop only). Screenshots for the
+tier's critique round.

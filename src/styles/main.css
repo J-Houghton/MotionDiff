@@ -88,6 +88,8 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .mast-actions button:hover { border-bottom-color: var(--ink); }
 
 .plate { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; }
+/* picture · readings · parameters when the readings column is open */
+#app[data-readings='true'] .plate { grid-template-columns: minmax(0, 1fr) auto auto; }
 .plate::before { content: none; }
 .frame-cell, .plate > .frame { min-width: 0; }
 /* The frame is as large as its cell allows at the picture's own shape. */
@@ -234,6 +236,29 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .scrub::-webkit-slider-thumb { -webkit-appearance: none; width: 4px; height: 16px; background: var(--accent); border: 0; border-radius: 0; }
 .scrub::-moz-range-thumb { width: 4px; height: 16px; background: var(--accent); border: 0; border-radius: 0; }
 .scrub:disabled { opacity: 0.35; cursor: default; }
+
+/* readings: measured values as plate marginalia beside the picture
+   (docs/readings-panel.md). Desktop Plate only. */
+.readings { width: 236px; align-self: start; max-height: calc(100dvh - var(--chrome-h, 196px) + 10px); overflow: auto; padding: 0 2px; }
+.rd-head { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--ink); padding-bottom: 4px; }
+.rd-head b { font: italic 600 17px/1 var(--serif); letter-spacing: -0.01em; }
+.rd-close { background: none; border: 0; min-width: 32px; min-height: 32px; color: var(--soft); }
+.rd-instruments { display: grid; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.rd-peak b { font: 600 34px/1 var(--serif); letter-spacing: -0.02em; display: block; font-variant-numeric: tabular-nums; }
+.rd-peak span, .rd-line span, .rd-rose span { font: 400 10px/1.3 var(--mono); color: var(--soft); letter-spacing: 0.05em; text-transform: uppercase; }
+.rd-line canvas, .rd-rose canvas { display: block; width: 100%; height: auto; }
+.rd-rose canvas { width: 88px; }
+.rd-idle { opacity: 0.35; }
+.rd-all summary { cursor: pointer; font: 500 11px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--soft); padding: 9px 0; }
+.rd-all summary:hover { color: var(--ink); }
+.rd-list { margin: 0; padding: 2px 0 4px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; font: 400 11px/1.35 var(--mono); }
+.rd-list dt { color: var(--soft); }
+.rd-list dt i { display: block; font-style: normal; font-size: 9px; opacity: 0.8; }
+.rd-list dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rd-note { margin: 6px 0 0; font: italic 400 12px/1.35 var(--serif); color: var(--soft); }
+/* desktop Plate only: the margin does not exist elsewhere */
+#app[data-layout='viewfinder'] .readings, #app[data-phone='true'] .readings { display: none; }
+@media (max-width: 1150px) { .readings { display: none; } }
 
 /* parameters: a card on the page's right margin */
 .panel { width: 268px; align-self: start; max-height: calc(100dvh - var(--chrome-h, 196px) + 10px); overflow: auto; border: 1px solid var(--ink); box-shadow: 5px 6px 0 var(--shade); }

@@ -16,6 +16,7 @@ import { initPanel } from './panel.js';
 import { initRuler } from './ruler.js';
 import { initLegend } from './legend.js';
 import { initGuide } from './guide.js';
+import { initReadings } from './readings.js';
 import { initKeys, SHORTCUTS } from './keys.js';
 
 const RATES = [0.25, 0.5, 1, 1.5, 2];
@@ -33,6 +34,7 @@ const TEMPLATE = `
   <nav class="mast-actions" aria-label="Application">
     <button type="button" id="btnSource"><kbd>N</kbd><span>Source</span></button>
     <button type="button" id="btnPanel" aria-expanded="true"><kbd>P</kbd><span>Parameters</span></button>
+    <button type="button" id="btnReadings"><kbd>I</kbd><span>Readings</span></button>
     <button type="button" id="btnFull"><kbd>F</kbd><span>Fullscreen</span></button>
     <button type="button" id="btnTheme"><kbd>T</kbd><span id="themeLabel">Dark</span></button>
     <button type="button" id="btnKeys"><kbd>?</kbd><span>Keys</span></button>
@@ -489,6 +491,7 @@ export function initShell({ root, session }) {
   const ruler = initRuler({ container: $('ruler'), session });
   const legend = initLegend({ stage, session });
   const guide = initGuide({ stage, session });
+  const readings = initReadings({ root, plate: root.querySelector('.plate'), session });
 
   const actions = {
     toggle: () => session.toggle(),
@@ -514,8 +517,20 @@ export function initShell({ root, session }) {
     },
     split: () => { view.split = !view.split; applySplit(); },
     original: (held) => { view.original = held; applySplit(); },
-    panel: () => { view.panel = !view.panel; applyLayout(); if (view.panel) $('panel').querySelector('button, select, input')?.focus(); },
+    panel: () => {
+      view.panel = !view.panel;
+      if (view.panel && root.dataset.layout === 'plate' && window.innerWidth < 1800) readings.close();
+      applyLayout();
+      if (view.panel) $('panel').querySelector('button, select, input')?.focus();
+    },
     source: () => openSheet('sourceSheet'),
+    readings: () => {
+      if (root.dataset.layout !== 'plate') return;
+      // The readings and the parameters share the plate's margin: on an
+      // ordinary window both at once would shrink the picture below the
+      // size rule, so opening one closes the other.
+      if (readings.toggle() && view.panel && window.innerWidth < 1800) { view.panel = false; applyLayout(); }
+    },
     keys: () => ($('keysSheet').hidden ? openSheet('keysSheet') : closeSheets()),
     auto: () => session.autoConfigure(),
     record: () => session.toggleRecord(),
@@ -544,6 +559,7 @@ export function initShell({ root, session }) {
   click('btnSource', actions.source);
   click('btnSource2', actions.source);
   click('btnPanel', actions.panel);
+  click('btnReadings', actions.readings);
   click('btnParams', actions.panel);
   click('panelDone', actions.panel);
   click('btnFull', actions.fullscreen);
