@@ -153,6 +153,7 @@ export function initShell({ root, session }) {
     immersive: false,   // fullscreen viewfinder on a desktop
     hidden: false,      // H: picture only
     fill: null,         // viewfinder: true = crop to fill, false = show it all, null = decide by shape
+    mirror: false,      // front camera shown as a mirror
     panel: !phone.matches,
     scrubbing: false,
   };
@@ -165,6 +166,7 @@ export function initShell({ root, session }) {
     root.dataset.immersive = String(view.immersive && !phone.matches);
     root.dataset.panel = view.panel ? 'open' : 'closed';
     root.dataset.hidden = String(view.hidden);
+    root.dataset.mirror = String(view.mirror);
     root.dataset.source = session.loaded ? 'ready' : 'empty';
     // In the viewfinder the picture fills the screen, cropping what does not
     // fit, unless that would lose more than half of it (a landscape clip on
@@ -243,6 +245,47 @@ export function initShell({ root, session }) {
     applySplit();
   });
 
+  // ── Pinch zoom for a camera ─────────────────────────────────
+  // Two fingers on the picture drive the camera's own zoom where the driver
+  // exposes one (most phone back cameras; iOS Safari exposes none).
+  const pinch = { pointers: new Map(), startDist: 0, startZoom: 1, active: false, warned: false, busy: false };
+  stage.addEventListener('pointerdown', (event) => {
+    if (session.source?.kind !== 'camera') return;
+    if (event.target.closest('.split, button, .panel, .sheet, input')) return;
+    pinch.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinch.pointers.size !== 2) return;
+    const info = session.cameraZoom();
+    if (!info) {
+      if (!pinch.warned) session.setStatus('This camera exposes no zoom control', 'info');
+      pinch.warned = true;
+      return;
+    }
+    const [a, b] = [...pinch.pointers.values()];
+    pinch.active = true;
+    pinch.startDist = Math.hypot(a.x - b.x, a.y - b.y);
+    pinch.startZoom = info.value;
+  });
+  stage.addEventListener('pointermove', (event) => {
+    if (!pinch.pointers.has(event.pointerId)) return;
+    pinch.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (!pinch.active || pinch.busy || pinch.pointers.size !== 2) return;
+    const [a, b] = [...pinch.pointers.values()];
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    if (!(pinch.startDist > 0 && dist > 0)) return;
+    const zoom = pinch.startZoom * (dist / pinch.startDist);
+    pinch.busy = true;
+    session.setCameraZoom(zoom).then((ok) => {
+      pinch.busy = false;
+      if (ok) session.setStatus(`Zoom ${(session.cameraZoom()?.value ?? zoom).toFixed(1)}×`, 'info');
+    });
+  });
+  const endPinch = (event) => {
+    pinch.pointers.delete(event.pointerId);
+    if (pinch.pointers.size < 2) pinch.active = false;
+  };
+  stage.addEventListener('pointerup', endPinch);
+  stage.addEventListener('pointercancel', endPinch);
+
   // ── Mode caption ────────────────────────────────────────────
   function applyMode() {
     const { mode, params } = session;
@@ -272,6 +315,8 @@ export function initShell({ root, session }) {
   // ── Source info, transport ──────────────────────────────────
   function applySource() {
     const { source, pipeline } = session;
+    // The mirror stands only while the front camera is the source.
+    if (view.mirror && !(source?.kind === 'camera' && session.cameraFacing === 'user')) view.mirror = false;
     if (pipeline.width && pipeline.height) {
       stage.style.setProperty('--aspect', `${pipeline.width} / ${pipeline.height}`);
       stage.style.setProperty('--ar', String(pipeline.width / pipeline.height));
@@ -348,7 +393,17 @@ export function initShell({ root, session }) {
     const row = document.createElement('div');
     row.className = 'sources-row';
     row.append(button('Open a file…', () => fileInput.click(), primary === 'file' ? 'primary' : ''));
-    if (navigator.mediaDevices?.getUserMedia) row.append(button('Camera', run(() => session.loadCamera()), primary === 'camera' ? 'primary' : ''));
+    if (navigator.mediaDevices?.getUserMedia) {
+      row.append(button('Camera', run(() => { view.mirror = false; session.loadCamera(); }), primary === 'camera' ? 'primary' : ''));
+      // Mirror: the front camera, flipped like a mirror, fullscreen — an
+      // installation where viewers see their own motion.
+      row.append(button('Mirror', run(() => {
+        view.mirror = true;
+        session.loadCamera('user');
+        if (!phone.matches && !view.immersive) actions.fullscreen();
+        else applyLayout();
+      })));
+    }
     if (navigator.mediaDevices?.getDisplayMedia && !phone.matches) row.append(button('Screen', run(() => session.loadScreen())));
 
     const url = document.createElement('form');

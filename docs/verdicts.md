@@ -779,3 +779,26 @@ transport at 72 px. Audited on the phone in motion history: min contrast
 5.63, no overlap, no clipping, no small targets. Screenshots in the tier's
 critique round.
 
+
+### IA4. Mirror mode, and camera zoom by pinch — interface
+**What it is.** A Mirror source button: the front camera, flipped like a
+mirror, fullscreen viewfinder — an installation where viewers see their own
+motion. The flip is display-only (CSS on the video and canvas): nothing
+measured changes, and the direction legend flips with the picture so its
+arrows and hues keep telling the truth about what is on screen. The mirror
+stands only while the front camera is the source (flipping to the back
+camera or loading a clip removes it). And, at the owner's request: two
+fingers on the picture drive the camera's own zoom where the driver exposes
+one (`track.getCapabilities().zoom`), with a status readout; a camera
+without a zoom control says so once (iOS Safari exposes none).
+
+**Result:** verified with headless Chrome's fake camera: the Mirror button
+loads the user-facing camera into the fullscreen viewfinder with the canvas
+flipped (`matrix(-1, 0, 0, 1, 0, 0)`; the fake camera's burnt-in timestamp
+reads backwards); the fake camera has no zoom capability, so the graceful
+path ran (`cameraZoom()` null, `setCameraZoom` false, the status message).
+**Needs the owner's eyes on a real phone:** the real front camera in Mirror
+(including a heading-coloured mode, to see the flipped legend read
+correctly), pinch zoom on the back camera (range, smoothness, whether the
+driver animates it), and that fullscreen sticks on the phone browser.
+

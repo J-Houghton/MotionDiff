@@ -101,7 +101,13 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
   overflow: hidden;
 }
 .frame video, .frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: fill; }
-.frame canvas { z-index: 1; }
+.frame canvas { z-index: 1; touch-action: none; /* two fingers pinch the camera's zoom */ }
+
+/* Mirror: the front camera flipped like a mirror. Display only — nothing
+   measured changes. The legend flips with the picture, so its arrows and
+   hues keep telling the truth about what is on screen. */
+#app[data-mirror='true'] .frame video, #app[data-mirror='true'] .frame canvas { transform: scaleX(-1); }
+#app[data-mirror='true'] .legend { transform: scaleX(-1); }
 /* The original: the video itself, lying over the canvas, transparent until
    split compare or hold-original makes it opaque (ui/shell.js). */
 .frame video { z-index: 2; opacity: 0; pointer-events: none; }
@@ -177,7 +183,8 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 :root[data-theme='dark'] .ruler-mark b { color: #0d1a2c; }
 :root[data-theme='dark'] .ruler-mark-2 b { color: var(--paper); }
 .ruler-mark-trail { --flag: 9px; --mark: var(--soft); }
-.ruler-mark-trail b { top: 11px; bottom: auto; background: var(--paper); color: var(--soft) !important; padding: 1px 4px; z-index: 1; }
+/* label below the axis, anchored to the marker's foot so a taller phone hit box cannot lift it */
+.ruler-mark-trail b { top: auto; bottom: -15px; background: var(--paper); color: var(--soft) !important; padding: 1px 4px; z-index: 1; }
 /* nothing to play yet: the transport would only be dead buttons */
 #app[data-source='empty'] .play, #app[data-source='empty'] .scrub { visibility: hidden; }
 .ruler-now { right: 0; width: 2px; height: 30px; background: var(--ink); transform: none; }
@@ -298,8 +305,9 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 
 #app[data-layout='viewfinder'] .cap { position: absolute; z-index: 6; left: 44px; right: 44px; bottom: 44px; display: grid; grid-template-columns: 1fr; gap: 6px; background: #000; border: 0; padding: 12px 14px 8px; }
 #app[data-layout='viewfinder'] .cap-mode { display: none; }
-/* the ruler, compact, between the scrub and the transport */
-#app[data-layout='viewfinder'] .ruler { height: 72px; }
+/* the ruler, between the scrub and the transport, at the Plate's geometry:
+   shorter and the TRAIL and GAP labels collide when their values coincide */
+#app[data-layout='viewfinder'] .ruler { height: 82px; }
 #app[data-phone='true'] .ruler { margin: 4px 2px 0; }
 /* markers a thumb can hit (the audit measures the element, not a pseudo) */
 #app[data-phone='true'] .ruler-mark { width: 44px; height: max(44px, var(--flag)); }

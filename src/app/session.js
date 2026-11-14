@@ -279,17 +279,49 @@ export class Session {
     return this._loadVideo(clip.url, false);
   }
 
-  async loadCamera() {
+  /** @param {'user'|'environment'} [facing] - Which camera; default the one used last */
+  async loadCamera(facing) {
     if (!navigator.mediaDevices?.getUserMedia) {
       this.setStatus('This browser has no camera access (it needs HTTPS)', 'error');
       return;
     }
+    if (facing) this._facingMode = facing;
     try {
       this.setStatus('Requesting camera…', 'info');
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: this._facingMode }, audio: false });
       await this._loadStream(stream, 'camera');
     } catch {
       this.setStatus('Camera access denied', 'error');
+    }
+  }
+
+  get cameraFacing() { return this._facingMode; }
+
+  /**
+   * The camera's zoom control, or null when the source is not a camera or
+   * its driver exposes none (iOS Safari exposes none).
+   * @returns {{min: number, max: number, step: number, value: number}|null}
+   */
+  cameraZoom() {
+    const track = this._stream?.getVideoTracks?.()[0];
+    const caps = track?.getCapabilities?.();
+    if (this.source?.kind !== 'camera' || !caps || !('zoom' in caps) || !caps.zoom) return null;
+    const { min = 1, max = 1, step = 0.1 } = caps.zoom;
+    if (!(max > min)) return null;
+    return { min, max, step: step || 0.1, value: track.getSettings?.().zoom ?? min };
+  }
+
+  /** @returns {Promise<boolean>} false when the camera has no zoom */
+  async setCameraZoom(value) {
+    const info = this.cameraZoom();
+    if (!info) return false;
+    const track = this._stream.getVideoTracks()[0];
+    const zoom = Math.min(info.max, Math.max(info.min, value));
+    try {
+      await track.applyConstraints({ advanced: [{ zoom }] });
+      return true;
+    } catch {
+      return false;
     }
   }
 
