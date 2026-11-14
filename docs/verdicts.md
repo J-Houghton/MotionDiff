@@ -1204,3 +1204,50 @@ brightness mask's 41%); and diffuse fronts with soft edges respond weakly
 (the judge: the upper cloud mass the brightness mask fills is "almost
 absent"). It is a remedy for lighting and exposure drift, not a better
 general mask; the help sheet says so.
+
+### V-B9. Magnify muted where nothing ever happens (background + magnify) — visual
+`magQuiet` ("Mute still areas") on Magnify: the background model's variance —
+each pixel's own level of change, learnt over seconds — gates the amplified
+band. Where a pixel's σ sits at the frame's quiet level (the 25th percentile)
+the band fades to nothing; where something rhythmic keeps raising it (a
+breathing flank) the band stays. This mutes amplified sensor noise on walls
+and bedding without knowing where the subject is. The picture adds
+`keep·amp·band`, so gate off is arithmetically identical to today; the band
+magnitude (data, sonification) is gated the same way. WebGL only, as the
+model is. Design: docs/combined-modes.md §4, including the pre-registered
+risk that a rhythm fainter than the noise floor is muted with the noise.
+
+**Expectations, written before building:**
+- *On `kitten` (gate on vs off, after a few seconds of learning):* the
+  amplified grain and shimmer on the blanket, wall and sleeping body's still
+  parts visibly drop; the flank's breathing swell stays. A blind judge says
+  which strip is quieter off the subject and confirms the subject's movement
+  is equally visible in both.
+- *Numbers:* mean band strength (data R) over a still background patch drops
+  by at least half with the gate; over the flank it stays within about a
+  quarter of ungated.
+- *On `pulse` (a 1-level swing, under the model's 2-level variance floor):*
+  the gate mutes it — the pre-registered design risk, demonstrated and stated
+  in the help sheet ("turn the gate off for rhythms fainter than the noise"),
+  not a failure.
+- *No regression:* gate off byte-identical (multiplying the band by 1 is
+  exact); the Canvas2D worker path untouched.
+
+**Result: accepted, with the numbers and the look reported honestly.** One
+blind judge, the kitten pair unlabeled:
+
+| Check | Judge (blind) | Numbers |
+|---|---|---|
+| Visible | Told apart "fairly easily, mainly in the still regions" | 57% of pixels differ |
+| Still areas calmer | Ungated: "fine grain and mottling on the wall and blanket… hazy… smeared". Gated: "the wall surface itself is flatter and cleaner, with less grain" | Static-area flicker 11.8 → 6.0 (−49%): the amplified shimmer is what halves. Mean band strength: flat wall −30%, blanket −16%, the windowsill box −37% (those surfaces carry real recurring change — lamp flicker, breathing shadows — which the gate rightly keeps) |
+| Subject untouched | "Amplification looks about equally strong in both… no clear weakening" | Flank band strength 94% of ungated |
+| The clean-room case | | On `pulse` (a wholly static scene) the gate mutes everything, band strength 0.030 → 0.000 — including the 1-level pulse itself, the pre-registered design risk, now in the help sheet |
+| No regression | | Gate off: 0% changed, max diff 0 (the composite keeps its exact float association when ungated); 308 tests; typecheck clean; worker path untouched |
+
+**The look, stated rather than hidden:** what still flickers for real — bright
+edges under a pulsing lamp — keeps its amplification and stands out harder
+against the calmed surroundings; the judge read those rims as the gated
+strip's own artefact ("embossed… cut-out" folds). The help sheet says so. The
+registered "background drops by at least half" held for the flicker measure
+and the static clip, not for the kitten's mean band strength, whose remainder
+is real signal.

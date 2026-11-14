@@ -72,6 +72,7 @@ Ranked by visible effect for the effort.
 | Flow gated by the mask or the background model (`flowOnly` on Optical flow) | with this update | V-B6; the gates' limits are in the help sheet |
 | Per-pixel noise threshold (`maskAuto` on the mask mode) | with this update | V-B7 |
 | Lighting normalisation (`maskGradient`: edge differencing on the mask mode) | with this update | V-B8 |
+| Magnify muted where nothing ever happens (`magQuiet`: the model's variance gates the band) | with this update | V-B9 |
 
 ## Deferred
 | Item | Why |
