@@ -5,13 +5,13 @@
  *
  *   label    shown on the button
  *   url      the file
- *   mode     optional: the mode this sample shows off (a mode id). Named on
- *            the button, and selected when the sample is loaded
- *   params   optional: settings applied with it (pipeline params)
- *   display  optional: 'diff' | 'overlay' | 'glow'
+ *   preset   optional: the name of the PARAMETER_PRESETS entry the sample
+ *            opens with. The preset is the one source of truth for the
+ *            sample's mode, settings and display, and the same look is
+ *            offered in the panel's Preset list for any footage.
  *   credit   where it comes from and under what licence
  *
- * A sample without a mode keeps whatever mode and settings are current.
+ * A sample without a preset keeps whatever mode and settings are current.
  */
 export const TEST_CLIPS = [
   {
@@ -37,35 +37,28 @@ export const TEST_CLIPS = [
     // video and plain under magnification. It stirs once around 6.5 s.
     label: 'Sleeping Kitten',
     url: 'https://videos.pexels.com/video-files/13925469/13925469-hd_1920_1080_30fps.mp4',
-    mode: 'magnify',
-    params: { magAmp: 20, magFreqLow: 0.15, magFreqHigh: 1.0, magChroma: 1, magDownsample: 2, blurEnabled: false },
+    preset: 'Sleeping Kitten',
     credit: 'Pexels licence',
   },
   {
     // A timelapse: a flower unfolds against a still wall.
     label: 'Flower Opening',
     url: 'https://videos.pexels.com/video-files/12538831/12538831-hd_1920_1080_30fps.mp4',
-    mode: 'posy',
-    params: { frameOffset: 30, threshold: 8, trailLength: 20, channelSpread: 2, blurEnabled: false, ageColorEnabled: false },
-    display: 'diff',
+    preset: 'Flower Opening',
     credit: 'Pexels licence',
   },
   {
     // Dozens of bees on a plain wall: each is cut out where it is.
     label: 'Bees at the Hive',
     url: 'https://videos.pexels.com/video-files/9491523/9491523-hd_1920_1080_25fps.mp4',
-    mode: 'mask',
-    params: { frameOffset: 3, secondGap: 30, threshold: 20, maskBlur: true, maskClean: true, maskShow: 'cutout', trailLength: 5 },
-    display: 'diff',
+    preset: 'Bees at the Hive',
     credit: 'Pexels licence',
   },
   {
     // A few gulls against clear sky: each leaves a ribbon along its path.
     label: 'Gulls Overhead',
     url: 'https://videos.pexels.com/video-files/28077187/12294615_1920_1080_30fps.mp4',
-    mode: 'history',
-    params: { historyShow: 'age', historyLength: 60, frameOffset: 5, secondGap: 30, threshold: 15, ageColorNew: '#ff4400', ageColorOld: '#0044ff' },
-    display: 'diff',
+    preset: 'Gulls Overhead',
     credit: 'Pexels licence',
   },
   {
@@ -73,17 +66,13 @@ export const TEST_CLIPS = [
     // ones that stop are absorbed.
     label: 'Crossing from Above',
     url: 'https://videos.pexels.com/video-files/37252006/15781298_1920_1080_60fps.mp4',
-    mode: 'background',
-    params: { absorbSeconds: 4, threshold: 20, maskShow: 'cutout', frameOffset: 5, trailLength: 0 },
-    display: 'diff',
+    preset: 'Crossing from Above',
     credit: 'Pexels licence',
   },
   {
     label: 'Motorway',
     url: 'https://videos.pexels.com/video-files/854897/854897-hd_1920_1080_30fps.mp4',
-    mode: 'flow',
-    params: { flowShow: 'particles', flowGap: 2, flowRange: 40, flowSmoothing: 6, traceDensity: 25, traceLength: 15, traceGain: 1, traceColour: 'heading' },
-    display: 'diff',
+    preset: 'Motorway',
     credit: 'Pexels licence',
   },
   {
@@ -91,17 +80,13 @@ export const TEST_CLIPS = [
     // longer gap and a small speed range; shown over the video.
     label: 'Clouds over Peaks',
     url: 'https://videos.pexels.com/video-files/27608396/12184838_1920_1080_24fps.mp4',
-    mode: 'flow',
-    params: { flowShow: 'particles', flowGap: 4, flowRange: 10, flowSmoothing: 15, traceDensity: 25, traceLength: 15, traceGain: 1, traceColour: 'heading' },
-    display: 'glow',
+    preset: 'Clouds over Peaks',
     credit: 'Pexels licence',
   },
   {
     label: 'Weir',
     url: 'https://videos.pexels.com/video-files/7876183/7876183-hd_1920_1080_30fps.mp4',
-    mode: 'flow',
-    params: { flowShow: 'particles', flowGap: 2, flowRange: 20, flowSmoothing: 6, traceDensity: 25, traceLength: 15, traceGain: 1, traceColour: 'heading' },
-    display: 'diff',
+    preset: 'Weir',
     credit: 'Pexels licence',
   },
   {
@@ -110,8 +95,7 @@ export const TEST_CLIPS = [
     // change under us.
     label: 'Candle Plume',
     url: 'https://raw.githubusercontent.com/JPaonaskar/Background-Oriented-Schlieren/f1ca8f60354c05260e2569af7826b5dc8380f9a7/Sample%20Data/Candle.MOV',
-    mode: 'schlieren',
-    params: { schlierenShow: 'knife', schlierenHold: false, schlierenRange: 25, schlierenWindow: 4, schlierenSmooth: 1, schlierenReference: 60, schlierenSteady: true },
+    preset: 'Candle Plume',
     credit: 'JPaonaskar/Background-Oriented-Schlieren, MIT licence',
   },
 ];
@@ -146,7 +130,13 @@ export function migratePresetParams(params, version = 1) {
 }
 
 // Thresholds are in raw difference units (PRESET_VERSION 2).
+// One list serves both uses: the panel's Preset select offers every entry
+// for whatever footage is loaded, and a sample names the entry it opens
+// with (TEST_CLIPS.preset) — the samples' looks are not a second preset
+// system. `display` is optional; a preset without one keeps the current
+// display.
 export const PARAMETER_PRESETS = [
+  // Hand-made Posy and Raw looks.
   {
     name: 'Subtle Wind',
     params: {
@@ -202,4 +192,55 @@ export const PARAMETER_PRESETS = [
       blurEnabled: false,
     },
   },
+  // The looks the samples open with, named after their sample. Each was
+  // checked on its footage (static camera, or the whole frame would light
+  // up); on other footage they are starting points.
+  {
+    name: 'Sleeping Kitten',
+    params: { algorithm: 'magnify', magAmp: 20, magFreqLow: 0.15, magFreqHigh: 1.0, magChroma: 1, magDownsample: 2, blurEnabled: false },
+  },
+  {
+    name: 'Flower Opening',
+    display: 'diff',
+    params: { algorithm: 'posy', frameOffset: 30, threshold: 8, trailLength: 20, channelSpread: 2, blurEnabled: false, ageColorEnabled: false },
+  },
+  {
+    name: 'Bees at the Hive',
+    display: 'diff',
+    params: { algorithm: 'mask', frameOffset: 3, secondGap: 30, threshold: 20, maskBlur: true, maskClean: true, maskShow: 'cutout', trailLength: 5 },
+  },
+  {
+    name: 'Gulls Overhead',
+    display: 'diff',
+    params: { algorithm: 'history', historyShow: 'age', historyLength: 60, frameOffset: 5, secondGap: 30, threshold: 15, ageColorNew: '#ff4400', ageColorOld: '#0044ff' },
+  },
+  {
+    name: 'Crossing from Above',
+    display: 'diff',
+    params: { algorithm: 'background', absorbSeconds: 4, threshold: 20, maskShow: 'cutout', frameOffset: 5, trailLength: 0 },
+  },
+  {
+    name: 'Motorway',
+    display: 'diff',
+    params: { algorithm: 'flow', flowShow: 'particles', flowGap: 2, flowRange: 40, flowSmoothing: 6, traceDensity: 25, traceLength: 15, traceGain: 1, traceColour: 'heading' },
+  },
+  {
+    name: 'Clouds over Peaks',
+    display: 'glow',
+    params: { algorithm: 'flow', flowShow: 'particles', flowGap: 4, flowRange: 10, flowSmoothing: 15, traceDensity: 25, traceLength: 15, traceGain: 1, traceColour: 'heading' },
+  },
+  {
+    name: 'Weir',
+    display: 'diff',
+    params: { algorithm: 'flow', flowShow: 'particles', flowGap: 2, flowRange: 20, flowSmoothing: 6, traceDensity: 25, traceLength: 15, traceGain: 1, traceColour: 'heading' },
+  },
+  {
+    name: 'Candle Plume',
+    params: { algorithm: 'schlieren', schlierenShow: 'knife', schlierenHold: false, schlierenRange: 25, schlierenWindow: 4, schlierenSmooth: 1, schlierenReference: 60, schlierenSteady: true },
+  },
 ];
+
+/** @param {string} name @returns {{name: string, display?: string, params: object}|null} */
+export function getPreset(name) {
+  return PARAMETER_PRESETS.find((preset) => preset.name === name) || null;
+}

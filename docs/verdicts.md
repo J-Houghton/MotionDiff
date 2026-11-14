@@ -996,3 +996,18 @@ re-registered on `traffic` before rendering it: each carriageway's ribbons in
 one steady hue (the two opposed headings), and the near, faster carriageway's
 ribbons brighter than the far one at the same speed range — speed is what the
 direction view cannot show at all.
+
+### IA7. One preset list: the samples' looks join the Preset select — interface
+At the owner's request: the per-sample default settings and the panel's
+preset list were two separately maintained sets. Now `PARAMETER_PRESETS` is
+the one source of truth — the samples' looks are entries in it, named after
+their sample, and a `TEST_CLIPS` entry carries only `preset: '<name>'`.
+A preset may name a display; `Session.applyPreset` applies both, from the
+panel and from the sample buttons alike.
+
+**Result:** verified in the browser: the Motorway sample button opens flow
+with its preset (diff display, speed range 40), applying "Gulls Overhead"
+from the preset path switches any footage to motion history with its
+settings, and the select offers all 14 looks. 296 unit tests and the
+typecheck pass. No pixels change: the same settings apply as before, from
+one list instead of two.
