@@ -1,0 +1,5 @@
+{ "scenes": [
+  {"name":"sunset-fixed","clip":"sunset","at":3,"frames":6,"every":8,"warmup":2,"display":"diff","readData":true,"params":{"algorithm":"mask","frameOffset":5,"secondGap":30,"threshold":12,"maskGradient":false,"maskAuto":false,"trailLength":0,"maskBlur":true,"maskClean":true,"maskFill":0,"maskShow":"solid"}},
+  {"name":"sunset-gradient","clip":"sunset","at":3,"frames":6,"every":8,"warmup":2,"display":"diff","readData":true,"params":{"algorithm":"mask","frameOffset":5,"secondGap":30,"threshold":12,"maskGradient":true,"maskAuto":false,"trailLength":0,"maskBlur":true,"maskClean":true,"maskFill":0,"maskShow":"solid"}},
+  {"name":"truth-gradient","clip":"truth","at":2,"frames":6,"every":3,"warmup":2,"display":"diff","readData":true,"params":{"algorithm":"mask","frameOffset":5,"secondGap":30,"threshold":12,"maskGradient":true,"maskAuto":false,"trailLength":0,"maskBlur":true,"maskClean":true,"maskFill":0,"maskShow":"cutout"}}
+] }

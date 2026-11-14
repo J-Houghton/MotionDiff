@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MASK_VOTES_STRICT, threeFrameDifference, thresholdMask, majority3x3 } from '../mask.js';
+import { MASK_VOTES_STRICT, dilate, erode, lumaSobel, threeFrameDifference, thresholdMask, thresholdMaskAuto, majority3x3 } from '../mask.js';
 import { boxBlur } from '../blur.js';
 
 function makePixels(...pixels) {
@@ -185,5 +185,139 @@ describe('motion mask under noise', () => {
     // still its current outline. Nothing where it used to be, nothing else.
     expect(countIn(m, W, 52, 58, 14, 34)).toBe(0);
     expect(total(m) - countIn(m, W, 58, 78, 14, 34)).toBeLessThan(8);
+  });
+});
+
+describe('dilate and erode (the close that fills holes)', () => {
+  const W = 16;
+  const H = 12;
+  /** A mask from a set of [x, y] pixels. */
+  const from = (...set) => {
+    const m = new Uint8Array(W * H);
+    for (const [x, y] of set) m[y * W + x] = 1;
+    return m;
+  };
+  /** A filled rectangle. */
+  const rect = (x0, y0, w, h) => {
+    const m = new Uint8Array(W * H);
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) m[y * W + x] = 1;
+    return m;
+  };
+  const close = (m, radius) => erode(dilate(m, W, H, radius, new Uint8Array(W * H)), W, H, radius, new Uint8Array(W * H));
+  const count = (m) => m.reduce((a, b) => a + b, 0);
+
+  it('a close fills a hole inside a solid shape and returns it to its own outline', () => {
+    const solid = rect(4, 3, 8, 6);
+    const holed = rect(4, 3, 8, 6);
+    holed[5 * W + 7] = 0; // a pinhole
+    holed[5 * W + 8] = 0; // two wide
+    expect(close(holed, 1)).toEqual(solid);
+  });
+
+  it('a close bridges a crack no wider than twice the radius', () => {
+    const cracked = new Uint8Array(W * H);
+    for (let y = 2; y < 10; y++) for (let x = 2; x < 14; x++) if (x !== 7 && x !== 8) cracked[y * W + x] = 1;
+    const closed = close(cracked, 1);
+    expect(closed[5 * W + 7]).toBe(1);
+    expect(closed[5 * W + 8]).toBe(1);
+  });
+
+  it('a close does not grow a solid shape, move its outline, or invent pixels', () => {
+    const solid = rect(5, 4, 6, 4);
+    expect(close(solid, 1)).toEqual(solid);
+    expect(close(solid, 2)).toEqual(solid);
+    expect(count(close(from([8, 6]), 2))).toBe(1); // a lone pixel survives unchanged
+  });
+
+  it('a shape touching the border keeps its edge through a close', () => {
+    const atEdge = rect(0, 0, 6, 5);
+    atEdge[2 * W + 2] = 0; // a hole near the corner
+    expect(close(atEdge, 1)).toEqual(rect(0, 0, 6, 5));
+  });
+
+  it('dilate grows by the radius; erode shrinks interior shapes by it', () => {
+    const grown = dilate(from([8, 6]), W, H, 2, new Uint8Array(W * H));
+    expect(count(grown)).toBe(25);
+    const shrunk = erode(rect(4, 3, 8, 6), W, H, 1, new Uint8Array(W * H));
+    expect(shrunk).toEqual(rect(5, 4, 6, 4));
+  });
+});
+
+describe('thresholdMaskAuto (per-pixel noise floor)', () => {
+  const sigma = (levels) => (levels / 255) ** 2; // variance of a per-pixel σ in levels
+
+  it('a difference must clear its own noise as well as the global floor', () => {
+    // σ = 4 levels: 2.5·σ·√2 ≈ 14.1 mean-channel levels, far above a floor of 8.
+    const difference = Uint16Array.of(30, 60, 0);
+    const variance = Float32Array.of(sigma(4), sigma(4), sigma(4));
+    const out = thresholdMaskAuto(difference, variance, 8, 2.5, false, new Uint8Array(3));
+    expect(Array.from(out)).toEqual([0, 1, 0]); // 30 < noise ≈ 42 (sum units); 60 clears it; 0 never moves
+  });
+
+  it('where the pixel is quiet the global floor still rules', () => {
+    // σ = 1 level: the noise bar ≈ 10.6 in sum units, under a floor of 8·3 = 24.
+    const difference = Uint16Array.of(20, 24);
+    const variance = Float32Array.of(sigma(1), sigma(1));
+    const out = thresholdMaskAuto(difference, variance, 8, 2.5, false, new Uint8Array(2));
+    expect(Array.from(out)).toEqual([0, 1]);
+  });
+
+  it('blurred frames carry a third of the noise, so the bar drops with them', () => {
+    // σ = 4 levels: unblurred bar ≈ 42 in sum units, blurred ≈ 14.
+    const difference = Uint16Array.of(30, 30);
+    const variance = Float32Array.of((4 / 255) ** 2, (4 / 255) ** 2);
+    const sharp = thresholdMaskAuto(difference, variance, 8, 2.5, false, new Uint8Array(2));
+    const blurred = thresholdMaskAuto(difference, variance, 8, 2.5, true, new Uint8Array(2));
+    expect(Array.from(sharp)).toEqual([0, 0]);
+    expect(Array.from(blurred)).toEqual([1, 1]);
+  });
+
+  it('matches thresholdMask when the variance is zero', () => {
+    const difference = Uint16Array.of(0, 23, 24, 700);
+    const fixed = thresholdMask(difference, 8, new Uint8Array(4));
+    const auto = thresholdMaskAuto(difference, new Float32Array(4), 8, 2.5, false, new Uint8Array(4));
+    expect(Array.from(auto)).toEqual(Array.from(fixed));
+  });
+});
+
+describe('lumaSobel (ignore lighting)', () => {
+  const W = 12;
+  const H = 10;
+  const grey = (value) => {
+    const f = new Uint8ClampedArray(W * H * 4);
+    for (let i = 0; i < f.length; i += 4) { f[i] = f[i + 1] = f[i + 2] = value; f[i + 3] = 255; }
+    return f;
+  };
+
+  it('a flat frame has no edges', () => {
+    const out = lumaSobel(grey(97), W, H, new Float32Array(W * H));
+    expect(Math.max(...out)).toBe(0);
+  });
+
+  it('a global brightness change leaves the edge image untouched — the point of the feature', () => {
+    const scene = grey(60);
+    for (let y = 0; y < H; y++) for (let x = 6; x < W; x++) {
+      const i = (y * W + x) * 4;
+      scene[i] = scene[i + 1] = scene[i + 2] = 180; // a step edge at x = 6
+    }
+    const brighter = Uint8ClampedArray.from(scene, (v, i) => (i % 4 === 3 ? v : Math.min(255, v + 40)));
+    const a = lumaSobel(scene, W, H, new Float32Array(W * H));
+    const b = lumaSobel(brighter, W, H, new Float32Array(W * H));
+    expect(Array.from(b)).toEqual(Array.from(a));
+    // And the edge itself is strong where the step is.
+    expect(a[4 * W + 6]).toBeGreaterThan(50);
+    expect(a[4 * W + 2]).toBe(0);
+  });
+
+  it('a vertical step edge measures the step over the kernel norm', () => {
+    const scene = grey(0);
+    for (let y = 0; y < H; y++) for (let x = 6; x < W; x++) {
+      const i = (y * W + x) * 4;
+      scene[i] = scene[i + 1] = scene[i + 2] = 200;
+    }
+    const out = lumaSobel(scene, W, H, new Float32Array(W * H));
+    // |gx| at the step column: (200·4)/8 = 100, both border columns of the step.
+    expect(out[5 * W + 5]).toBeCloseTo(100, 5);
+    expect(out[5 * W + 6]).toBeCloseTo(100, 5);
   });
 });

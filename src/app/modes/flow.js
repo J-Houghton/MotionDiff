@@ -15,12 +15,15 @@
  *
  * Needs float render targets.
  */
+import { BG_HOLD_SECONDS, backgroundAlpha } from '../../core/background.js';
 import { FLOW_MAX_STEP, flowReadings } from '../../core/flow.js';
 import { lookbackTime } from '../../core/timebase.js';
 import { FLOW_PRELUDE, flowBetween, flowLuma, flowPass, flowSmooth, readField } from '../flow.js';
 import { particleField, reduceField, renderParticles } from '../particles.js';
 import { renderArrows } from '../arrows.js';
-import { asMs } from './params.js';
+import { learnMask, updateBackground } from './background.js';
+import { maskDifference, maskDraw, maskLayers, maskLookback } from './mask.js';
+import { THRESHOLD, asMs } from './params.js';
 
 /** Flow is solved on a copy of the frame at most this wide. */
 export const FLOW_WIDTH = 320;
@@ -91,6 +94,90 @@ export const TRACE_PARAMS = [
 /** Speed range in picture pixels per second, from the control (percent of the width per second). */
 const fullSpeed = (params, width) => (params.flowRange / 100) * width;
 
+// The gate at the working size: maximum of the voted decision over each
+// texel's footprint (any moving pixel gates its cell in)…
+const GATE_REDUCE_FRAG = `${FLOW_PRELUDE}
+uniform sampler2D uDecision; // full size, R = moving
+uniform int uFactor;
+
+void main() {
+  ivec2 p = here();
+  float set = 0.0;
+  for (int dy = 0; dy < uFactor; dy++) {
+    for (int dx = 0; dx < uFactor; dx++) set = max(set, px(uDecision, p * uFactor + ivec2(dx, dy)).r);
+  }
+  fragColor = vec4(set, 0.0, 0.0, 1.0);
+}`;
+
+// …then dilated by the solve window, so a mover's rim keeps its vectors.
+const GATE_DILATE_FRAG = `${FLOW_PRELUDE}
+uniform sampler2D uGate;
+
+void main() {
+  ivec2 p = here();
+  float set = 0.0;
+  for (int dy = -3; dy <= 3; dy++) {
+    for (int dx = -3; dx <= 3; dx++) set = max(set, px(uGate, p + ivec2(dx, dy)).r);
+  }
+  fragColor = vec4(set, 0.0, 0.0, 1.0);
+}`;
+
+// Confidence gated BEFORE smoothing: gated places decay below the presence
+// floor rather than blinking off.
+const GATE_APPLY_FRAG = `${FLOW_PRELUDE}
+uniform sampler2D uFlow;
+uniform sampler2D uGate;
+
+void main() {
+  ivec2 p = here();
+  vec3 flow = px(uFlow, p).rgb;
+  fragColor = vec4(flow.rg, flow.b * step(0.5, px(uGate, p).r), 1.0);
+}`;
+
+/**
+ * The full-size decision that gates the flow, or null to measure everywhere:
+ * the three-frame mask ('mask'), or the background model's foreground
+ * ('foreground', updating the model from this frame as the background mode
+ * would).
+ * @param {import('./index.js').ModeFrame} frame
+ */
+function gateDecision(frame) {
+  const { gl: renderer, params } = frame;
+  if (params.flowOnly === 'mask') {
+    const layers = maskLayers(frame);
+    if (!layers) return null; // no second frame yet: measure everywhere
+    return maskDifference(renderer, { layers, threshold: params.threshold, blur: true });
+  }
+  return updateBackground(renderer, {
+    mask: learnMask(frame).tex,
+    alpha: backgroundAlpha(frame.stepMs, params.absorbSeconds),
+    holdStep: frame.stepMs / 1000 / BG_HOLD_SECONDS,
+    threshold: params.threshold,
+    repeat: frame.step === 'repeat',
+  });
+}
+
+/**
+ * The gate at the working size (R = 1 where flow may keep its confidence),
+ * or null when nothing gates this frame.
+ * @param {import('./index.js').ModeFrame} frame
+ * @param {number} width - The working size flow is solved at
+ * @param {number} height
+ */
+export function flowGate(frame, width, height) {
+  const { gl: renderer, params } = frame;
+  if (params.flowOnly !== 'mask' && params.flowOnly !== 'foreground') return null;
+  // Targets before binds.
+  const voted = renderer.target('flow:gate-voted', renderer.width, renderer.height);
+  const reduced = renderer.target('flow:gate-reduced', width, height);
+  const gate = renderer.target('flow:gate', width, height);
+  const decision = gateDecision(frame);
+  if (!decision) return null;
+  maskDraw(renderer, decision.tex, voted.fb, { clean: true, output: 'data' });
+  flowPass(renderer, 'flow:gate-reduce', GATE_REDUCE_FRAG, { uDecision: 0 }, reduced, [voted.tex], (gl, u) => gl.uniform1i(u.uFactor, flowFactor(renderer.width)));
+  return flowPass(renderer, 'flow:gate-dilate', GATE_DILATE_FRAG, { uGate: 0 }, gate, [reduced.tex]);
+}
+
 /**
  * The velocity field for this frame, or null while there is no older frame.
  * @param {import('./index.js').ModeFrame} frame - The per-frame context from Pipeline.process
@@ -109,7 +196,10 @@ export function flowVelocity(frame) {
   const current = flowLuma(renderer, 'flow:current', factor);
   const older = flowLuma(renderer, 'flow:older', factor, ring.slotAt(age));
   const velocity = renderer.target('flow:velocity', current.width, current.height, { float: true });
-  const flow = flowBetween(renderer, 'flow', older, current, { levels: flowLevels(current.width) });
+  const gated = renderer.target('flow:gated', current.width, current.height, { float: true });
+  let flow = flowBetween(renderer, 'flow', older, current, { levels: flowLevels(current.width) });
+  const gate = flowGate(frame, current.width, current.height);
+  if (gate) flow = flowPass(renderer, 'flow:gate-apply', GATE_APPLY_FRAG, { uFlow: 0, uGate: 1 }, gated, [flow.tex, gate.tex]);
   flowPass(renderer, 'flow:velocity', VELOCITY_FRAG, { uFlow: 0 }, velocity, [flow.tex], (gl, u) => gl.uniform1f(u.uScale, factor / gapSeconds));
 
   const seconds = params.flowSmoothing / 30;
@@ -231,6 +321,8 @@ export default /** @type {import('./index.js').Mode} */ ({
     'Along a straight edge only the motion across the edge can be seen.',
     'Fast things need a short gap, slow things a long one: beyond the reach shown under the picture, the answer is wrong, not just weak.',
     'A moving camera makes everything flow.',
+    'Measure on limits where flow exists: the mask gate keeps vectors only where the three-frame mask says something moves now; the foreground gate keeps what the background model has not absorbed, so a stopper\'s flow fades out over the absorb time. A mover\'s rim keeps its vectors either way.',
+    'A gate is only as good as its mask: what the mask misses (small, far or slow movers, and most of a surface that moves everywhere, like water) loses its flow with it. On motion-everywhere footage leave Measure on at Everything; for slow drift prefer the foreground gate.',
     'Traces are drawn at the processing size, so they are soft when shown large.',
   ],
   data: { kind: 'vector', what: 'R: speed as a share of the speed range; G, B: velocity in picture pixels per second, x to the right and y down' },
@@ -239,12 +331,22 @@ export default /** @type {import('./index.js').Mode} */ ({
   needsFloat: true,
   params: [
     { key: 'flowShow', label: 'Show', type: 'select', default: 'particles', options: { 'Particle traces': 'particles', 'Colour': 'colour', 'Arrow grid': 'arrows' } },
+    { key: 'flowOnly', label: 'Measure on', type: 'select', default: 'all', options: { 'Everything': 'all', 'Moving (mask)': 'mask', 'Foreground (model)': 'foreground' } },
+    { ...THRESHOLD, when: (p) => p.flowOnly !== 'all' },
+    { key: 'absorbSeconds', label: 'Absorb after', type: 'range', min: 0.5, max: 20, step: 0.5, default: 4, format: (v) => `${v} s`, when: (p) => p.flowOnly === 'foreground' },
     { key: 'flowGap', label: 'Gap', type: 'range', min: 1, max: 15, step: 1, default: 2, format: asMs },
     SPEED_RANGE,
     { key: 'flowSmoothing', label: 'Smoothing', type: 'range', min: 0, max: 30, step: 1, default: 6, format: asMs },
     ...TRACE_PARAMS.map((param) => ({ ...param, when: (p) => p.flowShow === 'particles' })),
   ],
-  lookback: (params) => [params.flowGap, params.flowGap],
+  lookback: (params) => {
+    if (params.flowOnly === 'mask') {
+      const [near, far] = maskLookback(params);
+      return [Math.min(params.flowGap, near), Math.max(params.flowGap, far)];
+    }
+    if (params.flowOnly === 'foreground') return [Math.min(params.flowGap, params.frameOffset), Math.max(params.flowGap, params.frameOffset)];
+    return [params.flowGap, params.flowGap];
+  },
   animates: (params) => params.flowShow === 'particles',
   summary(params) {
     return `Compares frames ${asMs(params.flowGap)} apart. Full brightness is ${params.flowRange}% of the picture's width per second; a shorter gap follows faster motion, a longer one finds slower.`;

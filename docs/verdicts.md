@@ -997,6 +997,260 @@ one steady hue (the two opposed headings), and the near, faster carriageway's
 ribbons brighter than the far one at the same speed range — speed is what the
 direction view cannot show at all.
 
+### IA7. One preset list: the samples' looks join the Preset select — interface
+At the owner's request: the per-sample default settings and the panel's
+preset list were two separately maintained sets. Now `PARAMETER_PRESETS` is
+the one source of truth — the samples' looks are entries in it, named after
+their sample, and a `TEST_CLIPS` entry carries only `preset: '<name>'`.
+A preset may name a display; `Session.applyPreset` applies both, from the
+panel and from the sample buttons alike.
+
+**Result:** verified in the browser: the Motorway sample button opens flow
+with its preset (diff display, speed range 40), applying "Gulls Overhead"
+from the preset path switches any footage to motion history with its
+settings, and the select offers all 14 looks. 296 unit tests and the
+typecheck pass. No pixels change: the same settings apply as before, from
+one list instead of two.
+### V-B5. Filling holes in mask cut-outs (morphological close) — visual
+`maskFill` (Off / 1 px / 2 px) on the Motion mask and Background model modes:
+after the 3×3 vote has removed speckle, the decision is dilated then eroded by
+the chosen radius, so holes up to twice the radius across are filled and
+ragged rims are smoothed, without growing the cut-out (a close returns solid
+shapes to their own outline). Core `dilate`/`erode` in core/mask.js are the
+source of truth; the shader mirrors them. Off keeps today's path untouched.
+Design: docs/combined-modes.md §5.
+
+**Expectations, written before building:**
+- *On `traffic`, mask cut-out, fill 2 px vs off:* vehicle cut-outs lose their
+  interior holes (dark panels, windows) and read as solid shapes; rims
+  smoother. A blind judge tells the strips apart and says one shows whole
+  vehicles where the other shows fragments or perforated ones.
+- *On `bees`, mask cut-out:* each bee one solid blob instead of fragments.
+- *On `crossing`, background-model cut-out, fill 2 px:* the same for cars and
+  pedestrians being carved out of the model.
+- *Speckle must not return:* the vote runs before the close, so lone noise
+  pixels are gone before anything dilates. Flicker in static areas must not
+  rise against the off strips.
+- *Truth check (`truth-mask` scene, fill 1):* the share of the square's
+  outline filled rises or holds against off; the share marked "elsewhere"
+  stays within a point or two.
+- *No regression:* with fill off, mask and background strips byte-identical
+  to before the change.
+
+**Result: accepted; visible exactly where there are holes to fill.** One blind
+judge, three pairs, unlabeled and shuffled:
+
+| Check | Clip | Judge (blind) | Numeric guard |
+|---|---|---|---|
+| Visible and intended | traffic (mask) | Told apart "clearly": with fill, "cars are whole, filled shapes"; without, "riddled with dark holes, black outlines, cracks"; rims smoother with fill | 1.8% of pixels changed; flicker 0.20 → 0.18 |
+| Bees | bees (mask) | "Barely" told apart — at these settings the bee cut-outs were not actually perforated, so there was almost nothing to fill | 0.57% changed, at the invisibility floor |
+| Crossing | crossing (background) | "Nearly identical for the cars and pedestrians. Both are solid" — the model's cut-outs had no holes; fill only thickened faint shadow patches slightly | 1.0% changed; flicker 0.22 → 0.24 |
+| No speckle returns | all three | "No variant showed background speckle in any pair" (the vote runs before the close) | |
+| Nothing lost or grown | all three | "No mover present in one and missing in the other"; with fill the traffic shapes read "slightly puffier" (a close rounds concavities) | |
+| Truth check | truth | Fill 1 vs off: marks on the current outline 100% both, elsewhere 0 both, outline coverage identical — the close invents nothing on a mask without holes | |
+| No regression | truth, truth-noisy, highway, background scenes | | Fill off: 0% changed, max diff 0 on all five guard scenes; parity probes exact on both fill cases (and all seven probes pass on the rebased tree); 301 tests |
+
+The expectation for `bees` was wrong about the footage, not the change: a
+hole-filler that finds no holes alters nothing, which the truth check
+confirms is the designed behaviour. An *open* (salt removal) was not built:
+the 3×3 vote already does that job. Samples keep fill off — it is a remedy
+for footage whose cut-outs are actually perforated, like `traffic`.
+
+### V-B6. Flow measured only on what moves (mask + flow, background + flow) — visual
+`flowOnly` on the Optical flow mode: `Everything` (today's behaviour),
+`Moving (mask)` — the three-frame mask gates the measured vectors before the
+running average, so colour, traces and arrows exist only on movers — and
+`Foreground (model)` — the background model's decision gates instead, so a
+slow drifter keeps its flow and a stopper's fades out as it is absorbed. The
+gate is downsampled to the working size by maximum and dilated by the solve
+window, so a mover's rim keeps its vectors; the gate multiplies confidence
+BEFORE smoothing, so gated places decay below the presence floor rather than
+blinking off. Design: docs/combined-modes.md §2–3.
+
+**Expectations, written before building:**
+- *On `traffic`, colour view, mask gate vs everything:* colour confined to the
+  vehicles; the faint speckle and smeared patches on the empty road are gone.
+  A blind judge tells the strips apart and says which rule each follows.
+- *On `crossing`, foreground gate:* flow colour on moving vehicles and
+  pedestrians only; the road, its markings and parked/absorbed cars carry
+  none.
+- *On `river` (everything moves):* the gates change little — the picture
+  stays a full field of flow apart from the still banks.
+- *Readouts stay honest:* with a gate on, the "share of frame" readout counts
+  only ungated cells, and the camera claim is omitted (under half the frame
+  measured: the ground is deliberately no longer measured, so the median no
+  longer speaks for the camera).
+- *No regression:* `flowOnly: 'all'` byte-identical to before the change on
+  the flow guard scenes; flow and schlieren parity probes still pass (the
+  solver itself is untouched; only its confidence is gated afterwards).
+
+**Result: accepted, with the gates' reach stated as limits.** One blind judge
+(traffic pair, river pair, clouds trio, unlabeled and shuffled):
+
+| Check | Clips | Judge (blind) | Numeric guard |
+|---|---|---|---|
+| Visible and intended | traffic | Told apart; the gated strip has "smaller, tighter blobs", the smeared upper-left mass separated and the stray streaks and left-edge specks removed; "the main big blobs are equally coloured in both" | |
+| Intended (re-registered): the two gates differ on slow drift | clouds | Ranked exactly as registered: ungated full, foreground gate keeps most of the cloud front (patchy), mask gate "essentially black". Mountains and empty sky stay black in all three | |
+| Readouts stay honest | traffic | | Gated: measured share 0.23 → 0.12 (only movers are measured); the camera claim stays omitted (share < 0.5) |
+| No regression | all nine flow guard scenes | | `flowOnly: 'all'`: 0% changed, max diff 0; 301 tests; typecheck clean |
+
+**Expectations that failed, kept as limits (in the help sheet):**
+- On `river` the mask gate does not "change little": the three-frame mask
+  resolves little of a surface that moves everywhere, and the gate eats much
+  of the measurement with it (the judge: large areas coloured ungated are
+  "black apart from patches" gated). The gate is for distinct movers on still
+  ground; on motion-everywhere footage it should stay off.
+- On `traffic` the gate also cost a few genuine small, distant movers (an
+  orange streak on the far road) that the mask had missed: a gate is only as
+  good as its mask.
+
+**Addendum, before any clouds strips were rendered.** The crossing strips show
+the foreground gate changing almost nothing there: flow's own "no better than
+still" test already blanks that background, so the expectation named a clip
+where the gate has no work. What distinguishes the two gates is slow drift:
+the three-frame mask misses what barely moves between its gaps, while the
+model never absorbs what keeps drifting. Re-registered on `clouds` (slow
+cloud flow, gap 4) before rendering it: with the mask gate much of the cloud
+front's colour disappears; with the foreground gate it stays close to
+ungated; the mountains and plain stay dark in all three.
+
+### V-B7. Per-pixel noise threshold for the mask (background model's variance) — visual
+`maskAuto` on the Motion mask mode: the background model's variance (which
+learns each pixel's own noise) sets a per-pixel floor of BG_K·σ·√2 — ×√2
+because a frame-to-frame difference carries two frames' noise where the model
+comparison carries one — and the global threshold becomes a floor under it,
+exactly the rule the background mode already decides by. The model and its
+variance are maintained the same way the flow gate maintains them
+(learnMask + updateBackground). Design: docs/combined-modes.md §6; roadmap
+motion-extraction item 2.
+
+**Expectations, written before building:**
+- *On `truth-noisy` (heavy sensor noise) at a LOW floor (threshold 8):* the
+  fixed mask is speckled all over the still background; the auto mask at the
+  same floor is as clean as the fixed mask at 20, while the square and discs
+  stay marked at least as fully as fixed-20 marks them. A blind judge tells
+  the strips apart and describes one as noise-speckled, the other as clean.
+- *On `night` (real low light, grain) at threshold 10:* fixed speckles on the
+  water and sky grain; auto suppresses the grain and keeps the walkers.
+- *On clean footage (`truth`):* auto at the default floor is near-identical
+  to fixed (the learnt variance sits at its minimum, whose √2 rule lands just
+  under the default floor).
+- *Truth check:* auto at floor 8 marks the square and disc outlines within a
+  few points of fixed-20's coverage, nothing elsewhere.
+- *No regression:* `maskAuto` off byte-identical to before the change.
+
+**Result: accepted after one correction round.** Fresh blind judge each round
+(the pairs unlabeled and shuffled; the round-2 judge knew nothing of round 1).
+
+*Round 1* (bar = BG_K·σ·√2): on `truth-noisy` clean and told apart at a
+glance, but the judge found the auto disc thinner than fixed-8's, and on
+`night` the walkers reduced to "thin edge outlines… red clothing largely
+missing". Cause, found and fixed rather than tuned around: the mask
+differences 3×3-blurred frames, which carry a third of the learnt (unblurred)
+noise, so the bar stood ~3× too high wherever the signal was low-contrast.
+
+*Round 2* (bar scaled by the blur, core and shader):
+
+| Check | Clip | Judge (blind, fresh) | Numbers |
+|---|---|---|---|
+| Visible and intended | truth-noisy, floor 8 | Fixed "has visibly more speckle… a denser cloud of dots"; auto "much cleaner… almost pure black"; "the bar and disc are about equally complete in both — no real loss of mover area" | Marks elsewhere 1.45% of marks (0.02% of coverage) vs fixed-8's 10%; outline coverage 42.8% vs fixed-20's 41.4%; disc filled 51.2 vs 50.2 |
+| Night keeps its movers | night, floor 10 | "Cannot tell them apart at a glance… completeness looks the same" — nothing visibly suppressed either: at this floor the fixed mask's background marks are real lights and reflections, not grain, so the auto bar rightly leaves them (as with V-B5's bees: nothing to fix, nothing changed) | |
+| Clean footage unchanged | truth, floor 20 | | Auto vs fixed byte-identical (the minimum learnt variance lands under the default floor) |
+| No regression | truth, truth-noisy, highway | | maskAuto off: 0% changed, max diff 0; 304 tests pass; typecheck clean |
+
+Not probed for shader parity (the auto path needs model state over frames);
+covered instead by the core unit tests (including the blur scaling) and the
+byte-identical clean-footage check against the fixed path.
+
+The night expectation half-failed honestly: auto "suppresses the grain" only
+where the marks are grain. Low-contrast movers survive the bar now; what
+survives of the night background is signal.
+
+### V-B8. Lighting normalisation: differencing edges instead of brightness — visual
+`maskGradient` ("Ignore lighting") on the Motion mask mode: the three frames
+are reduced to their edge strength (Sobel magnitude of luma — the gradient of
+a smoothed image, so it replaces the pre-blur) before differencing. A global
+brightness or exposure change adds a constant the gradient does not see, so
+it stops lighting the whole frame; what moves still changes its edges.
+Design: docs/combined-modes.md §7; roadmap motion-extraction item 5.
+
+**Expectations, written before building:**
+- *On `sunset` (timelapse exposure drift; measured: 27% of the frame marked
+  at threshold 12 today):* with the option on, at the same threshold, the
+  flat sky and sea stop being marked — the share of the frame in the mask
+  falls by at least half — while the cloud fronts' moving edges stay marked.
+  A blind judge tells the strips apart and describes one as a whole-frame
+  wash and the other as edges of the changing clouds only.
+- *Brightness invariance, exactly:* the core unit test adds a constant to
+  every pixel and the edge image is unchanged.
+- *On `truth`:* the movers stay marked at their outlines (a flat interior
+  was never marked); nothing new appears elsewhere (truth check).
+- *No regression:* option off byte-identical to before the change.
+
+**Result: accepted, with the edge-detector's nature stated as limits.** One
+blind judge, the sunset pair unlabeled and shuffled:
+
+| Check | Judge (blind) | Numbers |
+|---|---|---|
+| Visible | "Instantly distinguishable" | Share of the frame marked at the same threshold: 21.1% → 1.0% |
+| Intended | The fixed strip is "the pattern a global brightness drift would produce… whole cloud bodies rather than boundaries"; the gradient strip "marks only thin edges and contours… the bank's undulating silhouette is traceable across all six panels", not random scatter | Core unit test: a constant added to every pixel leaves the edge image bit-identical |
+| Movers keep their outlines | | `truth`: 100% of marks on the current outline, nothing elsewhere |
+| No regression | | Option off: 0% changed, max diff 0 on three guard scenes; 308 tests; typecheck clean |
+
+**Limits, stated rather than hidden:** the gradient mask is a sparse edge
+detector — thin ridges, further thinned by the clean-up vote, so a mover's
+outline is marked sparsely (`truth`: 14% of the outline against the
+brightness mask's 41%); and diffuse fronts with soft edges respond weakly
+(the judge: the upper cloud mass the brightness mask fills is "almost
+absent"). It is a remedy for lighting and exposure drift, not a better
+general mask; the help sheet says so.
+
+### V-B9. Magnify muted where nothing ever happens (background + magnify) — visual
+`magQuiet` ("Mute still areas") on Magnify: the background model's variance —
+each pixel's own level of change, learnt over seconds — gates the amplified
+band. Where a pixel's σ sits at the frame's quiet level (the 25th percentile)
+the band fades to nothing; where something rhythmic keeps raising it (a
+breathing flank) the band stays. This mutes amplified sensor noise on walls
+and bedding without knowing where the subject is. The picture adds
+`keep·amp·band`, so gate off is arithmetically identical to today; the band
+magnitude (data, sonification) is gated the same way. WebGL only, as the
+model is. Design: docs/combined-modes.md §4, including the pre-registered
+risk that a rhythm fainter than the noise floor is muted with the noise.
+
+**Expectations, written before building:**
+- *On `kitten` (gate on vs off, after a few seconds of learning):* the
+  amplified grain and shimmer on the blanket, wall and sleeping body's still
+  parts visibly drop; the flank's breathing swell stays. A blind judge says
+  which strip is quieter off the subject and confirms the subject's movement
+  is equally visible in both.
+- *Numbers:* mean band strength (data R) over a still background patch drops
+  by at least half with the gate; over the flank it stays within about a
+  quarter of ungated.
+- *On `pulse` (a 1-level swing, under the model's 2-level variance floor):*
+  the gate mutes it — the pre-registered design risk, demonstrated and stated
+  in the help sheet ("turn the gate off for rhythms fainter than the noise"),
+  not a failure.
+- *No regression:* gate off byte-identical (multiplying the band by 1 is
+  exact); the Canvas2D worker path untouched.
+
+**Result: accepted, with the numbers and the look reported honestly.** One
+blind judge, the kitten pair unlabeled:
+
+| Check | Judge (blind) | Numbers |
+|---|---|---|
+| Visible | Told apart "fairly easily, mainly in the still regions" | 57% of pixels differ |
+| Still areas calmer | Ungated: "fine grain and mottling on the wall and blanket… hazy… smeared". Gated: "the wall surface itself is flatter and cleaner, with less grain" | Static-area flicker 11.8 → 6.0 (−49%): the amplified shimmer is what halves. Mean band strength: flat wall −30%, blanket −16%, the windowsill box −37% (those surfaces carry real recurring change — lamp flicker, breathing shadows — which the gate rightly keeps) |
+| Subject untouched | "Amplification looks about equally strong in both… no clear weakening" | Flank band strength 94% of ungated |
+| The clean-room case | | On `pulse` (a wholly static scene) the gate mutes everything, band strength 0.030 → 0.000 — including the 1-level pulse itself, the pre-registered design risk, now in the help sheet |
+| No regression | | Gate off: 0% changed, max diff 0 (the composite keeps its exact float association when ungated); 308 tests; typecheck clean; worker path untouched |
+
+**The look, stated rather than hidden:** what still flickers for real — bright
+edges under a pulsing lamp — keeps its amplification and stands out harder
+against the calmed surroundings; the judge read those rims as the gated
+strip's own artefact ("embossed… cut-out" folds). The help sheet says so. The
+registered "background drops by at least half" held for the flicker measure
+and the static clip, not for the kitten's mean band strength, whose remainder
+is real signal.
 ### IA8. Readings panel — interface (owner's commission)
 Design and research in `docs/readings-panel.md` (observatory plate
 marginalia; strip-chart pen line). Desktop Plate only; the I key and a mast

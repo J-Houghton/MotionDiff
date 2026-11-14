@@ -3,9 +3,14 @@
 Status of everything planned for MotionDiff. Updated at the end of every working
 session. Statuses: **done**, **in progress**, **planned**, **deferred**.
 
-Last updated: 2026-11-14 (session 5. Session A small tier: display work — legend,
-ruler, paused traces, arrows, mirror, setup guide. Session B small tier: flow
-readouts, too-fast warning, JSDoc type check, magnify sample).
+Last updated: 2026-11-14 (session 5. Session A: display small and medium tiers
+(legend, ruler, paused traces, arrows, mirror, setup guide, readings panel,
+display-resolution layer). Session B: measurement small and medium tiers (flow
+readouts and warning, JSDoc type check, magnify sample; measured ribbon colours,
+hole filling, flow gates, per-pixel threshold, lighting normalisation, magnify
+quiet gate). Both sessions stopped before the large tier at the owner's
+instruction; camera compensation waits on the shared-stage pipeline design,
+docs/combined-modes.md §8).
 
 The governing rule for every item: lightweight, and easy to maintain and debug by hand.
 Visual work is accepted under the rules in `docs/development.md`; results are logged in
@@ -28,7 +33,7 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 | Mirror: the front camera flipped like a mirror, fullscreen | **done**, session 5 (Session A) | An installation where viewers see their own motion | | Verdict IA4. Display-only flip; the legend flips with it. Needs the owner's phone |
 | Camera zoom by pinch (owner's request) | **done**, session 5 (Session A) | Two fingers zoom the camera where the driver allows it | | In IA4. iOS Safari exposes no zoom control; needs the owner's phone |
 | Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. Would replace the experimental traces view on real footage |
-| Camera compensation (global motion, then subtract it) | planned | On `handheld`, `highway` and `river` (whose camera moves forward, as flow revealed) the scenery goes dark and only real movers remain, in every mode | Medium | The flow and its median shift exist; needs a zoom term for `river` |
+| Camera compensation (global motion, then subtract it) | planned | On `handheld`, `highway` and `river` (whose camera moves forward, as flow revealed) the scenery goes dark and only real movers remain, in every mode | Medium | The flow and its median shift exist (`pipeline.readings.camera`); deliberately waits for the shared-stage pipeline restructure, docs/combined-modes.md §8 |
 | Real-time stabiliser | planned, after compensation | `handheld` plays back steady | Medium | |
 | Sonification | done; **deferred** beyond keeping it working | | | Could be driven by flow speed and heading |
 
@@ -52,11 +57,11 @@ Ranked by visible effect for the effort.
 |---|---|---|---|---|---|
 | | Dense optical flow | **done**, session 4 | Speed and heading per patch from one frame pair | | `docs/optical-flow.md`, verdict V5 |
 | 1 | Frozen reference frame ("difference from this moment") | planned | Everything that changed since the pin stays lit, however slowly it changed: the whole cloud bank on `sunset` | Small | One pinned ring layer and a key to pin. Schlieren's held reference is the same idea for shifts |
-| 2 | Per-pixel noise threshold | planned | On `night` and `truth-noisy` the mask is clean without touching the threshold | Medium | Threshold from the background model's variance, ×√2 for a difference |
+| 2 | Per-pixel noise threshold | **done**, Session B | On `night` and `truth-noisy` the mask is clean without touching the threshold | | `maskAuto` on the mask mode, V-B7; the bar scales with the pre-blur |
 | 3 | Combining several frame gaps | planned | On `traffic`, the slow far carriageway and the fast near one both show fully at one setting; in flow, slow and fast motion in one picture | Medium | Maximum over two or three gaps |
 | 4 | Magnify: per-level amplification | planned | On `face`, the pulse shows as a colour change of the skin without the amplified edges and noise | Medium-large | Biggest quality gain found in research |
-| 5 | Lighting normalisation (gradient-image differencing) | planned | On `sunset`, and on a camera with auto-exposure, a brightness change no longer lights the whole frame | Medium | Would also help schlieren under changing light |
-| 6 | Morphological open and close | planned | On `traffic`, mask and background-model cut-outs lose their holes and ragged rims | Small-medium | |
+| 5 | Lighting normalisation (gradient-image differencing) | **done**, Session B (mask mode) | On `sunset`, and on a camera with auto-exposure, a brightness change no longer lights the whole frame | | `maskGradient` on the mask mode, V-B8 (21% → 1% on `sunset`). Bringing it to schlieren stays open |
+| 6 | Morphological open and close | **done**, Session B (close; the vote already removes salt) | On `traffic`, mask and background-model cut-outs lose their holes and ragged rims | | `maskFill` on the mask and background modes, V-B5 |
 | 7 | Magnify: pulse and motion presets, deeper pooling | planned | On `face`, one click gives a visible pulse | Small | |
 | 8 | Flow at moving edges | planned | The ragged outlines of movers in the flow colour view become clean | Medium | A median or an edge-aware window |
 
@@ -67,6 +72,12 @@ Ranked by visible effect for the effort.
 | Type checking through JSDoc: `npm run typecheck` holds the mode contract, worker messages and params to their typedefs | `a24f191` | V-B2 |
 | Schlieren publishes its setup judgement as data (`pipeline.readings.setup`), for Session A's in-picture setup guide | `2f6520c` | |
 | Magnify sample that is not a face: *Sleeping Kitten*, plus the `kitten` reference clip | with this update | V-B3 |
+| History ribbons in measured flow colours (`historyShow: 'measured'`) | `5ab27a9` | V-B4 |
+| Fill holes in mask and background cut-outs (morphological close, `maskFill`) | with this update | V-B5 |
+| Flow gated by the mask or the background model (`flowOnly` on Optical flow) | with this update | V-B6; the gates' limits are in the help sheet |
+| Per-pixel noise threshold (`maskAuto` on the mask mode) | with this update | V-B7 |
+| Lighting normalisation (`maskGradient`: edge differencing on the mask mode) | with this update | V-B8 |
+| Magnify muted where nothing ever happens (`magQuiet`: the model's variance gates the band) | with this update | V-B9 |
 
 ## Deferred
 | Item | Why |

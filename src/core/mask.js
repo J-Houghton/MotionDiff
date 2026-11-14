@@ -64,6 +64,76 @@ export function thresholdMask(difference, threshold, out) {
   return out;
 }
 
+/**
+ * Threshold a difference with a per-pixel noise floor: a pixel moves when
+ * its difference clears the global threshold AND k standard deviations of
+ * its own noise, times √2 because a frame-to-frame difference carries two
+ * frames' noise where the variance was learnt against a stable mean.
+ *
+ * @param {Uint16Array} difference - From threeFrameDifference (channel sums, 0..765)
+ * @param {Float32Array} variance - Per pixel, of the mean channel difference
+ *   in 0..1 units (the background model's, core/background.js)
+ * @param {number} threshold - The global floor, mean channel difference 0..255
+ * @param {number} k - Standard deviations (BG_K in core/background.js)
+ * @param {boolean} blurred - Whether the frames were 3x3 box-blurred before
+ *   differencing: the blur averages nine pixels, so the noise in the
+ *   difference is a third of the learnt σ, and the bar scales with it
+ * @param {Uint8Array} out - 1 = moving, 0 = still
+ * @returns {Uint8Array} out
+ */
+export function thresholdMaskAuto(difference, variance, threshold, k, blurred, out) {
+  const floor = threshold * 3;
+  const scale = blurred ? 1 / 3 : 1;
+  const count = Math.min(out.length, difference.length);
+  for (let p = 0; p < count; p++) {
+    const d = difference[p];
+    // σ of the channel SUM: 3×255 × σ of the mean channel difference.
+    const noise = k * Math.sqrt(2 * variance[p]) * 765 * scale;
+    out[p] = d > 0 && d >= floor && d >= noise ? 1 : 0;
+  }
+  return out;
+}
+
+// Rec.709 luma weights, as in core/flow.js (core modules do not import each other).
+const LUMA_R = 0.2126;
+const LUMA_G = 0.7152;
+const LUMA_B = 0.0722;
+
+/**
+ * Edge strength of a frame: the Sobel magnitude of its luma, (|gx|+|gy|)/8,
+ * 0..255-ish. The Sobel kernels measure the gradient of a smoothed image, so
+ * no separate pre-blur is needed. A constant added to every pixel (a global
+ * brightness or exposure change) leaves this image untouched: differencing
+ * edge strengths instead of brightness is what "ignore lighting" means.
+ * Pixels beyond the border repeat the edge.
+ *
+ * @param {Uint8ClampedArray|Uint8Array} rgba - width*height*4
+ * @param {number} width
+ * @param {number} height
+ * @param {Float32Array} out - width*height
+ * @returns {Float32Array} out
+ */
+export function lumaSobel(rgba, width, height, out) {
+  const clampI = (v, max) => (v < 0 ? 0 : v > max ? max : v);
+  const luma = new Float32Array(width * height);
+  for (let p = 0, i = 0; p < luma.length; p++, i += 4) {
+    luma[p] = LUMA_R * rgba[i] + LUMA_G * rgba[i + 1] + LUMA_B * rgba[i + 2];
+  }
+  for (let y = 0; y < height; y++) {
+    const up = clampI(y - 1, height - 1) * width;
+    const mid = y * width;
+    const down = clampI(y + 1, height - 1) * width;
+    for (let x = 0; x < width; x++) {
+      const l = clampI(x - 1, width - 1);
+      const r = clampI(x + 1, width - 1);
+      const gx = (luma[up + r] + 2 * luma[mid + r] + luma[down + r]) - (luma[up + l] + 2 * luma[mid + l] + luma[down + l]);
+      const gy = (luma[down + l] + 2 * luma[down + x] + luma[down + r]) - (luma[up + l] + 2 * luma[up + x] + luma[up + r]);
+      out[mid + x] = (Math.abs(gx) + Math.abs(gy)) / 8;
+    }
+  }
+  return out;
+}
+
 /** Votes needed by majority3x3: a simple majority of the nine cells. */
 export const MASK_VOTES = 5;
 /**
@@ -73,6 +143,68 @@ export const MASK_VOTES = 5;
  * pixels as it moves and would reset the history in stripes.
  */
 export const MASK_VOTES_STRICT = 7;
+
+/**
+ * Dilate: a pixel is set when any cell within `radius` of it (a square
+ * window) is set. Cells outside the image count as not set, so nothing grows
+ * in from the border.
+ *
+ * @param {Uint8Array} mask - width*height values, 0 or 1
+ * @param {number} width
+ * @param {number} height
+ * @param {number} radius - 1, 2…
+ * @param {Uint8Array} out - Must not be `mask`
+ * @returns {Uint8Array} out
+ */
+export function dilate(mask, width, height, radius, out) {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let set = 0;
+      for (let dy = -radius; dy <= radius && !set; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        for (let dx = -radius; dx <= radius; dx++) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= width) continue;
+          if (mask[ny * width + nx]) { set = 1; break; }
+        }
+      }
+      out[y * width + x] = set;
+    }
+  }
+  return out;
+}
+
+/**
+ * Erode: a pixel stays set only when every cell within `radius` of it is
+ * set. Cells outside the image count as SET, so a close (dilate, then erode)
+ * does not eat shapes touching the border.
+ *
+ * @param {Uint8Array} mask - width*height values, 0 or 1
+ * @param {number} width
+ * @param {number} height
+ * @param {number} radius - 1, 2…
+ * @param {Uint8Array} out - Must not be `mask`
+ * @returns {Uint8Array} out
+ */
+export function erode(mask, width, height, radius, out) {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let set = 1;
+      for (let dy = -radius; dy <= radius && set; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        for (let dx = -radius; dx <= radius; dx++) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= width) continue;
+          if (!mask[ny * width + nx]) { set = 0; break; }
+        }
+      }
+      out[y * width + x] = set;
+    }
+  }
+  return out;
+}
 
 /**
  * 3x3 vote: a pixel is set when at least `votes` of the nine cells around it

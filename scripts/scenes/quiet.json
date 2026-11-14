@@ -1,0 +1,6 @@
+{ "scenes": [
+  {"name":"kitten-mag-off","clip":"kitten","at":7.5,"frames":6,"every":8,"warmup":7,"display":"diff","params":{"algorithm":"magnify","magAmp":20,"magFreqLow":0.15,"magFreqHigh":1.0,"magChroma":1,"magDownsample":2,"magQuiet":false,"blurEnabled":false,"frameOffset":5,"threshold":20,"absorbSeconds":4}},
+  {"name":"kitten-mag-quiet","clip":"kitten","at":7.5,"frames":6,"every":8,"warmup":7,"display":"diff","params":{"algorithm":"magnify","magAmp":20,"magFreqLow":0.15,"magFreqHigh":1.0,"magChroma":1,"magDownsample":2,"magQuiet":true,"blurEnabled":false,"frameOffset":5,"threshold":20,"absorbSeconds":4}},
+  {"name":"pulse-mag-off","clip":"pulse","at":6,"frames":6,"every":8,"warmup":5,"display":"diff","readData":true,"params":{"algorithm":"magnify","magAmp":40,"magFreqLow":0.7,"magFreqHigh":2.0,"magChroma":1,"magDownsample":2,"magQuiet":false,"blurEnabled":false,"frameOffset":5,"threshold":20,"absorbSeconds":4}},
+  {"name":"pulse-mag-quiet","clip":"pulse","at":6,"frames":6,"every":8,"warmup":5,"display":"diff","readData":true,"params":{"algorithm":"magnify","magAmp":40,"magFreqLow":0.7,"magFreqHigh":2.0,"magChroma":1,"magDownsample":2,"magQuiet":true,"blurEnabled":false,"frameOffset":5,"threshold":20,"absorbSeconds":4}}
+] }

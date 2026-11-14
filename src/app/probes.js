@@ -8,7 +8,7 @@
 import { boxBlur } from '../core/blur.js';
 import { posyBlend, rawDiff } from '../core/diff.js';
 import { diffMagnitude, poolMagnitude } from '../core/magnitude.js';
-import { MASK_VOTES_STRICT, majority3x3, thresholdMask, threeFrameDifference } from '../core/mask.js';
+import { MASK_VOTES_STRICT, dilate, erode, majority3x3, thresholdMask, threeFrameDifference } from '../core/mask.js';
 import { HISTORY_MAX_DELTA, historyGradient, historyStep, poolDirection } from '../core/history.js';
 import { maskDifference, maskDraw, renderMask } from './modes/mask.js';
 import { HISTORY_CELL, HISTORY_SPREAD, renderHistory } from './modes/history.js';
@@ -418,9 +418,33 @@ export function debugMaskParity(pipeline) {
     { name: 'blur', blur: true, clean: false },
     { name: 'clean', blur: false, clean: true },
     { name: 'blur + clean', blur: true, clean: true },
+    { name: 'clean + fill 1', blur: false, clean: true, fill: 1 },
+    { name: 'blur + clean + fill 2', blur: true, clean: true, fill: 2 },
   ];
 
-  const cases = CASES.map(({ name, blur, clean }) => {
+  // The shader carries the strength through the same min/max as the decision.
+  const morphStrength = (values, mode, radius) => {
+    const out = new Float32Array(values.length);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let picked = mode === 'max' ? 0 : Infinity;
+        for (let dy = -radius; dy <= radius; dy++) {
+          const ny = y + dy;
+          if (ny < 0 || ny >= height) continue;
+          for (let dx = -radius; dx <= radius; dx++) {
+            const nx = x + dx;
+            if (nx < 0 || nx >= width) continue;
+            const v = values[ny * width + nx];
+            picked = mode === 'max' ? Math.max(picked, v) : Math.min(picked, v);
+          }
+        }
+        out[y * width + x] = picked;
+      }
+    }
+    return out;
+  };
+
+  const cases = CASES.map(({ name, blur, clean, fill = 0 }) => {
     const blurred = [cur, old1, old2].map((frame) => {
       if (!blur) return frame;
       const copy = new Uint8ClampedArray(frame);
@@ -430,8 +454,13 @@ export function debugMaskParity(pipeline) {
     const difference = threeFrameDifference(blurred[0], blurred[1], blurred[2], new Uint16Array(width * height));
     let mask = thresholdMask(difference, THRESHOLD, new Uint8Array(width * height));
     if (clean) mask = majority3x3(mask, width, height, new Uint8Array(width * height));
+    let strength = Float32Array.from(difference, (d) => d / 765);
+    if (fill > 0) {
+      mask = erode(dilate(mask, width, height, fill, new Uint8Array(width * height)), width, height, fill, new Uint8Array(width * height));
+      strength = morphStrength(morphStrength(strength, 'max', fill), 'min', fill);
+    }
 
-    renderMask(gl, { layers: [1, 0], threshold: THRESHOLD, blur, clean, show: 'cutout' });
+    renderMask(gl, { layers: [1, 0], threshold: THRESHOLD, blur, clean, show: 'cutout', fill });
     const picture = gl.readDiffPixels();
     const data = gl.readDataField();
 
@@ -442,7 +471,7 @@ export function debugMaskParity(pipeline) {
     for (let p = 0; p < mask.length; p++) {
       moving += mask[p];
       if (Math.round(data.values[p * 4]) !== mask[p]) maskMismatches++;
-      strengthDiff = Math.max(strengthDiff, Math.abs(data.values[p * 4 + 1] - difference[p] / 765) * 255);
+      strengthDiff = Math.max(strengthDiff, Math.abs(data.values[p * 4 + 1] - strength[p]) * 255);
       for (let c = 0; c < 3; c++) pictureDiff = Math.max(pictureDiff, Math.abs(picture[p * 4 + c] - cur[p * 4 + c] * mask[p]));
     }
     return {

@@ -150,7 +150,10 @@ precision highp float;
 
 uniform sampler2D uFast;
 uniform sampler2D uSlow;
+uniform sampler2D uGate;  // R = keep 0..1, frame size (magQuiet)
 uniform float uAmp;
+uniform int uGated;
+uniform int uFactor;      // pooled block size in frame pixels
 
 out vec4 fragColor;
 
@@ -159,7 +162,17 @@ const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   vec3 band = texelFetch(uFast, p, 0).rgb - texelFetch(uSlow, p, 0).rgb;
-  fragColor = vec4(min(abs(uAmp * dot(band, LUMA)), 1.0), 0.0, 0.0, 1.0);
+  float keep = 1.0;
+  if (uGated == 1) {
+    // The pooled grid's blocks anchor at the image's top-left; textures are
+    // stored bottom-up, so flip into image rows and back.
+    ivec2 size = textureSize(uFast, 0);
+    ivec2 gsize = textureSize(uGate, 0);
+    ivec2 img = ivec2((vec2(float(p.x), float(size.y - 1 - p.y)) + 0.5) * float(uFactor));
+    img = clamp(img, ivec2(0), gsize - 1);
+    keep = texelFetch(uGate, ivec2(img.x, gsize.y - 1 - img.y), 0).r;
+  }
+  fragColor = vec4(min(abs(uAmp * dot(band, LUMA)) * keep, 1.0), 0.0, 0.0, 1.0);
 }`;
 
 // Exact box mean along one axis; run horizontally then vertically it gives
@@ -373,8 +386,10 @@ precision highp float;
 uniform sampler2D uCurrent;
 uniform sampler2D uFast;
 uniform sampler2D uSlow;
+uniform sampler2D uGate;  // R = keep 0..1, frame size (magQuiet)
 uniform float uAmp;
 uniform float uChroma;
+uniform int uGated;       // 0 = keep everything (multiplying by 1 is exact)
 uniform vec2 uBandScale;  // frame size / (pooled grid size * factor), <= 1
 
 in vec2 vUV;
@@ -391,7 +406,10 @@ void main() {
   vec2 uvBand = vec2(uvImage.x, 1.0 - uvImage.y);
   vec3 band = texture(uFast, uvBand).rgb - texture(uSlow, uvBand).rgb;
   float bandLuma = dot(band, LUMA);
-  vec3 result = cur + uAmp * bandLuma + uAmp * uChroma * (band - vec3(bandLuma));
+  // Terms multiplied by keep separately, in the original order: with the
+  // gate off (keep = 1) the sum associates exactly as before, bit for bit.
+  float keep = uGated == 1 ? texture(uGate, vUV).r : 1.0;
+  vec3 result = cur + keep * (uAmp * bandLuma) + keep * (uAmp * uChroma * (band - vec3(bandLuma)));
   fragColor = vec4(clamp(result, 0.0, 1.0), 1.0);
 }`;
 
@@ -691,9 +709,9 @@ export class WebGLRenderer {
     this._copyProg = createProgram(gl, vs, COPY_FRAG, { uInput: 0 });
     this._boxPoolProg = createProgram(gl, vs, BOX_POOL_FRAG, { uInput: 0 });
     this._emaProg = createProgram(gl, vs, EMA_FRAG, { uState: 0, uFrame: 1 });
-    this._magCompositeProg = createProgram(gl, vs, MAG_COMPOSITE_FRAG, { uCurrent: 0, uFast: 1, uSlow: 2 });
+    this._magCompositeProg = createProgram(gl, vs, MAG_COMPOSITE_FRAG, { uCurrent: 0, uFast: 1, uSlow: 2, uGate: 3 });
     this._magnitudeDiffProg = createProgram(gl, vs, MAGNITUDE_DIFF_FRAG, { uDiff: 0 });
-    this._magnitudeBandProg = createProgram(gl, vs, MAGNITUDE_BAND_FRAG, { uFast: 0, uSlow: 1 });
+    this._magnitudeBandProg = createProgram(gl, vs, MAGNITUDE_BAND_FRAG, { uFast: 0, uSlow: 1, uGate: 2 });
     this._poolProg = createProgram(gl, vs, POOL_FRAG, { uInput: 0 });
 
     // Kept: mode modules compile their own programs against it later.
@@ -1202,7 +1220,9 @@ export class WebGLRenderer {
    * their uAlgorithm uniform only distinguishes Posy from Raw, so a third
    * mode routed through them would silently render as Raw.
    *
-   * @param {object} opts - { alphaFast, alphaSlow, amp, chroma, downsample, blurEnabled }
+   * @param {object} opts - { alphaFast, alphaSlow, amp, chroma, downsample,
+   *   blurEnabled, gate } — gate: a frame-sized texture whose R mutes the
+   *   band per pixel (magQuiet), or null/undefined to keep everything
    * @returns {boolean} false when magnify is unavailable on this context
    */
   renderMagnify(opts) {
@@ -1271,15 +1291,21 @@ export class WebGLRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this._magFastTex[write]);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this._magSlowTex[write]);
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, opts.gate || this._curTex);
     gl.uniform1f(u.uAmp, opts.amp);
     gl.uniform1f(u.uChroma, opts.chroma);
+    gl.uniform1i(u.uGated, opts.gate ? 1 : 0);
     gl.uniform2f(u.uBandScale, this.width / (w * ds), this.height / (h * ds));
 
     this._drawQuadTo(null, this.width, this.height);
 
-    // This frame's motion magnitude comes from the amplified band.
+    // This frame's motion magnitude comes from the amplified band, muted
+    // by the same gate as the picture.
     this._magnitudeSource = 'band';
     this._magnitudeAmp = opts.amp;
+    this._magGateTex = opts.gate || null;
+    this._magFactor = ds;
     return true;
   }
 
@@ -1357,7 +1383,11 @@ export class WebGLRenderer {
       gl.bindTexture(gl.TEXTURE_2D, this._magFastTex[this._magStateRead]);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, this._magSlowTex[this._magStateRead]);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, this._magGateTex || this._magFastTex[this._magStateRead]);
       gl.uniform1f(u.uAmp, this._magnitudeAmp);
+      gl.uniform1i(u.uGated, this._magGateTex ? 1 : 0);
+      gl.uniform1i(u.uFactor, this._magFactor || 1);
     } else {
       const { prog, u } = this._magnitudeDiffProg;
       gl.useProgram(prog);
