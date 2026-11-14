@@ -629,3 +629,89 @@ the 49 MB candle clip after 1.0 to 1.4 s). The picker passes the interface audit
 desktop and phone sizes. Rejected after rendering: the intersection in Optical flow
 (dim, the vehicles move too far per frame). Not checked: loading on a phone or a slow
 connection, and browsers other than Chrome (the candle clip is a QuickTime file).
+
+---
+
+## Session A (Display)
+
+Session 5, display work: `src/ui/` and how results are drawn. Branch
+`session-a-display`.
+
+### IA1. On-screen button for split compare — interface
+Split compare (the S key) gets a visible control: a Split button in the transport
+on the Plate and in the fullscreen Viewfinder, and in the top action plate on
+phones, where the transport row has no room for it. Active state by `aria-pressed`
+and the accent fill; the split handle widened to 44 px on phones.
+
+**Result:** audit passes with split on at desktop (1440×700: no overlap, no
+clipping, min contrast 5.6) and phone (390×844, touch targets all ≥ 44 px,
+min contrast 11.5). Screenshots in the tier's critique round.
+
+### IA2. Direction legend — interface
+A hue wheel in the picture's corner, shown while the current view colours by
+heading (optical flow colour view and heading-coloured traces, motion history
+direction, schlieren direction), so the colours read without the help sheet.
+The wheel must match the shaders' hue(): right red, down yellow-green, left
+cyan, up violet — arrows on the wheel say so. Hidden in the data display, when
+nothing is loaded, and (like all chrome) when idle in the Viewfinder.
+
+**Result:** pending.
+
+### VA1. Traces keep flowing while the video is paused — visual
+**What it is.** A paused frame holds the measured velocity field of that
+instant; the particle traces keep being stepped through it on the wall clock,
+so the still frame reads like a wind map of one moment.
+
+**Expected effect, written before building:**
+- *On `traffic`, optical flow with particle traces, paused:* two screenshots of
+  the paused picture a second or two apart are visibly different: the traces
+  have flowed on along the same streams (same two opposed directions, same
+  regions). Today the two screenshots are identical.
+- *The video frame itself does not change* while paused: the original under the
+  traces (overlay display) is pixel-identical between the two moments.
+- *The streams stay where the motion was:* no traces appear over the still
+  background while paused (the frozen field is zero there).
+- *Resume is clean:* stepping or playing on after a paused spell shows no seam,
+  pile-up or flash; trails fade as they did before.
+- *No regression:* with traces hidden (colour view) a paused frame is as still
+  as today; other modes untouched; the feedback-state rules (recompute on
+  repeat) still hold for trails, history and background.
+- Applies to the optical flow mode's traces and schlieren's experimental traces.
+
+**Result:** pending.
+
+### VA2. Arrow grid for flow — visual
+**What it is.** A third display for the optical flow mode: a sparse regular
+grid of arrows over the picture, each showing the measured heading, with
+length proportional to speed (at the set speed range), hidden where confidence
+is low or nothing is measured. Reverses the roadmap's deferral at the owner's
+decision: arrows give a reading a still frame can carry unambiguously, which
+plain traces were judged not to (session 4).
+
+**Expected effect, written before building:**
+- *On `flow` (known truth):* arrows in the band point right, on the block
+  down-left, around the disc square to the radius; arrow length near the
+  disc's rim is visibly longer (about three times) than a third of the way
+  out. No arrows on the still background, none inside the flat centre where
+  nothing is measured.
+- *On `traffic`:* the two carriageways carry arrows in opposite directions; a
+  judge reads both directions and the faster lane from one still frame.
+- *Against the colour view and the traces, blind:* the judge tells the three
+  apart, reads direction from a single arrow still without a colour key, and
+  does not find the arrows to obscure the picture more than the traces do.
+- *Known limits for the help text:* an arrow is the mean of its cell, so a
+  boundary between movers blends; arrows are drawn at a fixed grid, not on
+  objects; speeds beyond the range setting clip at full length.
+- *No regression:* colour and particle displays unchanged (numeric guard on
+  their filmstrips).
+
+**Result:** pending.
+
+### IA3. Time ruler: the mask's second gap and the history length; the ruler in the Viewfinder — interface
+The ruler learns two more markers: the second gap of the modes built on the
+motion mask, and the history length of motion history, so those lookbacks read
+as a picture like gap, spread and trail do. The ruler also appears in the
+Viewfinder layout (fullscreen and phones), where today only the Plate has it.
+
+**Result:** pending.
+
