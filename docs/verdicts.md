@@ -848,3 +848,70 @@ label; the legend says direction only (brightness-means-speed stays in the
 help); the phone clock drops the total duration for space, as before this
 tier. Re-audited after the fixes: phone split and desktop flow states show
 nothing clipped, overlapping, off screen or under 44 px.
+## Session B
+
+Verdicts from the measurement session (branch `session-b-measure`) are numbered V-B1,
+V-B2… so they cannot collide with Session A's numbering.
+
+### V-B1. Live readouts from the flow field, and a too-fast warning — robustness
+**What is built.** The Optical flow mode reads a small copy of its velocity field back
+each frame and reports, on the status line and as data (`pipeline.readings`): the
+dominant heading, the peak speed, the share of the frame moving, and the camera's own
+motion (the confidence-weighted median shift). When a telling share of what moves is
+at the fastest speed the solver could have measured, the status line warns that the
+motion is beyond the gap's reach instead of showing a number that cannot be right.
+
+Readouts are text and data, not a picture: they are accepted on demonstrations
+against known truth and unit tests, with the numeric guard confirming the flow
+pictures themselves did not change.
+
+**Expectations, written before building:**
+- On the synthetic `flow` clip (a band sliding right at 90 px/s, a block down-left at
+  60 px/s, a turning disc) at the default gap: dominant heading reads right; peak
+  speed within 20% of the band's 90 px/s (scaled to the processing size); the share
+  moving between half and 1.3× the movers' true cover of the frame; the camera reads
+  still.
+- On `handheld` (the whole frame wobbles) the camera reads as moving; on `trees`
+  (static camera, branches in wind) it reads still.
+- Warning: on `flow` with the gap raised until the band's shift per gap is beyond the
+  pyramid's reach, the warning appears; at the default gap it does not.
+- No regression: before/after filmstrips of `scripts/scenes/flow` differ under the
+  numeric guard's invisibility threshold (readouts change no pixels), and the unit
+  tests for the new core functions pass.
+
+**Result: accepted.**
+
+What was built: `flowReadings` in `core/flow.js` (unit-tested: shares, percentile
+peak, circular heading with a coherence that tells one stream from opposed ones,
+the median camera shift via `globalShift`, saturation against a ceiling);
+`reportReadings` in `app/modes/flow.js` reads the velocity field back at ≤96 px
+wide each frame, carries the measurable ceiling on the field, puts a sentence on
+the status line and the numbers on `pipeline.readings`.
+
+Demonstrations (headless Chrome, SwiftShader; `scratchpad/readings-demo.js`):
+
+| Expectation | Measured |
+|---|---|
+| `flow`, default gap: heading right | Mean heading 0.08 rad; sentence "→ right" |
+| `flow`: peak within 20% of the band's 90 px/s | Mean peak 93.0 px/s (640 px processing width = the scene's own size) |
+| `flow`: share moving between 0.5× and 1.3× the true cover (~28%) | 34.9% ≈ 1.26× (window spread), sentence "31–32% of frame" |
+| `flow`, `trees`: camera reads still | See clarification below: the camera claim is omitted (under half the frame measurable), not "still" |
+| `handheld`: camera reads moving | "camera → 10%/s" (median 75 px/s), steady across samples |
+| Warning at a gap beyond reach (`flow`, gap 15, ceiling 56 px/s) | Warned (saturation up to 0.34); the flow also collapses to "nothing moving", as beyond-reach answers lose confidence |
+| No warning at the default gap | None (saturation 0.00; ceiling 448 px/s) |
+| No regression | All 20 before/after strips of `scripts/scenes/flow.json` byte-identical (changed 0%, max diff 0); 296 unit tests pass |
+
+**Clarification, found while demonstrating.** The first build claimed a camera
+reading whenever a third of the frame was measured: on the synthetic `flow` clip
+(flat background, so only the movers carry measurements) the median then reported
+the movers as "camera 12%/s". The median only speaks for the camera when most of
+the measured cells are background, so the claim is now made only when at least
+half the frame is measured, and under 2.5% of the width per second it reads as
+still (moving things among the measured cells drag the median a little; `trees`
+sat at 2–3%/s). Where less than half the frame is measured the sentence says
+nothing about the camera rather than guessing.
+
+Known limits, stated rather than hidden: the camera readout is the median shift —
+a zoom or rotation reads as near-still (its median is zero); and on footage where
+movers fill most of the measured area the dominant heading *is* the camera's
+drift, which is honest (everything does flow).

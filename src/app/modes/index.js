@@ -39,6 +39,9 @@
  *             note(message, type) puts a sentence on the status line (a
  *             setup problem, a reading); it is rate-limited. Return false
  *             when there was nothing to measure this frame.
+ *             A mode may also set frame.readings — a small object of live
+ *             measurements for this frame; the pipeline exposes the latest
+ *             one as pipeline.readings for the interface and tools.
  */
 import posy from './posy.js';
 import raw from './raw.js';

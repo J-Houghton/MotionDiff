@@ -464,6 +464,69 @@ export function smoothedVector(state, i, floor, out) {
   return out;
 }
 
+/** A moving cell at or above this share of the measurable ceiling counts as saturated. */
+export const FLOW_SATURATED = 0.85;
+
+/**
+ * Live readouts of a velocity field: what a person watching the measurement
+ * would want said in a sentence. All speeds are in the field's own units
+ * (picture pixels per second when the field is the smoothed velocity).
+ *
+ * @param {Float32Array} field - `stride` values per cell: vx, vy, then
+ *   presence (or confidence) — the layout of smoothFlow's resolved field and
+ *   of a GPU readback
+ * @param {number} count - Cells
+ * @param {object} options
+ * @param {number} options.floor - Speed below which a cell does not count as moving
+ * @param {number} options.present - Presence below which a cell is not measured
+ * @param {number} [options.stride] - Values per cell (3; 4 for a GPU readback)
+ * @param {number} [options.ceiling] - The fastest speed the solver could have
+ *   measured; cells at FLOW_SATURATED of it or above count as saturated
+ * @returns {{measured: number, moving: number, peak: number, heading: number,
+ *   coherence: number, camera: {dx: number, dy: number, share: number},
+ *   saturated: number}}
+ *   measured/moving: shares of all cells, 0..1. peak: the 95th-percentile
+ *   speed of the moving cells. heading: direction of their mean velocity,
+ *   radians, x right and y down. coherence: length of that mean velocity over
+ *   their mean speed (1 = one stream, 0 = opposed streams). camera: the median
+ *   shift of every measured cell (globalShift). saturated: the share of
+ *   moving cells at the ceiling, 0 without a ceiling.
+ */
+export function flowReadings(field, count, options) {
+  const stride = options.stride ?? 3;
+  const speeds = [];
+  let sumX = 0;
+  let sumY = 0;
+  let sumSpeed = 0;
+  let measured = 0;
+  let saturated = 0;
+  const limit = (options.ceiling ?? Infinity) * FLOW_SATURATED;
+  for (let p = 0; p < count; p++) {
+    if (field[p * stride + 2] < options.present) continue;
+    measured++;
+    const vx = field[p * stride];
+    const vy = field[p * stride + 1];
+    const speed = Math.sqrt(vx * vx + vy * vy);
+    if (speed < options.floor) continue;
+    speeds.push(speed);
+    sumX += vx;
+    sumY += vy;
+    sumSpeed += speed;
+    if (speed >= limit) saturated++;
+  }
+  speeds.sort((a, b) => a - b);
+  const moving = speeds.length;
+  return {
+    measured: measured / count,
+    moving: moving / count,
+    peak: moving ? speeds[Math.min(moving - 1, Math.floor(moving * 0.95))] : 0,
+    heading: moving ? Math.atan2(sumY, sumX) : 0,
+    coherence: sumSpeed > 0 ? Math.sqrt(sumX * sumX + sumY * sumY) / sumSpeed : 0,
+    camera: globalShift(field, count, options.present, stride),
+    saturated: moving ? saturated / moving : 0,
+  };
+}
+
 /**
  * The typical shift of the whole picture: the confidence-weighted median of
  * each component over a coarse sampling of the field. A camera that moved
