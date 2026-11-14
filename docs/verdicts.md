@@ -996,3 +996,35 @@ re-registered on `traffic` before rendering it: each carriageway's ribbons in
 one steady hue (the two opposed headings), and the near, faster carriageway's
 ribbons brighter than the far one at the same speed range — speed is what the
 direction view cannot show at all.
+
+### IA8. Readings panel — interface (owner's commission)
+Design and research in `docs/readings-panel.md` (observatory plate
+marginalia; strip-chart pen line). Desktop Plate only; the I key and a mast
+button; the readings and the parameters share the plate's margin, so on
+windows under 1800 px opening one closes the other — the picture never
+shrinks below the size rule for the panel's sake.
+
+**Built in the owner's two steps.** The raw list first; watching it on the
+clips changed the design twice: the raw camera row showed 86 px/s on the
+synthetic scene's still camera (the median only speaks for the camera when
+at least half the frame is measured — the row now says so instead of
+showing a mover's number), and the full list proved too much to leave open
+(now behind an "All readings" disclosure). Promoted instruments: the peak
+speed numeral (px/s, 95th percentile of moving cells), the moving-share pen
+line over 60 s on ruled chart paper (every mode: pooled grid where the mode
+publishes no readings), and the direction rose (eight sectors in the
+legend's hues — commissioned because one averaged heading is wrong on
+`traffic`, and the observation confirmed it: 77% of moving cells head
+down/down-right with an opposed up-stream the mean hides).
+
+| Check | Result |
+|---|---|
+| Known truth, synthetic `flow` scene | Peak 94 px/s against 90 known (95th pct over all movers); dominant heading → right 0°; rose East bin 77%; coherence 0.83; speed spread 24/76/0 against the range — all as the scene defines |
+| Rose orientation | A stubbed all-East reading draws one red bar pointing right: canvas y-down handled, hues match the legend |
+| `traffic` | Rose shows both carriageways (S-heavy group and opposed N/NE group); peak ~170 px/s; status line and panel agree |
+| No-readings mode (posy) | Pen line runs from the pooled grid; flow instruments dim with a plain sentence; no empty boxes |
+| Audit, panel open | Nothing clipped, overlapping, off screen; min contrast 5.97; picture share equal to the parameters-open baseline at the same window |
+| New measurement | One commit touching only reportReadings: rose and speeds bins over the field it already reads |
+
+Needs nothing from the owner's phone (desktop only). Screenshots for the
+tier's critique round.

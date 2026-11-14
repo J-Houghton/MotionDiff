@@ -942,6 +942,7 @@ export class Session {
       const { bursts, fps } = await this.pipeline.sampleBursts(this.video, { fps: this.fps });
       if (bursts.length === 0) throw new Error('could not read any frames');
       const { frameOffset, threshold, noiseFloor } = analyzeSample(bursts, fps);
+      this.noiseFloor = noiseFloor; // kept for the readings panel
       this.pipeline.setParams({ frameOffset, threshold });
       // The sampling seeks left unrelated frames behind.
       this.pipeline.clearState();

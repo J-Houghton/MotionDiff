@@ -332,6 +332,13 @@ export class Pipeline {
     return this._energyGrid;
   }
 
+  /** Frames the ring can hold and their memory, for the readings panel. */
+  ringInfo() {
+    if (!this._ring || !this.width) return null;
+    const frames = this._ring.capacity;
+    return { frames, bytes: frames * this.width * this.height * 4 };
+  }
+
   setProcessingWidth(width) {
     const nextWidth = Number.parseInt(width, 10);
     if (!Number.isFinite(nextWidth) || nextWidth <= 0 || nextWidth === this._processWidth) return;

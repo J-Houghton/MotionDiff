@@ -94,6 +94,7 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
 | Item | Verdict | Notes |
 |---|---|---|
 | On-screen button for split compare | IA1 | Transport on desktop; top action plate on phones |
+| Readings panel beside the Plate (owner's commission) | IA8 | Absorbs the motion-over-time strip (VA4); one small commit in reportReadings for rose and speed bins |
 | Direction legend (hue wheel) | IA2 | `ui/legend.js`; matches the shaders' hue() |
 | Time ruler: second gap, history length, ruler in the Viewfinder | IA3 | Markers rebuilt as 44 px phone hit boxes |
 | Traces keep flowing while paused | VA1 | Streamlines of the paused instant; `Session.pausedFlow` keeps tooling deterministic |
