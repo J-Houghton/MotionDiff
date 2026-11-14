@@ -19,6 +19,7 @@ import { HISTORY_MAX_DELTA } from '../../core/history.js';
 import { MASK_VOTES_STRICT } from '../../core/mask.js';
 import { AGE_COLORS, GAP, THRESHOLD, asMs } from './params.js';
 import { SECOND_GAP, maskDifference, maskDraw, maskLayers, maskLookback } from './mask.js';
+import { FLOW_PRESENT, SPEED_RANGE, flowVelocity } from './flow.js';
 
 /** Direction grid: one cell per this many pixels… */
 export const HISTORY_CELL = 8;
@@ -119,6 +120,45 @@ void main() {
   fragColor = vec4(sum, valid, total);
 }`;
 
+// The colour a ribbon was laid down in: where the mask says "moving now"
+// and the flow field has a measurement there, take it; where the mask says
+// moving but flow measured nothing (a flat mover's interior), keep what was
+// measured there before rather than writing black. Feedback state at full
+// size; the flow field is smaller and nearest-sampled (both bottom-up).
+const VELOCITY_FRAG = `#version 300 es
+precision highp float;
+
+uniform sampler2D uPrev;    // RG = velocity when last moving (px/s), B = presence
+uniform sampler2D uMask;    // R > 0.5 where the pixel is moving now
+uniform sampler2D uFlow;    // the smoothed velocity field, working size
+uniform float uFloor;       // presence below which flow measured nothing
+uniform int uEmpty;         // 1 = no previous state
+
+out vec4 fragColor;
+
+vec3 flowAt(vec2 q) { // bilinear, by hand: the target has no linear filter
+  vec2 base = floor(q);
+  vec2 f = q - base;
+  ivec2 i = ivec2(base);
+  ivec2 edge = textureSize(uFlow, 0) - 1;
+  vec3 a = texelFetch(uFlow, clamp(i, ivec2(0), edge), 0).rgb;
+  vec3 b = texelFetch(uFlow, clamp(i + ivec2(1, 0), ivec2(0), edge), 0).rgb;
+  vec3 c = texelFetch(uFlow, clamp(i + ivec2(0, 1), ivec2(0), edge), 0).rgb;
+  vec3 d = texelFetch(uFlow, clamp(i + ivec2(1, 1), ivec2(0), edge), 0).rgb;
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  vec3 kept = uEmpty == 1 ? vec3(0.0) : texelFetch(uPrev, p, 0).rgb;
+  if (texelFetch(uMask, p, 0).r > 0.5) {
+    vec2 scale = vec2(textureSize(uFlow, 0)) / vec2(textureSize(uPrev, 0));
+    vec3 flow = flowAt((vec2(p) + 0.5) * scale - 0.5);
+    if (flow.b >= uFloor) kept = flow;
+  }
+  fragColor = vec4(kept, 1.0);
+}`;
+
 // Then each cell with its neighbours: RG = mean vector, B = share valid.
 const POOL_FRAG = `#version 300 es
 precision highp float;
@@ -148,9 +188,11 @@ precision highp float;
 
 uniform sampler2D uAge;
 uniform sampler2D uPooled;
+uniform sampler2D uVelocity; // measured view: RG = velocity when last moving, B = presence
 uniform int uCell;
-uniform int uView;        // 0 = age as a colour gradient, 1 = direction as hue
+uniform int uView;        // 0 = age as a colour gradient, 1 = direction as hue, 2 = measured velocity
 uniform int uOutput;      // 0 = picture, 1 = data
+uniform float uFull;      // measured view: speed shown at full brightness, px/s
 uniform vec3 uNew;
 uniform vec3 uOld;
 
@@ -175,7 +217,16 @@ void main() {
     return;
   }
   vec3 colour;
-  if (uView == 1) {
+  if (uView == 2) {
+    // The measurement laid down with the ribbon: hue = heading, brightness =
+    // speed against the range; grey where nothing was ever measured.
+    vec3 v = texelFetch(uVelocity, p, 0).rgb;
+    float speed = length(v.rg);
+    float level = 0.3 + 0.7 * min(1.0, speed / uFull);
+    float known = v.b > 0.0 ? 1.0 : 0.0;
+    vec3 tint = mix(vec3(0.55), hue(atan(v.g, v.r) / 6.2831853) * level, known);
+    colour = tint * (1.0 - 0.7 * age);
+  } else if (uView == 1) {
     // For the picture, blend between cell centres so hues do not step in
     // blocks. In texture space a cell's centre is at (index + 0.5) * cell,
     // counted from the bottom row of the top-anchored grid.
@@ -216,18 +267,25 @@ const STATES = new WeakMap();
  * @param {WebGLTexture} opts.mask - R > 0.5 where moving
  * @param {number} opts.ageStep - Media time since the previous frame, in history lengths
  * @param {boolean} [opts.repeat] - The same frame again: recompute, do not advance
- * @param {'age'|'direction'} opts.view
+ * @param {'age'|'direction'|'measured'} opts.view
  * @param {string} [opts.colourNew] - Hex, age view
  * @param {string} [opts.colourOld]
+ * @param {{tex: *, width: number, height: number}|null} [opts.velocity] - Measured
+ *   view: the smoothed velocity field (flowVelocity), or null while there is none
+ * @param {number} [opts.full] - Measured view: speed at full brightness, px/s
  */
 export function renderHistory(renderer, opts) {
   const gl = renderer.gl;
   const { width, height } = renderer;
   const cols = Math.ceil(width / HISTORY_CELL);
   const rows = Math.ceil(height / HISTORY_CELL);
+  const measured = opts.view === 'measured';
 
   // Targets before binds (creating one binds its texture).
   const ages = [renderer.target('history:age0', width, height, { float: true }), renderer.target('history:age1', width, height, { float: true })];
+  const vels = measured
+    ? [renderer.target('history:vel0', width, height, { float: true }), renderer.target('history:vel1', width, height, { float: true })]
+    : null;
   const gradient = renderer.target('history:gradient', width, height, { float: true });
   const cellSums = renderer.target('history:cells', cols, rows, { float: true });
   const pooled = renderer.target('history:pooled', cols, rows, { float: true });
@@ -235,20 +293,30 @@ export function renderHistory(renderer, opts) {
 
   let state = STATES.get(renderer);
   if (!state || state.epoch !== renderer.epoch || ages[0].fresh || ages[1].fresh) {
-    state = { epoch: renderer.epoch, current: 0, previous: 0, empty: true, previousEmpty: true, drawn: false };
+    state = { epoch: renderer.epoch, current: 0, previous: 0, empty: true, previousEmpty: true, velEmpty: true, previousVelEmpty: true, drawn: false };
     STATES.set(renderer, state);
     ages[0].fresh = ages[1].fresh = false;
   }
+  if (vels && (vels[0].fresh || vels[1].fresh)) {
+    state.velEmpty = true;
+    vels[0].fresh = vels[1].fresh = false;
+  }
+  // While another view runs, no colours are laid down: start over on return.
+  if (!measured) state.velEmpty = true;
   let read;
   let empty;
+  let velEmpty;
   if (opts.repeat && state.drawn) {
     read = state.previous;
     empty = state.previousEmpty;
+    velEmpty = state.previousVelEmpty;
   } else {
     read = state.current;
     empty = state.empty;
+    velEmpty = state.velEmpty;
     state.previous = read;
     state.previousEmpty = empty;
+    state.previousVelEmpty = velEmpty;
     state.current = 1 - read;
   }
   const age = ages[state.current];
@@ -262,6 +330,22 @@ export function renderHistory(renderer, opts) {
   renderer.draw(age.fb, width, height);
   state.empty = false;
   state.drawn = true;
+
+  if (vels) {
+    // The colour each ribbon pixel was laid down in. Without a flow field
+    // yet, the floor lets nothing through and the state is only carried.
+    const lay = renderer.program('history:velocity', VELOCITY_FRAG, { uPrev: 0, uMask: 1, uFlow: 2 });
+    gl.useProgram(lay.prog);
+    renderer.bind(0, vels[read].tex);
+    renderer.bind(1, opts.mask);
+    renderer.bind(2, opts.velocity ? opts.velocity.tex : vels[read].tex);
+    // The field zeroes its vectors below flow's own presence floor, so a
+    // lower floor here would lay down phantom zero-vectors, not colours.
+    gl.uniform1f(lay.u.uFloor, opts.velocity ? FLOW_PRESENT : 1e9);
+    gl.uniform1i(lay.u.uEmpty, velEmpty ? 1 : 0);
+    renderer.draw(vels[state.current].fb, width, height);
+    state.velEmpty = false;
+  }
 
   const slope = renderer.program('history:gradient', GRADIENT_FRAG, { uAge: 0 });
   gl.useProgram(slope.prog);
@@ -281,12 +365,14 @@ export function renderHistory(renderer, opts) {
   gl.uniform1i(pool.u.uSpread, HISTORY_SPREAD);
   renderer.draw(pooled.fb, cols, rows);
 
-  const show = renderer.program('history:show', SHOW_FRAG, { uAge: 0, uPooled: 1 });
+  const show = renderer.program('history:show', SHOW_FRAG, { uAge: 0, uPooled: 1, uVelocity: 2 });
   gl.useProgram(show.prog);
   renderer.bind(0, age.tex);
   renderer.bind(1, pooled.tex);
+  renderer.bind(2, vels ? vels[state.current].tex : age.tex);
   gl.uniform1i(show.u.uCell, HISTORY_CELL);
-  gl.uniform1i(show.u.uView, opts.view === 'direction' ? 1 : 0);
+  gl.uniform1i(show.u.uView, measured ? 2 : opts.view === 'direction' ? 1 : 0);
+  gl.uniform1f(show.u.uFull, Math.max(1, opts.full || 0));
   gl.uniform3fv(show.u.uNew, hexToUnit(opts.colourNew, '#ff4400'));
   gl.uniform3fv(show.u.uOld, hexToUnit(opts.colourOld, '#0044ff'));
   gl.uniform1i(show.u.uOutput, 0);
@@ -305,18 +391,20 @@ export default /** @type {import('./index.js').Mode} */ ({
     'Things that sway back and forth (foliage, water) give mixed or grey hues.',
     'A flat-coloured object registers only at its edges, so its own footprint is uneven; the band behind it is not.',
     'Built on the motion mask: the same gap, second gap and threshold apply.',
+    'Measured colours are optical flow\'s: each ribbon keeps the heading and speed measured as it was laid down. Grey means flow measured nothing there; a flat mover\'s interior keeps the last colour measured on it.',
   ],
   data: { kind: 'vector', what: 'R: how recently the pixel moved (1 = now, 0 = not within the history); G, B: heading as a vector, x to the right and y down' },
   composite: true,
   worker: false,
   needsFloat: true,
   params: [
-    { key: 'historyShow', label: 'Show', type: 'select', default: 'age', options: { 'Age': 'age', 'Direction': 'direction' } },
+    { key: 'historyShow', label: 'Show', type: 'select', default: 'age', options: { 'Age': 'age', 'Direction': 'direction', 'Measured (flow)': 'measured' } },
     { key: 'historyLength', label: 'History', type: 'range', min: 5, max: 150, step: 5, default: 30, format: asMs },
     GAP,
     SECOND_GAP,
     THRESHOLD,
     ...AGE_COLORS.map((colour) => ({ ...colour, when: (p) => p.historyShow === 'age' })),
+    { ...SPEED_RANGE, when: (p) => p.historyShow === 'measured' },
   ],
   lookback: maskLookback,
   render(frame) {
@@ -332,6 +420,8 @@ export default /** @type {import('./index.js').Mode} */ ({
     // The strict vote: a hairline in the mask would stripe the history.
     maskDraw(renderer, raw.tex, mask.fb, { clean: MASK_VOTES_STRICT, output: 'data' });
 
+    // Measured colours ask the flow solver for this frame's velocity field.
+    const velocity = params.historyShow === 'measured' ? flowVelocity(frame) : null;
     renderHistory(renderer, {
       mask: mask.tex,
       ageStep: frame.stepMs / 1000 / (params.historyLength / 30),
@@ -339,6 +429,8 @@ export default /** @type {import('./index.js').Mode} */ ({
       view: params.historyShow,
       colourNew: params.ageColorNew,
       colourOld: params.ageColorOld,
+      velocity,
+      full: (params.flowRange / 100) * width,
     });
     renderer.renderComposite(frame.display, 'raw', false);
     return true;

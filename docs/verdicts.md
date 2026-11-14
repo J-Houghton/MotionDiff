@@ -947,3 +947,52 @@ after about 1.6 s. Rejected after rendering: a chihuahua asleep on a quilt
 white dog outdoors (Pexels 5596930 — mostly a dog's face, and the head
 drifts). Added to the reference clips as `kitten` for future magnify work.
 Not checked: loading on a phone or a slow connection.
+
+### V-B4. History ribbons in measured colours (flow + history) — visual
+`historyShow: 'measured'`: the ribbon a mover leaves is still the history
+mode's; its colour is the flow field's measurement from the moment each pixel
+was passed — hue = measured heading (flow's wheel), brightness = measured
+speed against the speed range — instead of a hue read off the ribbon's shape.
+Design: docs/combined-modes.md §1.
+
+**Expectations, written before building:**
+- *Measured vs direction, on `gulls`:* told apart. Each ribbon holds one
+  steady hue that matches its bird's course; the direction view shows the
+  same wheel but patch-averaged (56 px cells), so hues bleed across nearby
+  ribbons and wobble along one. A blind judge can say which is which from
+  "hue is uniform per ribbon and does not leak outside it".
+- *On `truth`:* the square's ribbon reads the right-heading hue (red), the
+  30°-down disc's ribbon yellow-orange, the leftward disc's cyan — the known
+  headings; brightness even along each ribbon while speed is constant.
+- *Where flow has nothing* (a flat mover's interior): the ribbon keeps the
+  last measured colour rather than going black; at worst it greys.
+- *No regression:* the age and direction views byte-identical (the new pass
+  runs only in the measured view); mask data output unchanged.
+
+**Result: accepted, with the limits below.** Three blind judges, one per
+clip pair, each given the two strips unlabeled in shuffled order.
+
+| Check | Clips | Judge (blind) |
+|---|---|---|
+| Visible | truth, traffic, gulls | Told apart "easily" on all three |
+| Intended: steady hue per rigid stream, brightness by speed | traffic | Measured strip described unprompted as "hue mostly uniform within a stream… brightness tied to speed or proximity, near-camera brightest"; the direction strip as "hue drifts and bleeds within a single stream" with "blue-grey and teal contamination" — the known 56 px pooling artifact |
+| Intended: known headings | truth | Disc's ribbon uniform orange (its 30° course); square's rim red (rightward) with a grey interior — the anticipated greying of a flat mover's interior, where flow measures nothing |
+| Intended (re-registered): parts of a flapping bird resolve | gulls | "Shows structure within a bird's motion (magenta body, teal wing edge, blue tail) that the other smooths away" |
+| No regression | truth, traffic | Age and direction strips before vs after: 0% changed, max diff 0, on all ten scenes; data output untouched; 296 tests pass; typecheck clean |
+
+**Limits, stated rather than hidden:** a flat mover's interior ribbon greys
+(flow has nothing to measure there; the rim carries the colour); faint or tiny
+movers lay down grey trails (the gulls' tails); the laydown edge is blocky at
+the flow working size; and a ribbon at the top of the speed range saturates to
+full brightness. The first two are what the measurement honestly knows, and
+the help sheet says so.
+
+**Addendum, before any traffic strips were rendered.** The gulls strips showed
+the first two expectations were written for the wrong animal: a flapping bird
+is not one motion, and the measured view resolves its parts (body forward,
+wingtips up and down) where the direction view's 56 px pooling averages them
+into one hue. The steady-hue expectation belongs to rigid movers, so it is
+re-registered on `traffic` before rendering it: each carriageway's ribbons in
+one steady hue (the two opposed headings), and the near, faster carriageway's
+ribbons brighter than the far one at the same speed range — speed is what the
+direction view cannot show at all.
