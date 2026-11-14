@@ -738,7 +738,29 @@ plain traces were judged not to (session 4).
 - *No regression:* colour and particle displays unchanged (numeric guard on
   their filmstrips).
 
-**Result:** pending.
+**Result: accepted.**
+
+Built as `app/arrows.js` (reads the same reduced field the particles read;
+3 segments per arrow drawn with the line machinery; arrows centred on a
+28 px grid, hidden below the presence and speed floors) behind an "Arrow
+grid" option in the flow mode's Show select. The blind judge was given the
+three displays unlabeled (Q = colour, J = particles, X = arrows) on the
+known-truth `flow` clip and on `traffic`, with the plain footage:
+
+| Check | Judge (blind) |
+|---|---|
+| Tells the three apart | "Trivially distinguishable at a glance: solid fields vs. fine streaks vs. discrete arrows" |
+| Direction from a single still, `flow` | Band "arrows all pointing right"; square "arrows pointing diagonally down-left"; disc "arrows arranged tangentially… i.e. clockwise rotation". "Most confident from a single frame: X. The arrowheads give signed direction with no legend needed" — the particles' known 180° ambiguity named unprompted |
+| Length means speed, disc | "Rim marks are noticeably longer… marks nearer the centre shrink to short stubs… a small empty patch at the very centre with no mark at all… exactly the velocity profile of rigid rotation, readable from one frame" |
+| `traffic` from one still | Two carriageways opposite ways, "the right/approaching side is faster in every method… longest arrows in X, with speed growing toward the bottom of the frame" |
+| Not cluttered | "Nothing is cluttered; X errs on too little ink, not too much". Rankings: direction X > J > Q; speed J > X > Q; pleasantness J > Q > X |
+| No regression | The colour and particle strips of the same moments are byte-identical to master (VA1's guard table covers them) |
+
+Defect the judge found, kept and added to the help text: the sparse grid
+undersamples small and slow movers (distant traffic "reduce[s] to a handful
+of faint specks"). The particles stay the default display. (Housekeeping:
+the renderer file itself landed one commit early, unwired, inside IA2's
+commit.)
 
 ### IA3. Time ruler: the mask's second gap and the history length; the ruler in the Viewfinder — interface
 The ruler learns two more markers: the second gap of the modes built on the

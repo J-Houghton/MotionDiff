@@ -18,6 +18,7 @@ import { FLOW_MAX_STEP } from '../../core/flow.js';
 import { lookbackTime } from '../../core/timebase.js';
 import { FLOW_PRELUDE, flowBetween, flowLuma, flowPass, flowSmooth } from '../flow.js';
 import { particleField, renderParticles } from '../particles.js';
+import { renderArrows } from '../arrows.js';
 import { asMs } from './params.js';
 
 /** Flow is solved on a copy of the frame at most this wide. */
@@ -122,6 +123,7 @@ export default {
   help: [
     'A trace is the path a point of the picture followed; its direction and, at true speed, its length are measured. Where traces start is random, and how many there are in a place means nothing: they gather on whatever moves.',
     'Heading colours: right is red, down is yellow-green, left is cyan, up is violet. Plain traces show the line of travel in a still picture, but which way along it only in motion.',
+    'An arrow is the measurement at its own grid point: it points the way that patch moves, its length is the speed (full length = the speed range). The grid is fixed to the picture, not to objects, and a point between two movers averages them; small and slow movers can fall between grid points.',
     'Nothing is measured on a flat surface: a plain object carries flow only at its edges and markings.',
     'Along a straight edge only the motion across the edge can be seen.',
     'Fast things need a short gap, slow things a long one: beyond the reach shown under the picture, the answer is wrong, not just weak.',
@@ -133,7 +135,7 @@ export default {
   worker: false,
   needsFloat: true,
   params: [
-    { key: 'flowShow', label: 'Show', type: 'select', default: 'particles', options: { 'Particle traces': 'particles', 'Colour': 'colour' } },
+    { key: 'flowShow', label: 'Show', type: 'select', default: 'particles', options: { 'Particle traces': 'particles', 'Colour': 'colour', 'Arrow grid': 'arrows' } },
     { key: 'flowGap', label: 'Gap', type: 'range', min: 1, max: 15, step: 1, default: 2, format: asMs },
     SPEED_RANGE,
     { key: 'flowSmoothing', label: 'Smoothing', type: 'range', min: 0, max: 30, step: 1, default: 6, format: asMs },
@@ -155,7 +157,7 @@ export default {
     const full = fullSpeed(params, width);
     // Targets before binds.
     const data = renderer.dataFramebuffer(width, height);
-    const field = params.flowShow === 'particles' ? particleField(renderer, 'flow', velocity) : null;
+    const field = params.flowShow === 'particles' || params.flowShow === 'arrows' ? particleField(renderer, 'flow', velocity) : null;
 
     const show = (framebuffer, output) => flowPass(renderer, 'flow:show', SHOW_FRAG, { uVelocity: 0 }, { fb: framebuffer, width, height }, [velocity.tex], (gl, u) => {
       gl.uniform1f(u.uFull, full);
@@ -163,7 +165,13 @@ export default {
       gl.uniform1i(u.uOutput, output);
     });
     show(data, 1);
-    if (field) {
+    if (params.flowShow === 'arrows') {
+      renderArrows(renderer, 'flow', field, {
+        minSpeed: full * FLOW_FLOOR,
+        fullSpeed: full,
+        colour: 'heading',
+      });
+    } else if (field) {
       renderParticles(renderer, 'flow', field, {
         dt: frame.stepMs / 1000,
         repeat: frame.step === 'repeat',
