@@ -1011,3 +1011,40 @@ from the preset path switches any footage to motion history with its
 settings, and the select offers all 14 looks. 296 unit tests and the
 typecheck pass. No pixels change: the same settings apply as before, from
 one list instead of two.
+
+### VA3. Crisp drawing layer at display resolution — visual
+Design: `docs/display-layer.md` (the canvas backing grows to display
+resolution; traces and arrows draw last, after the composite, from the same
+geometry; measurement untouched at processing size).
+
+**Expected effect, written before building:**
+- *On `traffic`, flow traces and arrows at a 2048-wide canvas:* a blind judge
+  shown before/after strips names the after as the sharper (hairlines instead
+  of smeared lines) and finds the same geometry: same streams, same arrow
+  directions and lengths.
+- *The video and the mode pictures are unchanged* (bilinear upscale moves from
+  the compositor into the composite pass): numeric guard at equal canvas size.
+- *Glow display keeps glowing* (`clouds` preset look judged before/after).
+- *At or below processing size nothing changes:* backing equal to processing
+  gives byte-identical pixels.
+- *Recording carries the crisp lines*; split, Mirror, fullscreen unchanged.
+- *A real phone's frame rate* cannot be measured here (software GL): owner's list.
+
+**Result:** pending.
+
+### VA4. Motion-over-time strip — visual
+Design: `docs/motion-strip.md` (a strip under the scrub from the pooled
+magnitude grid: brightness = motion of that moment, vertical profile = where
+in the picture; empty means not measured; click to seek).
+
+**Expected effect, written before building:**
+- *On `truth` after one playthrough:* bright at both ends, visibly dimmer
+  between 3.5 s and 8.5 s; a blind judge told only "this shows motion over
+  time" points at the quiet spell within about a second.
+- *On `traffic`* continuously bright; *on `sunset`* faint but not empty.
+- *Vertical profile on `truth`:* the square's band and the discs' read as
+  separate bright rows before 3.5 s.
+- *Interface:* audit passes at both sizes; the strip seeks on click/drag with
+  44 px touch targets.
+
+**Result:** pending.
