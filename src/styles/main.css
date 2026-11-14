@@ -114,6 +114,16 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .split::after { content: '◂ ▸'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font: 500 10px/1 var(--mono); white-space: nowrap; background: var(--accent); color: var(--on-accent); padding: 5px 5px; }
 
 .vf, .bracket, .phone-only, .immersive-only, .panel-head { display: none; }
+
+/* direction legend: a hue wheel for views that colour by heading */
+.legend { position: absolute; z-index: 3; right: 10px; bottom: 10px; width: 76px; height: 76px; background: var(--card); border: 1px solid var(--rule); }
+.legend-wheel { position: absolute; inset: 6px; border-radius: 50%;
+  -webkit-mask: radial-gradient(closest-side, transparent 52%, #000 54%); mask: radial-gradient(closest-side, transparent 52%, #000 54%); }
+.legend span { position: absolute; width: 14px; font: 500 13px/1 var(--mono); color: var(--ink); text-align: center; }
+.legend-r { right: 18px; top: 50%; transform: translateY(-50%); }
+.legend-l { left: 18px; top: 50%; transform: translateY(-50%); }
+.legend-u { left: 50%; top: 15px; transform: translateX(-50%); }
+.legend-d { left: 50%; bottom: 15px; transform: translateX(-50%); }
 #app[data-immersive='true'] .immersive-only { display: inline-block; }
 
 .empty { position: absolute; inset: 0; z-index: 5; display: grid; align-content: center; justify-items: center; gap: 12px; padding: 24px; background: var(--card); color: var(--ink); text-align: center; }
@@ -248,6 +258,10 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 #app[data-layout='viewfinder'] .chrome { transition: opacity 0.25s; }
 #app[data-layout='viewfinder'][data-idle='true'] .chrome { opacity: 0; pointer-events: none; }
 #app[data-layout='viewfinder'] .tag { background: #000; color: var(--ink); top: auto; bottom: 50%; }
+/* under the meta plate, clear of the bottom bar and the corner brackets */
+#app[data-layout='viewfinder'] .legend { right: 44px; bottom: auto; top: 130px; background: #000; border: 0; }
+#app[data-layout='viewfinder'][data-panel='open'] .legend { display: none; }
+#app[data-phone='true'] .legend { right: 8px; top: calc(126px + env(safe-area-inset-top)); }
 #app[data-layout='viewfinder'] .split::after { color: #000; }
 
 /* corner brackets: two sides of a square each */

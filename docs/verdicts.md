@@ -655,7 +655,14 @@ The wheel must match the shaders' hue(): right red, down yellow-green, left
 cyan, up violet — arrows on the wheel say so. Hidden in the data display, when
 nothing is loaded, and (like all chrome) when idle in the Viewfinder.
 
-**Result:** pending.
+**Result:** built as `ui/legend.js` (a CSS conic gradient turned a quarter
+turn so hue 0 sits at the right, matching `hue()` in the shaders; four arrow
+glyphs in the wheel's hole). Audit passes in the states that show it: flow
+colour on the Plate (min contrast 5.97, nothing clipped, overlapping or off
+screen), history direction on the phone (11.46, touch targets unaffected —
+the legend is not interactive). In the Viewfinder it sits under the meta
+plate, clear of the brackets and the bottom bar, and yields to the open
+panel. Screenshots in the tier's critique round.
 
 ### VA1. Traces keep flowing while the video is paused — visual
 **What it is.** A paused frame holds the measured velocity field of that

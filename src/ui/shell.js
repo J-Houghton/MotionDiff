@@ -14,6 +14,7 @@ import { MODES, getMode } from '../app/modes/index.js';
 import { TEST_CLIPS } from '../app/clips.js';
 import { initPanel } from './panel.js';
 import { initRuler } from './ruler.js';
+import { initLegend } from './legend.js';
 import { initKeys, SHORTCUTS } from './keys.js';
 
 const RATES = [0.25, 0.5, 1, 1.5, 2];
@@ -418,6 +419,7 @@ export function initShell({ root, session }) {
   // ── Actions (buttons and keys share them) ───────────────────
   const panel = initPanel({ container: $('paneHost'), session });
   const ruler = initRuler({ container: $('ruler'), session });
+  const legend = initLegend({ stage, session });
 
   const actions = {
     toggle: () => session.toggle(),
@@ -505,9 +507,9 @@ export function initShell({ root, session }) {
   // ── React to the session ────────────────────────────────────
   session.on((event) => {
     if (event === 'status') showStatus();
-    else if (event === 'source') { applySource(); applyMode(); panel.refresh(); }
+    else if (event === 'source') { applySource(); applyMode(); panel.refresh(); legend.update(); }
     else if (event === 'play' || event === 'recording') { applyPlay(); if (event === 'recording') panel.rebuild(); }
-    else if (event === 'params' || event === 'display') { applyMode(); ruler.update(); panel.refresh(); applySource(); }
+    else if (event === 'params' || event === 'display') { applyMode(); ruler.update(); panel.refresh(); applySource(); legend.update(); }
     else if (event === 'time') applyTime();
     else if (event === 'busy') root.dataset.busy = String(session.busy);
   });
