@@ -16,6 +16,7 @@ export const SHORTCUTS = [
   ['S', 'Split compare against the original', 'split'],
   ['O', 'Hold to see the original', null],
   ['P', 'Parameters', 'panel'],
+  ['I', 'Readings beside the picture (desktop)', 'readings'],
   ['N', 'Choose a source', 'source'],
   ['A', 'Auto-configure gap and threshold', 'auto'],
   ['R', 'Record / stop', 'record'],
@@ -27,7 +28,7 @@ export const SHORTCUTS = [
 ];
 
 const SINGLE = {
-  ' ': 'toggle', k: 'toggle', d: 'display', s: 'split', p: 'panel', n: 'source', a: 'auto',
+  ' ': 'toggle', k: 'toggle', d: 'display', s: 'split', p: 'panel', n: 'source', a: 'auto', i: 'readings',
   r: 'record', f: 'fullscreen', h: 'hide', t: 'theme', '?': 'keys', '/': 'keys', Escape: 'escape',
 };
 

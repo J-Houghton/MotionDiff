@@ -251,6 +251,32 @@ export function reportReadings(frame, velocity, full) {
     ceiling: velocity.ceiling,
   });
 
+  // Spread of the moving cells, for the readings panel: eight heading bins
+  // (bin 0 = right, then clockwise on screen, matching SECTORS) and three
+  // speed bins against the range (slow < a third of full, medium < full,
+  // fast at or beyond). Shares of the moving cells; all zero while nothing
+  // moves. Same pass shape as core's flowReadings, over the field already
+  // read back.
+  const rose = new Array(8).fill(0);
+  const speedBins = [0, 0, 0];
+  let movingCells = 0;
+  const cells = field.width * field.height;
+  const floor = full * FLOW_FLOOR;
+  for (let p = 0; p < cells; p++) {
+    if (buffers.values[p * 4 + 2] < FLOW_PRESENT) continue;
+    const vx = buffers.values[p * 4];
+    const vy = buffers.values[p * 4 + 1];
+    const speed = Math.hypot(vx, vy);
+    if (speed < floor) continue;
+    movingCells++;
+    rose[Math.round(((Math.atan2(vy, vx) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) % 8]++;
+    speedBins[speed < full / 3 ? 0 : speed < full ? 1 : 2]++;
+  }
+  if (movingCells > 0) {
+    for (let i = 0; i < 8; i++) rose[i] /= movingCells;
+    for (let i = 0; i < 3; i++) speedBins[i] /= movingCells;
+  }
+
   const pct = (speed) => Math.round((speed / renderer.width) * 100);
   const camera = readings.camera;
   const cameraSpeed = Math.hypot(camera.dx, camera.dy);
@@ -265,6 +291,8 @@ export function reportReadings(frame, velocity, full) {
     mode: 'flow',
     ...readings,
     cameraSpeed,
+    rose,
+    speeds: speedBins,
     width: renderer.width,
     height: renderer.height,
     ceiling: velocity.ceiling ?? null,
