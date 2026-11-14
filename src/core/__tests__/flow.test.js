@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   FLOW_NOISE, flowLuma, reducedSize, halve, warp, upsampleFlow, flowProducts, boxMean,
-  flowLevel, pyramidFlow, smoothFlow, smoothedVector, globalShift,
+  flowLevel, pyramidFlow, smoothFlow, smoothedVector, globalShift, flowReadings,
 } from '../flow.js';
 
 function lcg(seed) {
@@ -283,5 +283,87 @@ describe('globalShift', () => {
 
   it('reports nothing when nothing is trusted', () => {
     expect(globalShift(new Float32Array(30), 10, 4)).toEqual({ dx: 0, dy: 0, share: 0 });
+  });
+});
+
+describe('flowReadings', () => {
+  /** A field of `count` cells; place(p) returns [vx, vy, presence]. */
+  const field = (count, place, stride = 3) => {
+    const out = new Float32Array(count * stride);
+    for (let p = 0; p < count; p++) {
+      const [vx, vy, presence] = place(p);
+      out[p * stride] = vx;
+      out[p * stride + 1] = vy;
+      out[p * stride + 2] = presence;
+    }
+    return out;
+  };
+  const options = { floor: 5, present: 0.25 };
+
+  it('one stream to the right: its share, speed and heading, and no camera motion from half a frame', () => {
+    const count = 200;
+    const readings = flowReadings(field(count, (p) => (p < 100 ? [100, 0, 1] : [0, 0, 0])), count, options);
+    expect(readings.measured).toBeCloseTo(0.5, 6);
+    expect(readings.moving).toBeCloseTo(0.5, 6);
+    expect(readings.peak).toBeCloseTo(100, 3);
+    expect(readings.heading).toBeCloseTo(0, 6);
+    expect(readings.coherence).toBeCloseTo(1, 6);
+    expect(readings.saturated).toBe(0);
+  });
+
+  it('a mover over a still, measured background: the camera reads still', () => {
+    const count = 400;
+    const readings = flowReadings(field(count, (p) => (p < 100 ? [0, 50, 1] : [0.4, -0.3, 1])), count, options);
+    expect(readings.measured).toBeCloseTo(1, 6);
+    expect(readings.moving).toBeCloseTo(0.25, 6);
+    expect(readings.heading).toBeCloseTo(Math.PI / 2, 4); // y is down
+    expect(readings.camera.dx).toBeCloseTo(0.4, 5);
+    expect(readings.camera.dy).toBeCloseTo(-0.3, 5);
+    expect(readings.camera.share).toBeCloseTo(1, 6);
+  });
+
+  it('two opposed streams cancel into incoherence, not into a false heading', () => {
+    const count = 200;
+    const readings = flowReadings(field(count, (p) => (p % 2 ? [80, 0, 1] : [-80, 0, 1])), count, options);
+    expect(readings.moving).toBeCloseTo(1, 6);
+    expect(readings.coherence).toBeLessThan(0.01);
+    expect(readings.peak).toBeCloseTo(80, 3);
+  });
+
+  it('the whole frame drifting is the camera', () => {
+    const readings = flowReadings(field(100, () => [30, 0, 1]), 100, options);
+    expect(readings.camera.dx).toBeCloseTo(30, 5);
+    expect(readings.camera.share).toBeCloseTo(1, 6);
+  });
+
+  it('peak is the high percentile, so one wild vector does not set it', () => {
+    const count = 100;
+    const readings = flowReadings(field(count, (p) => (p === 7 ? [10000, 0, 1] : [p + 10, 0, 1])), count, options);
+    expect(readings.peak).toBeGreaterThan(90);
+    expect(readings.peak).toBeLessThan(200);
+  });
+
+  it('saturated counts the moving cells at the ceiling', () => {
+    const count = 100;
+    const readings = flowReadings(field(count, (p) => (p < 50 ? [100, 0, 1] : [20, 0, 1])), count,
+      { ...options, ceiling: 105 });
+    expect(readings.saturated).toBeCloseTo(0.5, 6);
+    const calm = flowReadings(field(count, () => [20, 0, 1]), count, { ...options, ceiling: 105 });
+    expect(calm.saturated).toBe(0);
+  });
+
+  it('an empty field reads as nothing, not as numbers', () => {
+    const readings = flowReadings(new Float32Array(300), 100, options);
+    expect(readings.measured).toBe(0);
+    expect(readings.moving).toBe(0);
+    expect(readings.peak).toBe(0);
+    expect(readings.coherence).toBe(0);
+    expect(readings.saturated).toBe(0);
+  });
+
+  it('reads a stride-4 field as the GPU readback lays it out', () => {
+    const readings = flowReadings(field(100, () => [40, 0, 1], 4), 100, { ...options, stride: 4 });
+    expect(readings.moving).toBeCloseTo(1, 6);
+    expect(readings.peak).toBeCloseTo(40, 3);
   });
 });

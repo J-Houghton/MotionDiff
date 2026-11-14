@@ -1,44 +1,72 @@
+// @ts-check
 /**
  * The mode registry. A mode is one module in this folder plus one entry in
  * MODES; nothing else needs to know it exists. The pipeline calls its
  * `render`, the panel builds its controls from `params`, and the keys 1–9
  * select modes in the order listed here.
  *
- * A mode module's default export:
+ * The typedefs below are the mode contract; `npm run typecheck` holds every
+ * mode module to it (each annotates its default export as a Mode).
  *
- *   id        string stored in presets as params.algorithm
- *   label     shown in the UI
- *   blurb     one sentence: what the picture means
- *   help      known artifacts, as short sentences (shown in the help sheet)
- *   params    control definitions, see params.js
- *   data      { kind: 'scalar' | 'mask' | 'vector', what } — every mode also
- *             exposes its result as data, not only as display colours: a
- *             per-pixel field in the renderer's data target, R = the
- *             magnitude every consumer can pool (see core/magnitude.js),
- *             G/B mode-specific. Read it with pipeline.readData().
- *   composite true when diff / overlay / glow display applies
- *   worker    true when the Canvas2D worker fallback can run it too
- *   needsFloat true when it needs float render targets
- *   summary(params)  optional: one sentence saying what the current
- *             settings amount to, shown where the time ruler would be for
- *             modes that do not look back by a gap.
- *   lookback(params)  optional: [shortest, longest] distance it reads back
- *             into the frame ring, in 1/30 s. Defaults to the gap and the
- *             gap plus two spreads.
- *   animates(params)  optional: true when the current settings make the
- *             picture move on its own (particle traces). The session then
- *             keeps redrawing while the video is paused, passing the wall
- *             clock as frame.pausedDt; everything else in the frame is a
- *             repeat.
- *   render(frame)  draw one frame on the GPU. `frame` is the context built
- *             in Pipeline.process: { gl, ring, time, step, dtMs, stepMs,
- *             trailAgeStep, params, display, layers, note }. dtMs is the media
- *             time since the previous frame (0 for a frame rendered again);
- *             stepMs is the same but keeps its value on a repeat, for
- *             feedback state that is recomputed rather than advanced.
- *             note(message, type) puts a sentence on the status line (a
- *             setup problem, a reading); it is rate-limited. Return false
- *             when there was nothing to measure this frame.
+ * @typedef {'first'|'advance'|'repeat'|'rewind'|'jump'} FrameStep
+ *   How this frame's media time relates to the previous one
+ *   (core/timebase.js classifyStep).
+ *
+ * @typedef {Record<string, *>} ModeParams
+ *   Every runtime setting, keyed by param key: pipeline.params. Values are
+ *   numbers (range), booleans (toggle), strings (select, color); fpsCap may
+ *   be null. Values are untyped: the schema, not the type system, says what
+ *   each key holds.
+ *
+ * @typedef {object} ModeFrame
+ *   The per-frame context built in Pipeline.process and handed to render().
+ * @property {*} gl - WebGLRenderer (app/renderer.webgl.js)
+ * @property {*} ring - FrameRing: slots and stamps of the frame history
+ * @property {number} time - This frame's media time, seconds
+ * @property {FrameStep} step
+ * @property {number} dtMs - Media time since the previous frame (0 for a
+ *   frame rendered again)
+ * @property {number} stepMs - As dtMs, but keeps its value on a repeat, for
+ *   feedback state that is recomputed rather than advanced
+ * @property {number} trailAgeStep - How far trail ages advance, in trail windows
+ * @property {ModeParams} params
+ * @property {'diff'|'overlay'|'glow'|'data'} display
+ * @property {number[]} layers - Scratch for ring layer indices
+ * @property {number} [pausedDt] - Wall-clock seconds since the last redraw
+ *   while the video is paused and the mode animates; only the particle step
+ *   consumes it, everything else treats the frame as a repeat
+ * @property {(message: string, type?: 'info'|'error') => void} note - Puts a
+ *   sentence on the status line (a setup problem, a reading); rate-limited
+ * @property {object|null} [readings] - A mode may set this: a small object of
+ *   live measurements for this frame; the pipeline exposes the latest one as
+ *   pipeline.readings for the interface and tools
+ *
+ * @typedef {object} Mode
+ * @property {string} id - Stored in presets as params.algorithm
+ * @property {string} label - Shown in the UI
+ * @property {string} blurb - One sentence: what the picture means
+ * @property {string[]} help - Known artifacts, as short sentences (help sheet)
+ * @property {import('./params.js').ParamDef[]} params - Control definitions
+ * @property {{kind: 'scalar'|'mask'|'vector', what: string}} data - Every mode
+ *   also exposes its result as data, not only as display colours: a per-pixel
+ *   field in the renderer's data target, R = the magnitude every consumer can
+ *   pool (see core/magnitude.js), G/B mode-specific. Read it with
+ *   pipeline.readData().
+ * @property {boolean} [composite] - True when diff / overlay / glow display applies
+ * @property {boolean} [worker] - True when the Canvas2D worker fallback can run it
+ * @property {boolean} [needsFloat] - True when it needs float render targets
+ * @property {(params: ModeParams) => string} [summary] - One sentence saying
+ *   what the current settings amount to, shown where the time ruler would be
+ *   for modes that do not look back by a gap
+ * @property {(params: ModeParams) => [number, number]} [lookback] - [shortest,
+ *   longest] distance it reads back into the frame ring, in 1/30 s. Defaults
+ *   to the gap and the gap plus two spreads
+ * @property {(params: ModeParams) => boolean} [animates] - True when the
+ *   current settings make the picture move on its own (particle traces). The
+ *   session then keeps redrawing while the video is paused, passing the wall
+ *   clock as frame.pausedDt; everything else in the frame is a repeat
+ * @property {(frame: ModeFrame) => boolean|void} render - Draw one frame on
+ *   the GPU. Return false when there was nothing to measure this frame
  */
 import posy from './posy.js';
 import raw from './raw.js';

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Background model: marks whatever is not part of the usual scene, whole,
  * whether or not it is moving right now.
@@ -118,7 +119,7 @@ const STATES = new WeakMap();
  * draw: the picture into the diff target, the foreground mask into the data
  * target.
  *
- * @param {object} renderer - WebGLRenderer
+ * @param {*} renderer - WebGLRenderer
  * @param {object} opts
  * @param {WebGLTexture} opts.mask - Motion mask, R > 0.5 where moving
  * @param {number} opts.alpha - core backgroundAlpha
@@ -194,7 +195,7 @@ export function renderBackground(renderer, opts) {
   maskDraw(renderer, decision.tex, data, { clean: opts.clean, output: 'data' });
 }
 
-export default {
+export default /** @type {import('./index.js').Mode} */ ({
   id: 'background',
   label: 'Background model',
   blurb: 'Whatever is not part of the usual scene, whole, moving or not. It learns what is usually there and shows the rest until that too becomes usual.',
@@ -254,4 +255,4 @@ export default {
     renderer.renderComposite(frame.display, 'raw', false);
     return true;
   },
-};
+});

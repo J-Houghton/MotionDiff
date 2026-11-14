@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Optical flow: how fast, and which way, each patch of the picture is moving.
  *
@@ -14,10 +15,10 @@
  *
  * Needs float render targets.
  */
-import { FLOW_MAX_STEP } from '../../core/flow.js';
+import { FLOW_MAX_STEP, flowReadings } from '../../core/flow.js';
 import { lookbackTime } from '../../core/timebase.js';
-import { FLOW_PRELUDE, flowBetween, flowLuma, flowPass, flowSmooth } from '../flow.js';
-import { particleField, renderParticles } from '../particles.js';
+import { FLOW_PRELUDE, flowBetween, flowLuma, flowPass, flowSmooth, readField } from '../flow.js';
+import { particleField, reduceField, renderParticles } from '../particles.js';
 import { renderArrows } from '../arrows.js';
 import { asMs } from './params.js';
 
@@ -29,6 +30,10 @@ export const FLOW_TRUSTED = 4;
 export const FLOW_PRESENT = 0.25;
 /** Motion slower than this share of the speed range is not drawn. */
 export const FLOW_FLOOR = 0.04;
+/** The readouts read the field back at most this wide: small enough for every frame. */
+export const READINGS_WIDTH = 96;
+/** Warn when at least this share of what moves is at the measurable ceiling. */
+export const READINGS_SATURATED = 0.2;
 
 /** Whole factor that brings the processing width down to the working size. */
 export const flowFactor = (width) => Math.max(1, Math.ceil(width / FLOW_WIDTH));
@@ -88,8 +93,8 @@ const fullSpeed = (params, width) => (params.flowRange / 100) * width;
 
 /**
  * The velocity field for this frame, or null while there is no older frame.
- * @param {object} frame - The per-frame context from Pipeline.process
- * @returns {{tex, fb, width, height}|null} RG = picture pixels per second,
+ * @param {import('./index.js').ModeFrame} frame - The per-frame context from Pipeline.process
+ * @returns {VelocityField|null} RG = picture pixels per second,
  *   averaged over time by confidence, zero where nothing is measured;
  *   B = how present a measurement is, 0..1
  */
@@ -108,15 +113,85 @@ export function flowVelocity(frame) {
   flowPass(renderer, 'flow:velocity', VELOCITY_FRAG, { uFlow: 0 }, velocity, [flow.tex], (gl, u) => gl.uniform1f(u.uScale, factor / gapSeconds));
 
   const seconds = params.flowSmoothing / 30;
-  return flowSmooth(renderer, 'flow', velocity, {
+  const smoothed = /** @type {VelocityField} */ (flowSmooth(renderer, 'flow', velocity, {
     alpha: seconds > 0 ? 1 - Math.exp(-(frame.stepMs / 1000) / seconds) : 1,
     trusted: FLOW_TRUSTED,
     floor: FLOW_PRESENT,
     repeat: frame.step === 'repeat',
-  });
+  }));
+  // The fastest speed this gap and pyramid could have measured, in picture
+  // pixels per second: carried with the field for the readouts.
+  smoothed.ceiling = (flowReach(flowLevels(current.width)) * factor) / gapSeconds;
+  return smoothed;
 }
 
-export default {
+/**
+ * A smoothed velocity target with the measurable ceiling carried along.
+ * @typedef {{tex: *, fb: *, width: number, height: number, ceiling?: number}} VelocityField
+ */
+
+/** Reused readback buffers, per renderer. */
+const READ_BUFFERS = new WeakMap();
+
+/** Eight compass names for a heading in radians (x right, y DOWN). */
+const SECTORS = [
+  ['→', 'right'], ['↘', 'down-right'], ['↓', 'down'], ['↙', 'down-left'],
+  ['←', 'left'], ['↖', 'up-left'], ['↑', 'up'], ['↗', 'up-right'],
+];
+const sector = (heading) => SECTORS[Math.round(((heading + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) % 8];
+
+/**
+ * Read the velocity field back small and measure it: the live readouts, and
+ * the sentence and data they become. Speeds are reported as a share of the
+ * picture's width per second, matching the Speed range control.
+ *
+ * @param {import('./index.js').ModeFrame} frame - The per-frame context
+ * @param {{tex, width, height, ceiling?: number}} velocity - From flowVelocity
+ * @param {number} full - Speed at full brightness, picture pixels per second
+ */
+export function reportReadings(frame, velocity, full) {
+  const renderer = frame.gl;
+  const field = reduceField(renderer, 'flow:readings', velocity, READINGS_WIDTH);
+  const buffers = readField(renderer, field, READ_BUFFERS.get(renderer));
+  READ_BUFFERS.set(renderer, buffers);
+  const readings = flowReadings(buffers.values, field.width * field.height, {
+    floor: full * FLOW_FLOOR,
+    present: FLOW_PRESENT,
+    stride: 4,
+    ceiling: velocity.ceiling,
+  });
+
+  const pct = (speed) => Math.round((speed / renderer.width) * 100);
+  const camera = readings.camera;
+  const cameraSpeed = Math.hypot(camera.dx, camera.dy);
+  // The median shift speaks for the camera only when at least half the frame
+  // is measured; under 2.5% of the width per second it is read as still
+  // (moving things among the measured cells drag the median a little).
+  const cameraPart = camera.share < 0.5 ? ''
+    : cameraSpeed >= renderer.width * 0.025 ? ` · camera ${sector(Math.atan2(camera.dy, camera.dx))[0]} ${pct(cameraSpeed)}%/s`
+      : ' · camera still';
+
+  frame.readings = {
+    mode: 'flow',
+    ...readings,
+    cameraSpeed,
+    width: renderer.width,
+    height: renderer.height,
+    ceiling: velocity.ceiling ?? null,
+  };
+
+  if (readings.saturated >= READINGS_SATURATED && readings.moving > 0.01) {
+    frame.note(`Motion beyond this gap's reach (over ${pct(velocity.ceiling)}% of width/s): shorten the gap`, 'error');
+  } else if (readings.moving < 0.005) {
+    frame.note(`nothing moving${cameraPart}`, 'info');
+  } else {
+    const [arrow, name] = sector(readings.heading);
+    const headingPart = readings.coherence < 0.25 ? 'mixed headings' : `${arrow} ${name}`;
+    frame.note(`${headingPart} · peak ${pct(readings.peak)}%/s · ${Math.round(readings.moving * 100)}% of frame${cameraPart}`, 'info');
+  }
+}
+
+export default /** @type {import('./index.js').Mode} */ ({
   id: 'flow',
   label: 'Optical flow',
   blurb: 'How fast and which way each patch of the picture is moving, measured between two frames: as flowing traces, or as colour.',
@@ -165,6 +240,7 @@ export default {
       gl.uniform1i(u.uOutput, output);
     });
     show(data, 1);
+    reportReadings(frame, velocity, full);
     if (params.flowShow === 'arrows') {
       renderArrows(renderer, 'flow', field, {
         minSpeed: full * FLOW_FLOOR,
@@ -189,4 +265,4 @@ export default {
     renderer.renderComposite(frame.display, 'raw', false);
     return true;
   },
-};
+});

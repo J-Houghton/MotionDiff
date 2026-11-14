@@ -1,0 +1,109 @@
+{
+  "scenes": [
+    {
+      "name": "truth-history-measured",
+      "clip": "truth",
+      "at": 2.0,
+      "frames": 6,
+      "every": 5,
+      "warmup": 2,
+      "params": {
+        "algorithm": "history",
+        "historyShow": "measured",
+        "historyLength": 60,
+        "frameOffset": 5,
+        "secondGap": 30,
+        "threshold": 15,
+        "flowRange": 25,
+        "flowGap": 2,
+        "flowSmoothing": 6
+      }
+    },
+    {
+      "name": "truth-history-direction",
+      "clip": "truth",
+      "at": 2.0,
+      "frames": 6,
+      "every": 5,
+      "warmup": 2,
+      "params": {
+        "algorithm": "history",
+        "historyShow": "direction",
+        "historyLength": 60,
+        "frameOffset": 5,
+        "secondGap": 30,
+        "threshold": 15
+      }
+    },
+    {
+      "name": "gulls-history-measured",
+      "clip": "gulls",
+      "at": 8.0,
+      "frames": 6,
+      "every": 5,
+      "warmup": 3,
+      "params": {
+        "algorithm": "history",
+        "historyShow": "measured",
+        "historyLength": 60,
+        "frameOffset": 5,
+        "secondGap": 30,
+        "threshold": 15,
+        "flowRange": 25,
+        "flowGap": 2,
+        "flowSmoothing": 6
+      }
+    },
+    {
+      "name": "gulls-history-direction",
+      "clip": "gulls",
+      "at": 8.0,
+      "frames": 6,
+      "every": 5,
+      "warmup": 3,
+      "params": {
+        "algorithm": "history",
+        "historyShow": "direction",
+        "historyLength": 60,
+        "frameOffset": 5,
+        "secondGap": 30,
+        "threshold": 15
+      }
+    },
+    {
+      "name": "traffic-history-measured",
+      "clip": "traffic",
+      "at": 3.0,
+      "frames": 6,
+      "every": 5,
+      "warmup": 3,
+      "params": {
+        "algorithm": "history",
+        "historyShow": "measured",
+        "historyLength": 45,
+        "frameOffset": 3,
+        "secondGap": 30,
+        "threshold": 15,
+        "flowRange": 40,
+        "flowGap": 2,
+        "flowSmoothing": 6
+      }
+    },
+    {
+      "name": "traffic-history-direction",
+      "clip": "traffic",
+      "at": 3.0,
+      "frames": 6,
+      "every": 5,
+      "warmup": 3,
+      "params": {
+        "algorithm": "history",
+        "historyShow": "direction",
+        "historyLength": 45,
+        "frameOffset": 3,
+        "secondGap": 30,
+        "threshold": 15
+      }
+    }
+  ]
+}

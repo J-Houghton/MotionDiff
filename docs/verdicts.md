@@ -848,3 +848,151 @@ label; the legend says direction only (brightness-means-speed stays in the
 help); the phone clock drops the total duration for space, as before this
 tier. Re-audited after the fixes: phone split and desktop flow states show
 nothing clipped, overlapping, off screen or under 44 px.
+## Session B
+
+Verdicts from the measurement session (branch `session-b-measure`) are numbered V-B1,
+V-B2… so they cannot collide with Session A's numbering.
+
+### V-B1. Live readouts from the flow field, and a too-fast warning — robustness
+**What is built.** The Optical flow mode reads a small copy of its velocity field back
+each frame and reports, on the status line and as data (`pipeline.readings`): the
+dominant heading, the peak speed, the share of the frame moving, and the camera's own
+motion (the confidence-weighted median shift). When a telling share of what moves is
+at the fastest speed the solver could have measured, the status line warns that the
+motion is beyond the gap's reach instead of showing a number that cannot be right.
+
+Readouts are text and data, not a picture: they are accepted on demonstrations
+against known truth and unit tests, with the numeric guard confirming the flow
+pictures themselves did not change.
+
+**Expectations, written before building:**
+- On the synthetic `flow` clip (a band sliding right at 90 px/s, a block down-left at
+  60 px/s, a turning disc) at the default gap: dominant heading reads right; peak
+  speed within 20% of the band's 90 px/s (scaled to the processing size); the share
+  moving between half and 1.3× the movers' true cover of the frame; the camera reads
+  still.
+- On `handheld` (the whole frame wobbles) the camera reads as moving; on `trees`
+  (static camera, branches in wind) it reads still.
+- Warning: on `flow` with the gap raised until the band's shift per gap is beyond the
+  pyramid's reach, the warning appears; at the default gap it does not.
+- No regression: before/after filmstrips of `scripts/scenes/flow` differ under the
+  numeric guard's invisibility threshold (readouts change no pixels), and the unit
+  tests for the new core functions pass.
+
+**Result: accepted.**
+
+What was built: `flowReadings` in `core/flow.js` (unit-tested: shares, percentile
+peak, circular heading with a coherence that tells one stream from opposed ones,
+the median camera shift via `globalShift`, saturation against a ceiling);
+`reportReadings` in `app/modes/flow.js` reads the velocity field back at ≤96 px
+wide each frame, carries the measurable ceiling on the field, puts a sentence on
+the status line and the numbers on `pipeline.readings`.
+
+Demonstrations (headless Chrome, SwiftShader; `scratchpad/readings-demo.js`):
+
+| Expectation | Measured |
+|---|---|
+| `flow`, default gap: heading right | Mean heading 0.08 rad; sentence "→ right" |
+| `flow`: peak within 20% of the band's 90 px/s | Mean peak 93.0 px/s (640 px processing width = the scene's own size) |
+| `flow`: share moving between 0.5× and 1.3× the true cover (~28%) | 34.9% ≈ 1.26× (window spread), sentence "31–32% of frame" |
+| `flow`, `trees`: camera reads still | See clarification below: the camera claim is omitted (under half the frame measurable), not "still" |
+| `handheld`: camera reads moving | "camera → 10%/s" (median 75 px/s), steady across samples |
+| Warning at a gap beyond reach (`flow`, gap 15, ceiling 56 px/s) | Warned (saturation up to 0.34); the flow also collapses to "nothing moving", as beyond-reach answers lose confidence |
+| No warning at the default gap | None (saturation 0.00; ceiling 448 px/s) |
+| No regression | All 20 before/after strips of `scripts/scenes/flow.json` byte-identical (changed 0%, max diff 0); 296 unit tests pass |
+
+**Clarification, found while demonstrating.** The first build claimed a camera
+reading whenever a third of the frame was measured: on the synthetic `flow` clip
+(flat background, so only the movers carry measurements) the median then reported
+the movers as "camera 12%/s". The median only speaks for the camera when most of
+the measured cells are background, so the claim is now made only when at least
+half the frame is measured, and under 2.5% of the width per second it reads as
+still (moving things among the measured cells drag the median a little; `trees`
+sat at 2–3%/s). Where less than half the frame is measured the sentence says
+nothing about the camera rather than guessing.
+
+Known limits, stated rather than hidden: the camera readout is the median shift —
+a zoom or rotation reads as near-still (its median is zero); and on footage where
+movers fill most of the measured area the dominant heading *is* the camera's
+drift, which is honest (everything does flow).
+
+### V-B2. Type checking through JSDoc — robustness
+The contracts that cross module boundaries are now JSDoc typedefs that
+`npm run typecheck` (tsc, no emit, no conversion: the code stays plain
+JavaScript) holds every implementation to: `Mode`, `ModeFrame` and `FrameStep`
+in `app/modes/index.js` with every mode's default export checked against
+`Mode`; `ParamDef` in `app/modes/params.js`; the worker protocol (request and
+result messages) in `app/pipeline.worker.js`, used by the worker body itself.
+
+Demonstration: the checker is clean at this commit; changing one mode's `id`
+to a number is caught at the export ("Type 'number' is not comparable to type
+'string'"). The only runtime change is the worker aliasing `self` to a typed
+scope; the Canvas2D fallback was demonstrated still working (posy and magnify
+render pictures with `?renderer=canvas2d`), and the build and all 296 tests pass.
+
+### V-B3. A sample clip for Magnify that is not a face — sample check, as I3
+**Chosen:** *Sleeping Kitten* (Pexels 13925469, 1920×1080, 30 fps, 13 s): a
+ginger kitten curled asleep indoors on a locked-off camera, flank and belly
+visible. Sample params: band 0.15–1.0 Hz, amplify 20×, pool 2×.
+
+As with I3, my own reading, no blind judge: in the magnified filmstrip the
+breathing shows as the flank edge swelling and sinking between frames; the
+band strength averaged over the frame oscillates with about a 1.5 s period
+(≈40 breaths/min, normal for a sleeping kitten) over four cycles before the
+kitten stirs once around 6.5 s — in the plain video the breathing is nearly
+invisible. Loaded from its host in headless Chrome the way the picker does
+it: comes up in Magnify with a picture (band strength in the data target)
+after about 1.6 s. Rejected after rendering: a chihuahua asleep on a quilt
+(Pexels 5994139 — it moves visibly, nothing for magnify to reveal) and a
+white dog outdoors (Pexels 5596930 — mostly a dog's face, and the head
+drifts). Added to the reference clips as `kitten` for future magnify work.
+Not checked: loading on a phone or a slow connection.
+
+### V-B4. History ribbons in measured colours (flow + history) — visual
+`historyShow: 'measured'`: the ribbon a mover leaves is still the history
+mode's; its colour is the flow field's measurement from the moment each pixel
+was passed — hue = measured heading (flow's wheel), brightness = measured
+speed against the speed range — instead of a hue read off the ribbon's shape.
+Design: docs/combined-modes.md §1.
+
+**Expectations, written before building:**
+- *Measured vs direction, on `gulls`:* told apart. Each ribbon holds one
+  steady hue that matches its bird's course; the direction view shows the
+  same wheel but patch-averaged (56 px cells), so hues bleed across nearby
+  ribbons and wobble along one. A blind judge can say which is which from
+  "hue is uniform per ribbon and does not leak outside it".
+- *On `truth`:* the square's ribbon reads the right-heading hue (red), the
+  30°-down disc's ribbon yellow-orange, the leftward disc's cyan — the known
+  headings; brightness even along each ribbon while speed is constant.
+- *Where flow has nothing* (a flat mover's interior): the ribbon keeps the
+  last measured colour rather than going black; at worst it greys.
+- *No regression:* the age and direction views byte-identical (the new pass
+  runs only in the measured view); mask data output unchanged.
+
+**Result: accepted, with the limits below.** Three blind judges, one per
+clip pair, each given the two strips unlabeled in shuffled order.
+
+| Check | Clips | Judge (blind) |
+|---|---|---|
+| Visible | truth, traffic, gulls | Told apart "easily" on all three |
+| Intended: steady hue per rigid stream, brightness by speed | traffic | Measured strip described unprompted as "hue mostly uniform within a stream… brightness tied to speed or proximity, near-camera brightest"; the direction strip as "hue drifts and bleeds within a single stream" with "blue-grey and teal contamination" — the known 56 px pooling artifact |
+| Intended: known headings | truth | Disc's ribbon uniform orange (its 30° course); square's rim red (rightward) with a grey interior — the anticipated greying of a flat mover's interior, where flow measures nothing |
+| Intended (re-registered): parts of a flapping bird resolve | gulls | "Shows structure within a bird's motion (magenta body, teal wing edge, blue tail) that the other smooths away" |
+| No regression | truth, traffic | Age and direction strips before vs after: 0% changed, max diff 0, on all ten scenes; data output untouched; 296 tests pass; typecheck clean |
+
+**Limits, stated rather than hidden:** a flat mover's interior ribbon greys
+(flow has nothing to measure there; the rim carries the colour); faint or tiny
+movers lay down grey trails (the gulls' tails); the laydown edge is blocky at
+the flow working size; and a ribbon at the top of the speed range saturates to
+full brightness. The first two are what the measurement honestly knows, and
+the help sheet says so.
+
+**Addendum, before any traffic strips were rendered.** The gulls strips showed
+the first two expectations were written for the wrong animal: a flapping bird
+is not one motion, and the measured view resolves its parts (body forward,
+wingtips up and down) where the direction view's 56 px pooling averages them
+into one hue. The steady-hue expectation belongs to rigid movers, so it is
+re-registered on `traffic` before rendering it: each carriageway's ribbons in
+one steady hue (the two opposed headings), and the near, faster carriageway's
+ribbons brighter than the far one at the same speed range — speed is what the
+direction view cannot show at all.

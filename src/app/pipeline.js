@@ -98,6 +98,14 @@ export class Pipeline {
     this.onStatus = null;
 
     this.onResult = null;
+
+    /**
+     * Live measurements from the active mode's last frame (a mode may set
+     * `frame.readings` in render), or null where the mode reports none.
+     * Optical flow puts its readouts here: see reportReadings in modes/flow.js.
+     * @type {object|null}
+     */
+    this.readings = null;
   }
 
   /**
@@ -624,7 +632,9 @@ export class Pipeline {
       frame.stepMs = this._lastDtMs;
       frame.params = this.params;
       frame.display = this._currentMode;
+      frame.readings = null;
       this._hasMagnitude = mode.render(frame) !== false;
+      this.readings = frame.readings;
       if (this._hasMagnitude && this._currentMode === 'data') gl.renderDataView(mode.data.kind);
     }
 

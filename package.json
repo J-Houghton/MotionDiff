@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "filmstrip": "node scripts/filmstrip.mjs"
+    "filmstrip": "node scripts/filmstrip.mjs",
+    "typecheck": "tsc -p jsconfig.json"
   },
   "_dependencyNotes": {
     "hls.js": "HLS stream playback for .m3u8 URLs",
@@ -18,6 +19,7 @@
     "tweakpane": "parameter panel, generated from each mode's schema (ui/panel.js)"
   },
   "devDependencies": {
+    "typescript": "^7.0.2",
     "vite": "^8.0.0",
     "vitest": "^4.1.0"
   },

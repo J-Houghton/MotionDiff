@@ -31,8 +31,16 @@ export const TEST_CLIPS = [
   },
   // Samples that show off a mode, in mode order. Each was checked in its mode
   // with these settings (static camera, or the whole frame would light up).
-  // Magnify has none yet: it wants a locked-off shot of something nearly
-  // still with a small rhythm (breathing, a sway), and not a face.
+  {
+    // A sleeping kitten on a locked-off camera: the breathing (about 40
+    // breaths a minute — normal for a kitten) is nearly invisible in the
+    // video and plain under magnification. It stirs once around 6.5 s.
+    label: 'Sleeping Kitten',
+    url: 'https://videos.pexels.com/video-files/13925469/13925469-hd_1920_1080_30fps.mp4',
+    mode: 'magnify',
+    params: { magAmp: 20, magFreqLow: 0.15, magFreqHigh: 1.0, magChroma: 1, magDownsample: 2, blurEnabled: false },
+    credit: 'Pexels licence',
+  },
   {
     // A timelapse: a flower unfolds against a still wall.
     label: 'Flower Opening',

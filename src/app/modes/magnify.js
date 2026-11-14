@@ -1,7 +1,8 @@
+// @ts-check
 import { emaAlpha } from '../../core/magnify.js';
 import { BLUR } from './params.js';
 
-export default {
+export default /** @type {import('./index.js').Mode} */ ({
   id: 'magnify',
   label: 'Magnify',
   blurb: 'A band of slow change, amplified and added back onto the picture: pulse, breathing, sway.',
@@ -52,4 +53,4 @@ export default {
     if (!ok) gl.renderBlank('raw', false);
     return ok;
   },
-};
+});

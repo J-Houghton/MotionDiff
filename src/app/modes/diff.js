@@ -6,7 +6,7 @@ import { lookbackTime } from '../../core/timebase.js';
 import { TRAIL_HOLD, TRAIL_REFRESH } from '../../core/trails.js';
 
 /**
- * @param {object} frame - The per-frame context from Pipeline.process
+ * @param {import('./index.js').ModeFrame} frame - The per-frame context from Pipeline.process
  * @param {'posy'|'raw'} algorithm
  * @returns {boolean} false when there is nothing to compare against yet
  */

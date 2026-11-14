@@ -206,7 +206,7 @@ export const FLOW_PRELUDE = PRELUDE;
 /**
  * Luma of the current frame, or of a ring layer, reduced by a whole factor.
  *
- * @param {object} renderer - WebGLRenderer
+ * @param {*} renderer - WebGLRenderer
  * @param {string} key - Names the target
  * @param {number} factor - 1, 2, 3…
  * @param {number} [layer] - Ring layer; omit for the current frame
@@ -225,7 +225,7 @@ export function flowLuma(renderer, key, factor, layer) {
 /**
  * Flow between two luma textures of the same size, coarse to fine.
  *
- * @param {object} renderer
+ * @param {*} renderer
  * @param {string} key - Prefix for this caller's targets
  * @param {{tex, width, height}} older
  * @param {{tex, width, height}} current
@@ -304,13 +304,13 @@ const PING_STATES = new WeakMap();
  * advanced twice; everything starts over when the renderer's epoch changes
  * or a target was rebuilt.
  *
- * @param {object} renderer
+ * @param {*} renderer
  * @param {string} key
  * @param {{tex, fb, fresh}[]} targets - Two targets
  * @param {boolean} repeat - The same frame again
  * @param {boolean} [hold] - Leave the state as it is (once it has content):
  *   `to` is then the current target and must not be drawn to
- * @returns {{from: object, to: object, empty: boolean, seen: number, held: boolean}}
+ * @returns {{from: *, to: *, empty: boolean, seen: number, held: boolean}}
  *   empty: `from` has no content yet; seen: frames written before this one
  */
 export function pingPong(renderer, key, targets, repeat, hold = false) {
@@ -346,7 +346,7 @@ export function pingPong(renderer, key, targets, repeat, hold = false) {
  * rules: two targets, recompute on a repeat, start over when the renderer's
  * epoch changes.
  *
- * @param {object} renderer
+ * @param {*} renderer
  * @param {string} key
  * @param {{tex, width, height}} measured - RG = vector, B = confidence
  * @param {{alpha: number, trusted: number, floor: number, repeat?: boolean}} options
@@ -371,7 +371,7 @@ export function flowSmooth(renderer, key, measured, options) {
  * Read a float target back: RGBA floats, row 0 at the TOP (the flip is done
  * here). A synchronous readback: keep the target small.
  *
- * @param {object} renderer
+ * @param {*} renderer
  * @param {{fb, width, height}} target
  * @param {{raw: Float32Array, values: Float32Array}} [buffers] - Reused when the size matches
  * @returns {{width: number, height: number, values: Float32Array, raw: Float32Array}}
