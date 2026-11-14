@@ -94,6 +94,46 @@ export function thresholdMaskAuto(difference, variance, threshold, k, blurred, o
   return out;
 }
 
+// Rec.709 luma weights, as in core/flow.js (core modules do not import each other).
+const LUMA_R = 0.2126;
+const LUMA_G = 0.7152;
+const LUMA_B = 0.0722;
+
+/**
+ * Edge strength of a frame: the Sobel magnitude of its luma, (|gx|+|gy|)/8,
+ * 0..255-ish. The Sobel kernels measure the gradient of a smoothed image, so
+ * no separate pre-blur is needed. A constant added to every pixel (a global
+ * brightness or exposure change) leaves this image untouched: differencing
+ * edge strengths instead of brightness is what "ignore lighting" means.
+ * Pixels beyond the border repeat the edge.
+ *
+ * @param {Uint8ClampedArray|Uint8Array} rgba - width*height*4
+ * @param {number} width
+ * @param {number} height
+ * @param {Float32Array} out - width*height
+ * @returns {Float32Array} out
+ */
+export function lumaSobel(rgba, width, height, out) {
+  const clampI = (v, max) => (v < 0 ? 0 : v > max ? max : v);
+  const luma = new Float32Array(width * height);
+  for (let p = 0, i = 0; p < luma.length; p++, i += 4) {
+    luma[p] = LUMA_R * rgba[i] + LUMA_G * rgba[i + 1] + LUMA_B * rgba[i + 2];
+  }
+  for (let y = 0; y < height; y++) {
+    const up = clampI(y - 1, height - 1) * width;
+    const mid = y * width;
+    const down = clampI(y + 1, height - 1) * width;
+    for (let x = 0; x < width; x++) {
+      const l = clampI(x - 1, width - 1);
+      const r = clampI(x + 1, width - 1);
+      const gx = (luma[up + r] + 2 * luma[mid + r] + luma[down + r]) - (luma[up + l] + 2 * luma[mid + l] + luma[down + l]);
+      const gy = (luma[down + l] + 2 * luma[down + x] + luma[down + r]) - (luma[up + l] + 2 * luma[up + x] + luma[up + r]);
+      out[mid + x] = (Math.abs(gx) + Math.abs(gy)) / 8;
+    }
+  }
+  return out;
+}
+
 /** Votes needed by majority3x3: a simple majority of the nine cells. */
 export const MASK_VOTES = 5;
 /**

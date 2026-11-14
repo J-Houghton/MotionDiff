@@ -34,6 +34,7 @@ uniform ivec2 uLayers;      // ring layers of the two older frames
 uniform float uThreshold;   // mean channel difference, 0..255
 uniform float uK;           // standard deviations the difference must clear
 uniform int uAuto;          // 1 = per-pixel floor from uVariance (mirrors thresholdMaskAuto)
+uniform int uGradient;      // 1 = difference edge strength, not brightness (mirrors lumaSobel)
 uniform int uBlur;          // 1 = 3x3 box blur before differencing
 
 out vec4 fragColor;
@@ -41,13 +42,35 @@ out vec4 fragColor;
 vec3 current(ivec2 q) { return floor(texelFetch(uCurrent, q, 0).rgb * 255.0 + 0.5); }
 vec3 older(ivec2 q, int layer) { return floor(texelFetch(uRing, ivec3(q, layer), 0).rgb * 255.0 + 0.5); }
 
+const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+
+// Mirrors lumaSobel at one pixel: layer -1 is the current frame.
+float edgeAt(ivec2 p, int layer, ivec2 size) {
+  float l[9];
+  int n = 0;
+  for (int dy = -1; dy <= 1; dy++) {
+    for (int dx = -1; dx <= 1; dx++) {
+      ivec2 q = clamp(p + ivec2(dx, dy), ivec2(0), size - 1);
+      l[n++] = dot(layer < 0 ? current(q) : older(q, layer), LUMA);
+    }
+  }
+  float gx = (l[2] + 2.0 * l[5] + l[8]) - (l[0] + 2.0 * l[3] + l[6]);
+  float gy = (l[6] + 2.0 * l[7] + l[8]) - (l[0] + 2.0 * l[1] + l[2]);
+  return (abs(gx) + abs(gy)) / 8.0;
+}
+
 void main() {
   ivec2 size = textureSize(uCurrent, 0);
   ivec2 p = ivec2(gl_FragCoord.xy);
   vec3 c;
   vec3 a;
   vec3 b;
-  if (uBlur == 1) {
+  if (uGradient == 1) {
+    // Edge strength replaces brightness (and the blur: Sobel smooths).
+    c = vec3(edgeAt(p, -1, size));
+    a = vec3(edgeAt(p, uLayers.x, size));
+    b = vec3(edgeAt(p, uLayers.y, size));
+  } else if (uBlur == 1) {
     vec3 sumC = vec3(0.0);
     vec3 sumA = vec3(0.0);
     vec3 sumB = vec3(0.0);
@@ -185,6 +208,8 @@ export function closeMask(renderer, decision, opts, key = 'mask') {
  * @param {boolean} opts.blur
  * @param {WebGLTexture} [opts.variance] - Per-pixel noise: the threshold
  *   becomes max(global, BG_K·σ·√2), as in core thresholdMaskAuto
+ * @param {boolean} [opts.gradient] - Difference edge strength (lumaSobel)
+ *   instead of brightness: a lighting change stops marking the frame
  * @returns {{tex: *, fb: *, width: number, height: number}} The target holding R = raw decision, G = strength
  */
 export function maskDifference(renderer, opts) {
@@ -202,6 +227,7 @@ export function maskDifference(renderer, opts) {
   gl.uniform1f(difference.u.uThreshold, opts.threshold);
   gl.uniform1f(difference.u.uK, BG_K);
   gl.uniform1i(difference.u.uAuto, opts.variance ? 1 : 0);
+  gl.uniform1i(difference.u.uGradient, opts.gradient ? 1 : 0);
   gl.uniform1i(difference.u.uBlur, opts.blur ? 1 : 0);
   renderer.draw(raw.fb, width, height);
   return raw;
@@ -235,7 +261,7 @@ export function maskDraw(renderer, decision, framebuffer, opts) {
  * Both passes: fills the diff target with the picture and the data target
  * with the mask.
  * @param {*} renderer
- * @param {{layers: number[], threshold: number, blur: boolean, clean: boolean, show: 'cutout'|'solid', fill?: number, variance?: WebGLTexture}} opts - maskDifference's, plus clean, show and fill (close radius, 0 = off)
+ * @param {{layers: number[], threshold: number, blur: boolean, clean: boolean, show: 'cutout'|'solid', fill?: number, variance?: WebGLTexture, gradient?: boolean}} opts - maskDifference's, plus clean, show and fill (close radius, 0 = off)
  */
 export function renderMask(renderer, opts) {
   const data = renderer.dataFramebuffer(renderer.width, renderer.height);
@@ -257,6 +283,7 @@ export const MASK_BLUR = { key: 'maskBlur', label: 'Blur first', type: 'toggle',
 export const MASK_CLEAN = { key: 'maskClean', label: 'Clean up', type: 'toggle', default: true };
 export { MASK_FILL };
 export const MASK_AUTO = { key: 'maskAuto', label: 'Auto threshold', type: 'toggle', default: false };
+export const MASK_GRADIENT = { key: 'maskGradient', label: 'Ignore lighting', type: 'toggle', default: false };
 
 /** The second gap is always behind the first. */
 const secondGap = (params) => Math.max(params.secondGap, params.frameOffset + 1);
@@ -287,6 +314,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     'A stopped object disappears.',
     'For the first moments after loading or seeking there is no second frame yet, and it behaves like Raw.',
     'Fill holes closes gaps in a cut-out up to twice its size across, after the clean-up vote, without growing the cut-out.',
+    'Ignore lighting differences each frame\'s edges instead of its brightness, so a lighting or exposure change stops marking the whole frame; it replaces the blur. The mask is then sparse — thin lines where edges moved — and soft, diffuse fronts respond weakly: a remedy for lighting drift, not a better general mask.',
     'Auto threshold learns each pixel\'s own noise (the background model\'s variance) and asks a difference to clear it as well as the set threshold, which becomes a floor: grainy footage cleans up without raising the threshold for the whole picture. The noise takes a second or two to be learnt.',
   ],
   data: { kind: 'mask', what: '1 where the pixel is moving, 0 where it is still; G holds the strength of the difference' },
@@ -300,6 +328,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     MASK_CLEAN,
     MASK_FILL,
     MASK_AUTO,
+    MASK_GRADIENT,
     { key: 'maskShow', label: 'Show', type: 'select', default: 'cutout', options: { 'Cut-out': 'cutout', 'Solid mask': 'solid' } },
     TRAIL,
   ],
@@ -330,6 +359,7 @@ export default /** @type {import('./index.js').Mode} */ ({
       show: params.maskShow,
       fill: params.maskFill,
       variance: model ? model.variance : undefined,
+      gradient: params.maskGradient,
     });
 
     renderer.renderTrail({

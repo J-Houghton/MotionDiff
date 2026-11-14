@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MASK_VOTES_STRICT, dilate, erode, threeFrameDifference, thresholdMask, thresholdMaskAuto, majority3x3 } from '../mask.js';
+import { MASK_VOTES_STRICT, dilate, erode, lumaSobel, threeFrameDifference, thresholdMask, thresholdMaskAuto, majority3x3 } from '../mask.js';
 import { boxBlur } from '../blur.js';
 
 function makePixels(...pixels) {
@@ -277,5 +277,47 @@ describe('thresholdMaskAuto (per-pixel noise floor)', () => {
     const fixed = thresholdMask(difference, 8, new Uint8Array(4));
     const auto = thresholdMaskAuto(difference, new Float32Array(4), 8, 2.5, false, new Uint8Array(4));
     expect(Array.from(auto)).toEqual(Array.from(fixed));
+  });
+});
+
+describe('lumaSobel (ignore lighting)', () => {
+  const W = 12;
+  const H = 10;
+  const grey = (value) => {
+    const f = new Uint8ClampedArray(W * H * 4);
+    for (let i = 0; i < f.length; i += 4) { f[i] = f[i + 1] = f[i + 2] = value; f[i + 3] = 255; }
+    return f;
+  };
+
+  it('a flat frame has no edges', () => {
+    const out = lumaSobel(grey(97), W, H, new Float32Array(W * H));
+    expect(Math.max(...out)).toBe(0);
+  });
+
+  it('a global brightness change leaves the edge image untouched — the point of the feature', () => {
+    const scene = grey(60);
+    for (let y = 0; y < H; y++) for (let x = 6; x < W; x++) {
+      const i = (y * W + x) * 4;
+      scene[i] = scene[i + 1] = scene[i + 2] = 180; // a step edge at x = 6
+    }
+    const brighter = Uint8ClampedArray.from(scene, (v, i) => (i % 4 === 3 ? v : Math.min(255, v + 40)));
+    const a = lumaSobel(scene, W, H, new Float32Array(W * H));
+    const b = lumaSobel(brighter, W, H, new Float32Array(W * H));
+    expect(Array.from(b)).toEqual(Array.from(a));
+    // And the edge itself is strong where the step is.
+    expect(a[4 * W + 6]).toBeGreaterThan(50);
+    expect(a[4 * W + 2]).toBe(0);
+  });
+
+  it('a vertical step edge measures the step over the kernel norm', () => {
+    const scene = grey(0);
+    for (let y = 0; y < H; y++) for (let x = 6; x < W; x++) {
+      const i = (y * W + x) * 4;
+      scene[i] = scene[i + 1] = scene[i + 2] = 200;
+    }
+    const out = lumaSobel(scene, W, H, new Float32Array(W * H));
+    // |gx| at the step column: (200·4)/8 = 100, both border columns of the step.
+    expect(out[5 * W + 5]).toBeCloseTo(100, 5);
+    expect(out[5 * W + 6]).toBeCloseTo(100, 5);
   });
 });

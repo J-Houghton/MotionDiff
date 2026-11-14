@@ -1165,3 +1165,42 @@ byte-identical clean-footage check against the fixed path.
 The night expectation half-failed honestly: auto "suppresses the grain" only
 where the marks are grain. Low-contrast movers survive the bar now; what
 survives of the night background is signal.
+
+### V-B8. Lighting normalisation: differencing edges instead of brightness — visual
+`maskGradient` ("Ignore lighting") on the Motion mask mode: the three frames
+are reduced to their edge strength (Sobel magnitude of luma — the gradient of
+a smoothed image, so it replaces the pre-blur) before differencing. A global
+brightness or exposure change adds a constant the gradient does not see, so
+it stops lighting the whole frame; what moves still changes its edges.
+Design: docs/combined-modes.md §7; roadmap motion-extraction item 5.
+
+**Expectations, written before building:**
+- *On `sunset` (timelapse exposure drift; measured: 27% of the frame marked
+  at threshold 12 today):* with the option on, at the same threshold, the
+  flat sky and sea stop being marked — the share of the frame in the mask
+  falls by at least half — while the cloud fronts' moving edges stay marked.
+  A blind judge tells the strips apart and describes one as a whole-frame
+  wash and the other as edges of the changing clouds only.
+- *Brightness invariance, exactly:* the core unit test adds a constant to
+  every pixel and the edge image is unchanged.
+- *On `truth`:* the movers stay marked at their outlines (a flat interior
+  was never marked); nothing new appears elsewhere (truth check).
+- *No regression:* option off byte-identical to before the change.
+
+**Result: accepted, with the edge-detector's nature stated as limits.** One
+blind judge, the sunset pair unlabeled and shuffled:
+
+| Check | Judge (blind) | Numbers |
+|---|---|---|
+| Visible | "Instantly distinguishable" | Share of the frame marked at the same threshold: 21.1% → 1.0% |
+| Intended | The fixed strip is "the pattern a global brightness drift would produce… whole cloud bodies rather than boundaries"; the gradient strip "marks only thin edges and contours… the bank's undulating silhouette is traceable across all six panels", not random scatter | Core unit test: a constant added to every pixel leaves the edge image bit-identical |
+| Movers keep their outlines | | `truth`: 100% of marks on the current outline, nothing elsewhere |
+| No regression | | Option off: 0% changed, max diff 0 on three guard scenes; 308 tests; typecheck clean |
+
+**Limits, stated rather than hidden:** the gradient mask is a sparse edge
+detector — thin ridges, further thinned by the clean-up vote, so a mover's
+outline is marked sparsely (`truth`: 14% of the outline against the
+brightness mask's 41%); and diffuse fronts with soft edges respond weakly
+(the judge: the upper cloud mass the brightness mask fills is "almost
+absent"). It is a remedy for lighting and exposure drift, not a better
+general mask; the help sheet says so.
