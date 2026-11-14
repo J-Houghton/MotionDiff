@@ -1,0 +1,186 @@
+{
+  "scenes": [
+    {
+      "name": "traffic-flow-all",
+      "clip": "traffic",
+      "at": 3,
+      "frames": 6,
+      "every": 5,
+      "warmup": 2,
+      "display": "diff",
+      "params": {
+        "algorithm": "flow",
+        "flowShow": "colour",
+        "flowOnly": "all",
+        "flowGap": 2,
+        "flowRange": 40,
+        "flowSmoothing": 6,
+        "threshold": 15,
+        "frameOffset": 3,
+        "secondGap": 30
+      }
+    },
+    {
+      "name": "traffic-flow-mask",
+      "clip": "traffic",
+      "at": 3,
+      "frames": 6,
+      "every": 5,
+      "warmup": 2,
+      "display": "diff",
+      "params": {
+        "algorithm": "flow",
+        "flowShow": "colour",
+        "flowOnly": "mask",
+        "flowGap": 2,
+        "flowRange": 40,
+        "flowSmoothing": 6,
+        "threshold": 15,
+        "frameOffset": 3,
+        "secondGap": 30
+      }
+    },
+    {
+      "name": "crossing-flow-all",
+      "clip": "crossing",
+      "at": 8,
+      "frames": 6,
+      "every": 10,
+      "warmup": 6,
+      "display": "diff",
+      "params": {
+        "algorithm": "flow",
+        "flowShow": "colour",
+        "flowOnly": "all",
+        "flowGap": 2,
+        "flowRange": 30,
+        "flowSmoothing": 6,
+        "threshold": 20,
+        "frameOffset": 5
+      }
+    },
+    {
+      "name": "crossing-flow-fg",
+      "clip": "crossing",
+      "at": 8,
+      "frames": 6,
+      "every": 10,
+      "warmup": 6,
+      "display": "diff",
+      "params": {
+        "algorithm": "flow",
+        "flowShow": "colour",
+        "flowOnly": "foreground",
+        "absorbSeconds": 4,
+        "flowGap": 2,
+        "flowRange": 30,
+        "flowSmoothing": 6,
+        "threshold": 20,
+        "frameOffset": 5
+      }
+    },
+    {
+      "name": "river-flow-all",
+      "clip": "river",
+      "at": 3,
+      "frames": 6,
+      "every": 5,
+      "warmup": 2,
+      "display": "diff",
+      "params": {
+        "algorithm": "flow",
+        "flowShow": "colour",
+        "flowOnly": "all",
+        "flowGap": 2,
+        "flowRange": 25,
+        "flowSmoothing": 6,
+        "threshold": 15,
+        "frameOffset": 3,
+        "secondGap": 30
+      }
+    },
+    {
+      "name": "river-flow-mask",
+      "clip": "river",
+      "at": 3,
+      "frames": 6,
+      "every": 5,
+      "warmup": 2,
+      "display": "diff",
+      "params": {
+        "algorithm": "flow",
+        "flowShow": "colour",
+        "flowOnly": "mask",
+        "flowGap": 2,
+        "flowRange": 25,
+        "flowSmoothing": 6,
+        "threshold": 15,
+        "frameOffset": 3,
+        "secondGap": 30
+      }
+    },
+    {
+      "name": "clouds-flow-all",
+      "clip": "clouds",
+      "at": 6,
+      "frames": 6,
+      "every": 8,
+      "warmup": 4,
+      "display": "diff",
+      "params": {
+        "algorithm": "flow",
+        "flowShow": "colour",
+        "flowGap": 4,
+        "flowRange": 10,
+        "flowSmoothing": 15,
+        "threshold": 15,
+        "frameOffset": 3,
+        "secondGap": 30,
+        "absorbSeconds": 4,
+        "flowOnly": "all"
+      }
+    },
+    {
+      "name": "clouds-flow-mask",
+      "clip": "clouds",
+      "at": 6,
+      "frames": 6,
+      "every": 8,
+      "warmup": 4,
+      "display": "diff",
+      "params": {
+        "algorithm": "flow",
+        "flowShow": "colour",
+        "flowGap": 4,
+        "flowRange": 10,
+        "flowSmoothing": 15,
+        "threshold": 15,
+        "frameOffset": 3,
+        "secondGap": 30,
+        "absorbSeconds": 4,
+        "flowOnly": "mask"
+      }
+    },
+    {
+      "name": "clouds-flow-fg",
+      "clip": "clouds",
+      "at": 6,
+      "frames": 6,
+      "every": 8,
+      "warmup": 4,
+      "display": "diff",
+      "params": {
+        "algorithm": "flow",
+        "flowShow": "colour",
+        "flowGap": 4,
+        "flowRange": 10,
+        "flowSmoothing": 15,
+        "threshold": 15,
+        "frameOffset": 3,
+        "secondGap": 30,
+        "absorbSeconds": 4,
+        "flowOnly": "foreground"
+      }
+    }
+  ]
+}

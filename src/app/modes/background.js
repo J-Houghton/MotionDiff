@@ -131,6 +131,32 @@ const STATES = new WeakMap();
  * @param {number} [opts.fill] - Close radius for filling holes, 0 = off
  */
 export function renderBackground(renderer, opts) {
+  const data = renderer.dataFramebuffer(renderer.width, renderer.height);
+  const decision = updateBackground(renderer, opts);
+  // With a fill, the vote happens inside closeMask (see renderMask).
+  const fill = opts.fill || 0;
+  const final = fill > 0 ? closeMask(renderer, decision.tex, { clean: opts.clean, radius: fill }, 'background') : decision;
+  const clean = fill > 0 ? false : opts.clean;
+  maskDraw(renderer, final.tex, renderer.diffFramebuffer, { clean, output: opts.show });
+  maskDraw(renderer, final.tex, data, { clean, output: 'data' });
+}
+
+/**
+ * The model's state update and decision for this frame, without drawing
+ * anything a mode shows: what the background mode draws from, and what
+ * gates other measurements (optical flow's foreground gate).
+ *
+ * @param {*} renderer - WebGLRenderer
+ * @param {object} opts - renderBackground's, less show and fill
+ * @param {WebGLTexture} opts.mask - Motion mask, R > 0.5 where moving (learnMask)
+ * @param {number} opts.alpha - core backgroundAlpha
+ * @param {number} opts.holdStep - Media time since the previous frame, in holds
+ * @param {number} opts.threshold - Mean channel difference, 0..255
+ * @param {boolean} [opts.repeat] - The same frame again: recompute, do not advance
+ * @returns {{tex: *, fb: *, width: number, height: number}} R = 1 where
+ *   foreground, G = how far from the model (the vote is NOT applied)
+ */
+export function updateBackground(renderer, opts) {
   const gl = renderer.gl;
   const { width, height } = renderer;
 
@@ -138,7 +164,6 @@ export function renderBackground(renderer, opts) {
   const models = [renderer.target('background:model0', width, height, { float: true }), renderer.target('background:model1', width, height, { float: true })];
   const variances = [renderer.target('background:variance0', width, height, { float: true }), renderer.target('background:variance1', width, height, { float: true })];
   const decision = renderer.target('background:decision', width, height);
-  const data = renderer.dataFramebuffer(width, height);
 
   let state = STATES.get(renderer);
   if (!state || state.epoch !== renderer.epoch || models[0].fresh || models[1].fresh) {
@@ -191,13 +216,33 @@ export function renderBackground(renderer, opts) {
 
   state.empty = false;
   state.drawn = true;
+  return decision;
+}
 
-  // With a fill, the vote happens inside closeMask (see renderMask).
-  const fill = opts.fill || 0;
-  const final = fill > 0 ? closeMask(renderer, decision.tex, { clean: opts.clean, radius: fill }, 'background') : decision;
-  const clean = fill > 0 ? false : opts.clean;
-  maskDraw(renderer, final.tex, renderer.diffFramebuffer, { clean, output: opts.show });
-  maskDraw(renderer, final.tex, data, { clean, output: 'data' });
+/**
+ * Where not to learn this frame: what changed since one gap ago, anywhere,
+ * voted clean. The model update and the flow gate both take it.
+ *
+ * @param {import('./index.js').ModeFrame} frame
+ * @returns {{tex: *, fb: *, width: number, height: number}}
+ */
+export function learnMask(frame) {
+  const { gl: renderer, params } = frame;
+  const { width, height } = renderer;
+  const mask = renderer.target('background:mask', width, height);
+  const near = frame.ring.nearest(lookbackTime(frame.time, params.frameOffset, 0, 0), frame.time);
+  if (near >= 0) {
+    const layer = frame.ring.slotAt(near);
+    const raw = maskDifference(renderer, { layers: [layer, layer], threshold: params.threshold, blur: true });
+    maskDraw(renderer, raw.tex, mask.fb, { clean: true, output: 'data' });
+  } else {
+    // No history yet (the very first frame): nothing is known to be moving.
+    const gl = renderer.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, mask.fb);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+  return mask;
 }
 
 export default /** @type {import('./index.js').Mode} */ ({
@@ -225,21 +270,7 @@ export default /** @type {import('./index.js').Mode} */ ({
   ],
   render(frame) {
     const { gl: renderer, params } = frame;
-    const { width, height } = renderer;
-    const mask = renderer.target('background:mask', width, height);
-    // What changed since one gap ago, anywhere: that is where not to learn.
-    const near = frame.ring.nearest(lookbackTime(frame.time, params.frameOffset, 0, 0), frame.time);
-    if (near >= 0) {
-      const layer = frame.ring.slotAt(near);
-      const raw = maskDifference(renderer, { layers: [layer, layer], threshold: params.threshold, blur: true });
-      maskDraw(renderer, raw.tex, mask.fb, { clean: true, output: 'data' });
-    } else {
-      // No history yet (the very first frame): nothing is known to be moving.
-      const gl = renderer.gl;
-      gl.bindFramebuffer(gl.FRAMEBUFFER, mask.fb);
-      gl.clearColor(0, 0, 0, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-    }
+    const mask = learnMask(frame);
 
     renderBackground(renderer, {
       mask: mask.tex,

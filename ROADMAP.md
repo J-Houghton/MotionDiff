@@ -69,6 +69,7 @@ Ranked by visible effect for the effort.
 | Magnify sample that is not a face: *Sleeping Kitten*, plus the `kitten` reference clip | with this update | V-B3 |
 | History ribbons in measured flow colours (`historyShow: 'measured'`) | `5ab27a9` | V-B4 |
 | Fill holes in mask and background cut-outs (morphological close, `maskFill`) | with this update | V-B5 |
+| Flow gated by the mask or the background model (`flowOnly` on Optical flow) | with this update | V-B6; the gates' limits are in the help sheet |
 
 ## Deferred
 | Item | Why |

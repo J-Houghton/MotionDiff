@@ -1055,3 +1055,61 @@ hole-filler that finds no holes alters nothing, which the truth check
 confirms is the designed behaviour. An *open* (salt removal) was not built:
 the 3×3 vote already does that job. Samples keep fill off — it is a remedy
 for footage whose cut-outs are actually perforated, like `traffic`.
+
+### V-B6. Flow measured only on what moves (mask + flow, background + flow) — visual
+`flowOnly` on the Optical flow mode: `Everything` (today's behaviour),
+`Moving (mask)` — the three-frame mask gates the measured vectors before the
+running average, so colour, traces and arrows exist only on movers — and
+`Foreground (model)` — the background model's decision gates instead, so a
+slow drifter keeps its flow and a stopper's fades out as it is absorbed. The
+gate is downsampled to the working size by maximum and dilated by the solve
+window, so a mover's rim keeps its vectors; the gate multiplies confidence
+BEFORE smoothing, so gated places decay below the presence floor rather than
+blinking off. Design: docs/combined-modes.md §2–3.
+
+**Expectations, written before building:**
+- *On `traffic`, colour view, mask gate vs everything:* colour confined to the
+  vehicles; the faint speckle and smeared patches on the empty road are gone.
+  A blind judge tells the strips apart and says which rule each follows.
+- *On `crossing`, foreground gate:* flow colour on moving vehicles and
+  pedestrians only; the road, its markings and parked/absorbed cars carry
+  none.
+- *On `river` (everything moves):* the gates change little — the picture
+  stays a full field of flow apart from the still banks.
+- *Readouts stay honest:* with a gate on, the "share of frame" readout counts
+  only ungated cells, and the camera claim is omitted (under half the frame
+  measured: the ground is deliberately no longer measured, so the median no
+  longer speaks for the camera).
+- *No regression:* `flowOnly: 'all'` byte-identical to before the change on
+  the flow guard scenes; flow and schlieren parity probes still pass (the
+  solver itself is untouched; only its confidence is gated afterwards).
+
+**Result: accepted, with the gates' reach stated as limits.** One blind judge
+(traffic pair, river pair, clouds trio, unlabeled and shuffled):
+
+| Check | Clips | Judge (blind) | Numeric guard |
+|---|---|---|---|
+| Visible and intended | traffic | Told apart; the gated strip has "smaller, tighter blobs", the smeared upper-left mass separated and the stray streaks and left-edge specks removed; "the main big blobs are equally coloured in both" | |
+| Intended (re-registered): the two gates differ on slow drift | clouds | Ranked exactly as registered: ungated full, foreground gate keeps most of the cloud front (patchy), mask gate "essentially black". Mountains and empty sky stay black in all three | |
+| Readouts stay honest | traffic | | Gated: measured share 0.23 → 0.12 (only movers are measured); the camera claim stays omitted (share < 0.5) |
+| No regression | all nine flow guard scenes | | `flowOnly: 'all'`: 0% changed, max diff 0; 301 tests; typecheck clean |
+
+**Expectations that failed, kept as limits (in the help sheet):**
+- On `river` the mask gate does not "change little": the three-frame mask
+  resolves little of a surface that moves everywhere, and the gate eats much
+  of the measurement with it (the judge: large areas coloured ungated are
+  "black apart from patches" gated). The gate is for distinct movers on still
+  ground; on motion-everywhere footage it should stay off.
+- On `traffic` the gate also cost a few genuine small, distant movers (an
+  orange streak on the far road) that the mask had missed: a gate is only as
+  good as its mask.
+
+**Addendum, before any clouds strips were rendered.** The crossing strips show
+the foreground gate changing almost nothing there: flow's own "no better than
+still" test already blanks that background, so the expectation named a clip
+where the gate has no work. What distinguishes the two gates is slow drift:
+the three-frame mask misses what barely moves between its gaps, while the
+model never absorbs what keeps drifting. Re-registered on `clouds` (slow
+cloud flow, gap 4) before rendering it: with the mask gate much of the cloud
+front's colour disappears; with the foreground gate it stays close to
+ungated; the mountains and plain stay dark in all three.
