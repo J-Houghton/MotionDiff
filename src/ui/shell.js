@@ -93,7 +93,7 @@ const TEMPLATE = `
     <span class="clock"><time id="timeNow">0:00.00</time><span id="timeTotal"></span></span>
     <button type="button" id="btnRate" aria-label="Playback speed">1×</button>
     <button type="button" id="btnSplit" aria-pressed="false" aria-label="Split compare against the original">◧<span class="btn-word"> Split</span></button>
-    <button type="button" id="btnFlip" aria-label="Flip camera" hidden>⟲ Flip</button>
+    <button type="button" id="btnFlip" aria-label="Switch between front and back camera" hidden>⇄ Flip</button>
     <button type="button" id="btnRec" aria-pressed="false">● Rec</button>
     <button type="button" id="btnExit" class="immersive-only">✕ Exit</button>
   </div>
@@ -176,6 +176,17 @@ export function initShell({ root, session }) {
     const screen = window.innerWidth / window.innerHeight;
     const kept = Math.min(shape / screen, screen / shape);
     root.dataset.fit = (view.fill ?? kept >= 0.5) ? 'fill' : 'whole';
+    // Where the picture actually is inside a letterboxed viewfinder, so
+    // chrome that belongs to the picture (the split divider) can clip to it
+    // and cards can prefer the empty bands.
+    let picTop = 0;
+    let picSide = 0;
+    if (viewfinder && root.dataset.fit === 'whole') {
+      if (shape > screen) picTop = (1 - screen / shape) / 2 * 100;
+      else picSide = (1 - shape / screen) / 2 * 100;
+    }
+    stage.style.setProperty('--pic-top', `${picTop}%`);
+    stage.style.setProperty('--pic-side', `${picSide}%`);
     measureChrome();
     $('btnPanel').setAttribute('aria-expanded', String(view.panel));
     $('panel').inert = !view.panel;

@@ -128,7 +128,7 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .guide-close { background: none; border: 0; min-width: 44px; min-height: 44px; }
 .guide-steps { margin: 0; padding: 4px 12px 10px 28px; display: grid; gap: 7px; }
 .guide-steps li::marker { font: 500 11px/1 var(--mono); color: var(--soft); }
-.guide-title { display: flex; align-items: baseline; gap: 8px; }
+.guide-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
 .guide-title b { font: 500 12px/1.2 var(--mono); }
 .guide-title::before { content: ''; flex: none; align-self: center; width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--soft); }
 .guide-steps li[data-state='ok'] .guide-title::before { background: var(--ch-g); border-color: var(--ch-g); }
@@ -139,10 +139,17 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .guide-steps p { margin: 3px 0 0; font: italic 400 12px/1.3 var(--serif); color: var(--soft); }
 .guide-chip { position: absolute; z-index: 4; left: 10px; top: 10px; background: var(--card); color: var(--ink); border: 1px solid var(--ink); padding: 8px 12px; min-height: 38px; }
 #app[data-layout='viewfinder'] .guide, #app[data-layout='viewfinder'] .guide-chip { background: #000; border-color: var(--rule); box-shadow: none; left: 16px; top: auto; bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }
-#app[data-phone='true'] .guide, #app[data-phone='true'] .guide-chip { left: 8px; bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }
+/* start in the letterbox band under the action plate; a step already
+   satisfied drops its instructions, so a healthy card stays off the picture */
+#app[data-phone='true'] .guide, #app[data-phone='true'] .guide-chip { left: 8px; bottom: auto; top: calc(118px + env(safe-area-inset-top, 0px)); }
+#app[data-phone='true'] .guide-steps li[data-state='ok'] p { display: none; }
+/* the guide speaks the monitor's voice here, not the plate's */
+#app[data-layout='viewfinder'] .guide-head b { font: 700 17px/1 var(--cond); text-transform: uppercase; letter-spacing: 0.08em; }
+#app[data-layout='viewfinder'] .guide-steps p { font: 400 11px/1.4 var(--mono); font-style: normal; }
 
-/* direction legend: a hue wheel for views that colour by heading */
-.legend { position: absolute; z-index: 3; right: 10px; bottom: 10px; width: 76px; height: 76px; background: var(--card); border: 1px solid var(--rule); }
+/* direction legend: a hue wheel for views that colour by heading. A round
+   card: no dead corners around a round wheel */
+.legend { position: absolute; z-index: 3; right: 10px; bottom: 10px; width: 84px; height: 84px; border-radius: 50%; background: var(--card); border: 1px solid var(--ink); }
 .legend-wheel { position: absolute; inset: 6px; border-radius: 50%;
   -webkit-mask: radial-gradient(closest-side, transparent 52%, #000 54%); mask: radial-gradient(closest-side, transparent 52%, #000 54%); }
 .legend span { position: absolute; width: 14px; font: 500 13px/1 var(--mono); color: var(--ink); text-align: center; }
@@ -294,6 +301,8 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 #app[data-layout='viewfinder'][data-panel='open'] .legend { display: none; }
 #app[data-phone='true'] .legend { right: 8px; top: calc(126px + env(safe-area-inset-top)); }
 #app[data-layout='viewfinder'] .split::after { color: #000; }
+/* the divider belongs to the picture: clip it to the letterboxed image */
+#app[data-layout='viewfinder'] .split { top: var(--pic-top, 0%); bottom: var(--pic-top, 0%); }
 
 /* corner brackets: two sides of a square each */
 #app[data-layout='viewfinder'] .bracket { display: block; position: absolute; z-index: 2; width: 26px; height: 26px; border: 0 solid var(--accent); pointer-events: none; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }

@@ -94,9 +94,7 @@ export function initGuide({ stage, session }) {
     set('settle',
       problem === 'settling' ? 'wait' : 'ok',
       problem === 'settling' ? 'settling…' : '');
-    set('hold',
-      setup.held ? 'ok' : 'idle',
-      setup.held ? 'held — light the candle' : '');
+    set('hold', setup.held ? 'ok' : 'idle', setup.held ? 'reference held' : '');
   }
 
   function update() {

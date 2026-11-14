@@ -131,7 +131,7 @@ export function initRuler({ container, session }) {
     mark2.node.hidden = !secondUnits;
     if (secondUnits) {
       place(mark2.node, secondUnits);
-      mark2.tag.textContent = `2ND ${asMs(secondUnits)}`;
+      mark2.tag.textContent = `2ND GAP ${asMs(secondUnits)}`;
       mark2.node.setAttribute('aria-valuetext', asMs(secondUnits));
     }
 

@@ -3,7 +3,8 @@
 Status of everything planned for MotionDiff. Updated at the end of every working
 session. Statuses: **done**, **in progress**, **planned**, **deferred**.
 
-Last updated: 2026-11-13 (end of session 4: optical flow, particle traces, schlieren).
+Last updated: 2026-11-14 (session 5, Session A small tier: display work — legend,
+ruler, paused traces, arrows, mirror, setup guide; Session B updates separately).
 
 The governing rule for every item: lightweight, and easy to maintain and debug by hand.
 Visual work is accepted under the rules in `docs/development.md`; results are logged in
@@ -22,7 +23,9 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 |---|---|---|---|---|
 | Schlieren: hot air and gas made visible | **done**, session 4 | A candle plume appears where the video shows a still background (`candle-dots`, `plume`) | | `docs/schlieren.md`, verdict V7 |
 | Schlieren on a real phone, and on the owner's footage | **in progress** | The same, live from a phone camera; weak sources (a mug, a heater); natural backgrounds; a held reference | Small once footage exists | Waiting for the footage listed in `docs/schlieren.md` and for a deploy to test on a phone. Defaults (window, smoothing, sensitivity) may need tuning for phone noise and compression |
-| Schlieren: a step-by-step setup guide in the picture | planned | First-time users reach a working setup without the help sheet: background, steady camera, settle, hold | Small | Today: a status-line note, the Setup check view, help text |
+| Schlieren: a step-by-step setup guide in the picture | **done**, session 5 (Session A) | First-time users reach a working setup without the help sheet: background, steady camera, settle, hold | | Verdict IA5. A checklist card with live state dots from `pipeline.readings`; the live wiring waits on Session B's readings landing in master |
+| Mirror: the front camera flipped like a mirror, fullscreen | **done**, session 5 (Session A) | An installation where viewers see their own motion | | Verdict IA4. Display-only flip; the legend flips with it. Needs the owner's phone |
+| Camera zoom by pinch (owner's request) | **done**, session 5 (Session A) | Two fingers zoom the camera where the driver allows it | | In IA4. iOS Safari exposes no zoom control; needs the owner's phone |
 | Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. Would replace the experimental traces view on real footage |
 | Camera compensation (global motion, then subtract it) | planned | On `handheld`, `highway` and `river` (whose camera moves forward, as flow revealed) the scenery goes dark and only real movers remain, in every mode | Medium | The flow and its median shift exist; needs a zoom term for `river` |
 | Real-time stabiliser | planned, after compensation | `handheld` plays back steady | Medium | |
@@ -32,14 +35,14 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 | Item | Status | Expected visible effect, and on what footage | Effort | Notes |
 |---|---|---|---|---|
 | Particle traces (wind-map display) | **done**, session 4 | Streams that show direction and speed at a glance: two opposed streams on `traffic` | | `docs/particles.md`, verdict V6 |
-| Traces keep flowing while the video is paused | planned | A paused frame shows the streamlines of that instant, like a wind map of one moment | Small | Needs a redraw loop while paused |
-| Direction legend | planned | A hue wheel in the corner makes heading colours readable without the help text (flow, history, schlieren direction) | Small | Any clip |
+| Traces keep flowing while the video is paused | **done**, session 5 (Session A) | A paused frame shows the streamlines of that instant, like a wind map of one moment | | Verdict VA1; `docs/particles.md` on what the paused picture means |
+| Direction legend | **done**, session 5 (Session A) | A hue wheel in the corner makes heading colours readable without the help text (flow, history, schlieren direction) | | Verdict IA2 |
 | Traces drawn at display resolution | planned | Crisp hair-lines on a large screen instead of soft ones | Small-medium | Today they are drawn at the processing size |
 | Asynchronous readback of the particle field | planned only if a phone needs it | No visible effect; a frame-rate measure | Small | The one per-frame readback; fine on desktop, unmeasured on phones |
-| Second-gap marker on the time ruler | planned | The ruler shows the mask's second gap and the history length | Small | |
-| The time ruler in the Viewfinder layout | planned | Gap and trail read as a ruler in fullscreen and on phones, as on the Plate | Small | |
+| Second-gap marker on the time ruler | **done**, session 5 (Session A) | The ruler shows the mask's second gap and the history length | | Verdict IA3 |
+| The time ruler in the Viewfinder layout | **done**, session 5 (Session A) | Gap and trail read as a ruler in fullscreen and on phones, as on the Plate | | Verdict IA3 |
 | A sample clip for Magnify that is not a face | planned | A locked-off shot of something nearly still with a small rhythm (a sleeping animal breathing, a slight sway) opens in Magnify and shows it | Small | One search was started and stopped unfinished |
-| Arrow grid for flow | deferred | | | Particles and colour cover it |
+| Arrow grid for flow | **done**, session 5 (Session A) | Signed direction readable from one still, which particles were judged not to give | | Off the deferred list at the owner's decision. Verdict VA2 |
 
 ## Motion extraction
 Ranked by visible effect for the effort.
@@ -76,6 +79,20 @@ Ranked by visible effect for the effort.
 | Phase-based / Riesz magnification | Large shader cost and a separate patent |
 
 ## Done
+### Session 5 — Session A (Display)
+Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdicts.md`.
+
+| Item | Verdict | Notes |
+|---|---|---|
+| On-screen button for split compare | IA1 | Transport on desktop; top action plate on phones |
+| Direction legend (hue wheel) | IA2 | `ui/legend.js`; matches the shaders' hue() |
+| Time ruler: second gap, history length, ruler in the Viewfinder | IA3 | Markers rebuilt as 44 px phone hit boxes |
+| Traces keep flowing while paused | VA1 | Streamlines of the paused instant; `Session.pausedFlow` keeps tooling deterministic |
+| Arrow grid for flow | VA2 | Owner's decision, off the deferred list |
+| Mirror mode; camera zoom by pinch | IA4 | Needs the owner's phone |
+| Schlieren setup guide in the picture | IA5 | Live wiring waits on Session B's `pipeline.readings` in master |
+| This machine's tooling | — | Headless Chrome on WSL2 needs `--enable-unsafe-swiftshader` (a wrapper outside the repo); software GL, so timings here are not comparable |
+
 ### Session 4
 | Item | Commit | Notes |
 |---|---|---|

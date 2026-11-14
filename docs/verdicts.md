@@ -822,3 +822,29 @@ button grew to 44 px, min contrast 10.7 on the phone. The live wiring runs
 against the stub exactly as it will against Session B's readings; checking
 it against the real field needs their branch merged, and the camera flow
 end-to-end needs the owner's phone.
+
+### IA6. The tier's critique round — interface
+A fresh critic (who had not seen the work) reviewed nine screenshots of the
+new chrome against the brief. Verdict: "the two languages are real and
+distinct — nothing here reads as a generic component library", with three
+send-backs, all acted on:
+
+| Send-back | Fix |
+|---|---|
+| The phone split divider ran the full viewport, through the title and letterbox ("looks like a rendering bug") | The shell now publishes the letterboxed picture's bounds (`--pic-top`); the divider clips to them |
+| The phone setup guide covered the picture while the letterbox band above sat empty | The card starts in the band under the action plate, and a step already satisfied drops its instruction line, so a healthy card fits the band entirely |
+| GAP/TRAIL label collision on the phone ruler | Already fixed before the round (IA3's foot anchor); the critique screenshot predated it |
+
+Nits acted on: the guide card re-set in the Viewfinder's voice (condensed
+caps and mono, not the Plate's serif); "2ND" flag relabelled "2ND GAP";
+the desktop legend became a round, larger card (no dead corners, arrows
+legible); the guide's held state reads "reference held" (the green dot had
+contradicted "light the candle"); the camera Flip glyph is now ⇄.
+
+Nits noted, kept deliberately: the red GAP flag inside the amber Viewfinder
+stays — red-means-R-channel/gap is a cross-layout semantic shared with the
+R/G/B spread flags; the hatched band keeps its TRAIL/HISTORY marker as its
+label; the legend says direction only (brightness-means-speed stays in the
+help); the phone clock drops the total duration for space, as before this
+tier. Re-audited after the fixes: phone split and desktop flow states show
+nothing clipped, overlapping, off screen or under 44 px.
