@@ -121,6 +121,26 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 
 .vf, .bracket, .phone-only, .immersive-only, .panel-head { display: none; }
 
+/* schlieren setup guide: a checklist card in the picture */
+.guide { position: absolute; z-index: 4; left: 10px; top: 10px; width: min(300px, calc(100% - 20px)); background: var(--card); border: 1px solid var(--ink); box-shadow: 5px 6px 0 var(--shade); }
+.guide-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--rule); padding: 8px 4px 8px 12px; }
+.guide-head b { font: 600 16px/1 var(--serif); letter-spacing: -0.01em; }
+.guide-close { background: none; border: 0; min-width: 44px; min-height: 44px; }
+.guide-steps { margin: 0; padding: 4px 12px 10px 28px; display: grid; gap: 7px; }
+.guide-steps li::marker { font: 500 11px/1 var(--mono); color: var(--soft); }
+.guide-title { display: flex; align-items: baseline; gap: 8px; }
+.guide-title b { font: 500 12px/1.2 var(--mono); }
+.guide-title::before { content: ''; flex: none; align-self: center; width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--soft); }
+.guide-steps li[data-state='ok'] .guide-title::before { background: var(--ch-g); border-color: var(--ch-g); }
+.guide-steps li[data-state='warn'] .guide-title::before { background: var(--accent); border-color: var(--accent); }
+.guide-steps li[data-state='wait'] .guide-title::before { background: var(--rule); }
+.guide-steps li[data-state='warn'] .guide-title b { color: var(--accent); }
+.guide-detail { font: 400 11px/1 var(--mono); color: var(--soft); }
+.guide-steps p { margin: 3px 0 0; font: italic 400 12px/1.3 var(--serif); color: var(--soft); }
+.guide-chip { position: absolute; z-index: 4; left: 10px; top: 10px; background: var(--card); color: var(--ink); border: 1px solid var(--ink); padding: 8px 12px; min-height: 38px; }
+#app[data-layout='viewfinder'] .guide, #app[data-layout='viewfinder'] .guide-chip { background: #000; border-color: var(--rule); box-shadow: none; left: 16px; top: auto; bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }
+#app[data-phone='true'] .guide, #app[data-phone='true'] .guide-chip { left: 8px; bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }
+
 /* direction legend: a hue wheel for views that colour by heading */
 .legend { position: absolute; z-index: 3; right: 10px; bottom: 10px; width: 76px; height: 76px; background: var(--card); border: 1px solid var(--rule); }
 .legend-wheel { position: absolute; inset: 6px; border-radius: 50%;

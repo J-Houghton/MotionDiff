@@ -802,3 +802,23 @@ path ran (`cameraZoom()` null, `setCameraZoom` false, the status message).
 correctly), pinch zoom on the back camera (range, smoothness, whether the
 driver animates it), and that fullscreen sticks on the phone browser.
 
+
+### IA5. Schlieren: a step-by-step setup guide in the picture — interface
+**What it is.** A checklist card on the stage for the schlieren mode:
+textured background, camera still, let it settle, hold then light — each
+step with a live state dot and reading from the mode's own judgement of the
+setup, published as `pipeline.readings` (Session B's contract: mode
+'schlieren', setup {problem, usable, camera, noise, seen, held}). Opens by
+itself the first time schlieren meets a live camera; a Setup-guide chip
+reopens it; without readings (Session B's branch not yet merged, a mode
+reporting none, the Canvas 2D fallback) the steps show no live state, which
+is still the checklist.
+
+**Result:** audited at desktop and phone with the readings stubbed in three
+states: all-good (green dots, "72% measurable", "held — light the candle"),
+plain background (step 1 red with "12% measurable"), settling (step 3
+waiting). No overlap, nothing clipped, touch targets pass after the close
+button grew to 44 px, min contrast 10.7 on the phone. The live wiring runs
+against the stub exactly as it will against Session B's readings; checking
+it against the real field needs their branch merged, and the camera flow
+end-to-end needs the owner's phone.
