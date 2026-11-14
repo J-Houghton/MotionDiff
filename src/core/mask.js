@@ -64,6 +64,36 @@ export function thresholdMask(difference, threshold, out) {
   return out;
 }
 
+/**
+ * Threshold a difference with a per-pixel noise floor: a pixel moves when
+ * its difference clears the global threshold AND k standard deviations of
+ * its own noise, times √2 because a frame-to-frame difference carries two
+ * frames' noise where the variance was learnt against a stable mean.
+ *
+ * @param {Uint16Array} difference - From threeFrameDifference (channel sums, 0..765)
+ * @param {Float32Array} variance - Per pixel, of the mean channel difference
+ *   in 0..1 units (the background model's, core/background.js)
+ * @param {number} threshold - The global floor, mean channel difference 0..255
+ * @param {number} k - Standard deviations (BG_K in core/background.js)
+ * @param {boolean} blurred - Whether the frames were 3x3 box-blurred before
+ *   differencing: the blur averages nine pixels, so the noise in the
+ *   difference is a third of the learnt σ, and the bar scales with it
+ * @param {Uint8Array} out - 1 = moving, 0 = still
+ * @returns {Uint8Array} out
+ */
+export function thresholdMaskAuto(difference, variance, threshold, k, blurred, out) {
+  const floor = threshold * 3;
+  const scale = blurred ? 1 / 3 : 1;
+  const count = Math.min(out.length, difference.length);
+  for (let p = 0; p < count; p++) {
+    const d = difference[p];
+    // σ of the channel SUM: 3×255 × σ of the mean channel difference.
+    const noise = k * Math.sqrt(2 * variance[p]) * 765 * scale;
+    out[p] = d > 0 && d >= floor && d >= noise ? 1 : 0;
+  }
+  return out;
+}
+
 /** Votes needed by majority3x3: a simple majority of the nine cells. */
 export const MASK_VOTES = 5;
 /**

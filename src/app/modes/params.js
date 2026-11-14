@@ -43,6 +43,14 @@ export const TRAIL = {
 
 export const BLUR = { key: 'blurEnabled', label: 'Blur', type: 'toggle', default: false };
 
+/**
+ * Fill holes in a mask cut-out (morphological close radius; modes built on
+ * the mask share it). Lives here, not in mask.js: background.js needs it
+ * while its module evaluates, and mask.js and background.js import each
+ * other's functions — this file imports nothing, so it breaks that cycle.
+ */
+export const MASK_FILL = { key: 'maskFill', label: 'Fill holes', type: 'select', default: 0, options: { 'Off': 0, '1 px': 1, '2 px': 2 } };
+
 export const TINTS = [
   { key: 'rgbTintR', label: 'Tint R', type: 'color', default: '#ff0000', when: (p) => p.channelSpread > 0 },
   { key: 'rgbTintG', label: 'Tint G', type: 'color', default: '#00ff00', when: (p) => p.channelSpread > 0 },

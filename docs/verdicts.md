@@ -1113,3 +1113,55 @@ model never absorbs what keeps drifting. Re-registered on `clouds` (slow
 cloud flow, gap 4) before rendering it: with the mask gate much of the cloud
 front's colour disappears; with the foreground gate it stays close to
 ungated; the mountains and plain stay dark in all three.
+
+### V-B7. Per-pixel noise threshold for the mask (background model's variance) — visual
+`maskAuto` on the Motion mask mode: the background model's variance (which
+learns each pixel's own noise) sets a per-pixel floor of BG_K·σ·√2 — ×√2
+because a frame-to-frame difference carries two frames' noise where the model
+comparison carries one — and the global threshold becomes a floor under it,
+exactly the rule the background mode already decides by. The model and its
+variance are maintained the same way the flow gate maintains them
+(learnMask + updateBackground). Design: docs/combined-modes.md §6; roadmap
+motion-extraction item 2.
+
+**Expectations, written before building:**
+- *On `truth-noisy` (heavy sensor noise) at a LOW floor (threshold 8):* the
+  fixed mask is speckled all over the still background; the auto mask at the
+  same floor is as clean as the fixed mask at 20, while the square and discs
+  stay marked at least as fully as fixed-20 marks them. A blind judge tells
+  the strips apart and describes one as noise-speckled, the other as clean.
+- *On `night` (real low light, grain) at threshold 10:* fixed speckles on the
+  water and sky grain; auto suppresses the grain and keeps the walkers.
+- *On clean footage (`truth`):* auto at the default floor is near-identical
+  to fixed (the learnt variance sits at its minimum, whose √2 rule lands just
+  under the default floor).
+- *Truth check:* auto at floor 8 marks the square and disc outlines within a
+  few points of fixed-20's coverage, nothing elsewhere.
+- *No regression:* `maskAuto` off byte-identical to before the change.
+
+**Result: accepted after one correction round.** Fresh blind judge each round
+(the pairs unlabeled and shuffled; the round-2 judge knew nothing of round 1).
+
+*Round 1* (bar = BG_K·σ·√2): on `truth-noisy` clean and told apart at a
+glance, but the judge found the auto disc thinner than fixed-8's, and on
+`night` the walkers reduced to "thin edge outlines… red clothing largely
+missing". Cause, found and fixed rather than tuned around: the mask
+differences 3×3-blurred frames, which carry a third of the learnt (unblurred)
+noise, so the bar stood ~3× too high wherever the signal was low-contrast.
+
+*Round 2* (bar scaled by the blur, core and shader):
+
+| Check | Clip | Judge (blind, fresh) | Numbers |
+|---|---|---|---|
+| Visible and intended | truth-noisy, floor 8 | Fixed "has visibly more speckle… a denser cloud of dots"; auto "much cleaner… almost pure black"; "the bar and disc are about equally complete in both — no real loss of mover area" | Marks elsewhere 1.45% of marks (0.02% of coverage) vs fixed-8's 10%; outline coverage 42.8% vs fixed-20's 41.4%; disc filled 51.2 vs 50.2 |
+| Night keeps its movers | night, floor 10 | "Cannot tell them apart at a glance… completeness looks the same" — nothing visibly suppressed either: at this floor the fixed mask's background marks are real lights and reflections, not grain, so the auto bar rightly leaves them (as with V-B5's bees: nothing to fix, nothing changed) | |
+| Clean footage unchanged | truth, floor 20 | | Auto vs fixed byte-identical (the minimum learnt variance lands under the default floor) |
+| No regression | truth, truth-noisy, highway | | maskAuto off: 0% changed, max diff 0; 304 tests pass; typecheck clean |
+
+Not probed for shader parity (the auto path needs model state over frames);
+covered instead by the core unit tests (including the blur scaling) and the
+byte-identical clean-footage check against the fixed path.
+
+The night expectation half-failed honestly: auto "suppresses the grain" only
+where the marks are grain. Low-contrast movers survive the bar now; what
+survives of the night background is signal.

@@ -24,8 +24,8 @@ import {
   BG_HOLD_SECONDS, BG_K, BG_MIN_STEP, BG_VAR_INIT, BG_VAR_MAX, BG_VAR_MIN, backgroundAlpha,
 } from '../../core/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH } from '../../core/trails.js';
-import { GAP, THRESHOLD, TRAIL } from './params.js';
-import { MASK_FILL, closeMask, maskDifference, maskDraw } from './mask.js';
+import { GAP, MASK_FILL, THRESHOLD, TRAIL } from './params.js';
+import { closeMask, maskDifference, maskDraw } from './mask.js';
 import { lookbackTime } from '../../core/timebase.js';
 
 const DECIDE_FRAG = `#version 300 es
@@ -153,8 +153,9 @@ export function renderBackground(renderer, opts) {
  * @param {number} opts.holdStep - Media time since the previous frame, in holds
  * @param {number} opts.threshold - Mean channel difference, 0..255
  * @param {boolean} [opts.repeat] - The same frame again: recompute, do not advance
- * @returns {{tex: *, fb: *, width: number, height: number}} R = 1 where
- *   foreground, G = how far from the model (the vote is NOT applied)
+ * @returns {{tex: *, fb: *, width: number, height: number, variance: WebGLTexture}}
+ *   R = 1 where foreground, G = how far from the model (the vote is NOT
+ *   applied); `variance` is this frame's per-pixel noise texture (R, 0..1²)
  */
 export function updateBackground(renderer, opts) {
   const gl = renderer.gl;
@@ -216,7 +217,7 @@ export function updateBackground(renderer, opts) {
 
   state.empty = false;
   state.drawn = true;
-  return decision;
+  return Object.assign(decision, { variance: variances[write].tex });
 }
 
 /**

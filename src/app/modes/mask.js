@@ -14,9 +14,11 @@
  * The data output is the mask.
  */
 import { lookbackTime } from '../../core/timebase.js';
+import { BG_HOLD_SECONDS, BG_K, backgroundAlpha } from '../../core/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH } from '../../core/trails.js';
 import { MASK_VOTES } from '../../core/mask.js';
-import { GAP, THRESHOLD, TRAIL, asMs } from './params.js';
+import { GAP, MASK_FILL, THRESHOLD, TRAIL, asMs } from './params.js';
+import { learnMask, updateBackground } from './background.js';
 
 // Pass 1. Mirrors boxBlur (core/blur.js) on each frame, then
 // threeFrameDifference and thresholdMask (core/mask.js).
@@ -27,8 +29,11 @@ precision highp sampler2DArray;
 
 uniform sampler2D uCurrent;
 uniform sampler2DArray uRing;
+uniform sampler2D uVariance; // per-pixel noise (0..1 units), when uAuto == 1
 uniform ivec2 uLayers;      // ring layers of the two older frames
 uniform float uThreshold;   // mean channel difference, 0..255
+uniform float uK;           // standard deviations the difference must clear
+uniform int uAuto;          // 1 = per-pixel floor from uVariance (mirrors thresholdMaskAuto)
 uniform int uBlur;          // 1 = 3x3 box blur before differencing
 
 out vec4 fragColor;
@@ -70,6 +75,8 @@ void main() {
   vec3 d2 = abs(c - b);
   float difference = min(d1.r + d1.g + d1.b, d2.r + d2.g + d2.b); // channel sum, 0..765
   float moving = (difference > 0.0 && difference >= uThreshold * 3.0) ? 1.0 : 0.0;
+  // Blurred frames carry a third of the learnt noise (nine pixels averaged).
+  if (uAuto == 1 && difference < uK * sqrt(2.0 * texelFetch(uVariance, p, 0).r) * 765.0 * (uBlur == 1 ? 1.0 / 3.0 : 1.0)) moving = 0.0;
   fragColor = vec4(moving, difference / 765.0, 0.0, 1.0);
 }`;
 
@@ -176,6 +183,8 @@ export function closeMask(renderer, decision, opts, key = 'mask') {
  * @param {number[]} opts.layers - Ring layers of the two older frames
  * @param {number} opts.threshold - Mean channel difference, 0..255
  * @param {boolean} opts.blur
+ * @param {WebGLTexture} [opts.variance] - Per-pixel noise: the threshold
+ *   becomes max(global, BG_K·σ·√2), as in core thresholdMaskAuto
  * @returns {{tex: *, fb: *, width: number, height: number}} The target holding R = raw decision, G = strength
  */
 export function maskDifference(renderer, opts) {
@@ -184,12 +193,15 @@ export function maskDifference(renderer, opts) {
   // Targets before binds: creating one binds its texture, which would
   // disturb the units set up for a draw.
   const raw = renderer.target('mask:raw', width, height);
-  const difference = renderer.program('mask:difference', DIFFERENCE_FRAG, { uCurrent: 0, uRing: 1 });
+  const difference = renderer.program('mask:difference', DIFFERENCE_FRAG, { uCurrent: 0, uRing: 1, uVariance: 2 });
   gl.useProgram(difference.prog);
   renderer.bind(0, renderer.currentTexture);
   renderer.bind(1, renderer.ringTexture, true);
+  renderer.bind(2, opts.variance || renderer.currentTexture);
   gl.uniform2i(difference.u.uLayers, opts.layers[0], opts.layers[1]);
   gl.uniform1f(difference.u.uThreshold, opts.threshold);
+  gl.uniform1f(difference.u.uK, BG_K);
+  gl.uniform1i(difference.u.uAuto, opts.variance ? 1 : 0);
   gl.uniform1i(difference.u.uBlur, opts.blur ? 1 : 0);
   renderer.draw(raw.fb, width, height);
   return raw;
@@ -223,7 +235,7 @@ export function maskDraw(renderer, decision, framebuffer, opts) {
  * Both passes: fills the diff target with the picture and the data target
  * with the mask.
  * @param {*} renderer
- * @param {{layers: number[], threshold: number, blur: boolean, clean: boolean, show: 'cutout'|'solid', fill?: number}} opts - maskDifference's, plus clean, show and fill (close radius, 0 = off)
+ * @param {{layers: number[], threshold: number, blur: boolean, clean: boolean, show: 'cutout'|'solid', fill?: number, variance?: WebGLTexture}} opts - maskDifference's, plus clean, show and fill (close radius, 0 = off)
  */
 export function renderMask(renderer, opts) {
   const data = renderer.dataFramebuffer(renderer.width, renderer.height);
@@ -243,7 +255,8 @@ export function renderMask(renderer, opts) {
 export const SECOND_GAP = { key: 'secondGap', label: 'Second gap', type: 'range', min: 2, max: 120, step: 1, default: 30, format: asMs };
 export const MASK_BLUR = { key: 'maskBlur', label: 'Blur first', type: 'toggle', default: true };
 export const MASK_CLEAN = { key: 'maskClean', label: 'Clean up', type: 'toggle', default: true };
-export const MASK_FILL = { key: 'maskFill', label: 'Fill holes', type: 'select', default: 0, options: { 'Off': 0, '1 px': 1, '2 px': 2 } };
+export { MASK_FILL };
+export const MASK_AUTO = { key: 'maskAuto', label: 'Auto threshold', type: 'toggle', default: false };
 
 /** The second gap is always behind the first. */
 const secondGap = (params) => Math.max(params.secondGap, params.frameOffset + 1);
@@ -274,6 +287,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     'A stopped object disappears.',
     'For the first moments after loading or seeking there is no second frame yet, and it behaves like Raw.',
     'Fill holes closes gaps in a cut-out up to twice its size across, after the clean-up vote, without growing the cut-out.',
+    'Auto threshold learns each pixel\'s own noise (the background model\'s variance) and asks a difference to clear it as well as the set threshold, which becomes a floor: grainy footage cleans up without raising the threshold for the whole picture. The noise takes a second or two to be learnt.',
   ],
   data: { kind: 'mask', what: '1 where the pixel is moving, 0 where it is still; G holds the strength of the difference' },
   composite: true,
@@ -285,6 +299,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     MASK_BLUR,
     MASK_CLEAN,
     MASK_FILL,
+    MASK_AUTO,
     { key: 'maskShow', label: 'Show', type: 'select', default: 'cutout', options: { 'Cut-out': 'cutout', 'Solid mask': 'solid' } },
     TRAIL,
   ],
@@ -297,6 +312,16 @@ export default /** @type {import('./index.js').Mode} */ ({
       return false;
     }
 
+    // Auto threshold keeps the background model's variance learning, the
+    // same way the background mode and the flow gate do.
+    const model = params.maskAuto ? updateBackground(renderer, {
+      mask: learnMask(frame).tex,
+      alpha: backgroundAlpha(frame.stepMs, params.absorbSeconds),
+      holdStep: frame.stepMs / 1000 / BG_HOLD_SECONDS,
+      threshold: params.threshold,
+      repeat: frame.step === 'repeat',
+    }) : null;
+
     renderMask(renderer, {
       layers,
       threshold: params.threshold,
@@ -304,6 +329,7 @@ export default /** @type {import('./index.js').Mode} */ ({
       clean: params.maskClean,
       show: params.maskShow,
       fill: params.maskFill,
+      variance: model ? model.variance : undefined,
     });
 
     renderer.renderTrail({

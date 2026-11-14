@@ -52,7 +52,7 @@ Ranked by visible effect for the effort.
 |---|---|---|---|---|---|
 | | Dense optical flow | **done**, session 4 | Speed and heading per patch from one frame pair | | `docs/optical-flow.md`, verdict V5 |
 | 1 | Frozen reference frame ("difference from this moment") | planned | Everything that changed since the pin stays lit, however slowly it changed: the whole cloud bank on `sunset` | Small | One pinned ring layer and a key to pin. Schlieren's held reference is the same idea for shifts |
-| 2 | Per-pixel noise threshold | planned | On `night` and `truth-noisy` the mask is clean without touching the threshold | Medium | Threshold from the background model's variance, ×√2 for a difference |
+| 2 | Per-pixel noise threshold | **done**, Session B | On `night` and `truth-noisy` the mask is clean without touching the threshold | | `maskAuto` on the mask mode, V-B7; the bar scales with the pre-blur |
 | 3 | Combining several frame gaps | planned | On `traffic`, the slow far carriageway and the fast near one both show fully at one setting; in flow, slow and fast motion in one picture | Medium | Maximum over two or three gaps |
 | 4 | Magnify: per-level amplification | planned | On `face`, the pulse shows as a colour change of the skin without the amplified edges and noise | Medium-large | Biggest quality gain found in research |
 | 5 | Lighting normalisation (gradient-image differencing) | planned | On `sunset`, and on a camera with auto-exposure, a brightness change no longer lights the whole frame | Medium | Would also help schlieren under changing light |
@@ -70,6 +70,7 @@ Ranked by visible effect for the effort.
 | History ribbons in measured flow colours (`historyShow: 'measured'`) | `5ab27a9` | V-B4 |
 | Fill holes in mask and background cut-outs (morphological close, `maskFill`) | with this update | V-B5 |
 | Flow gated by the mask or the background model (`flowOnly` on Optical flow) | with this update | V-B6; the gates' limits are in the help sheet |
+| Per-pixel noise threshold (`maskAuto` on the mask mode) | with this update | V-B7 |
 
 ## Deferred
 | Item | Why |

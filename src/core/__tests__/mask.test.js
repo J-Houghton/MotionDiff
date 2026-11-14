@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MASK_VOTES_STRICT, dilate, erode, threeFrameDifference, thresholdMask, majority3x3 } from '../mask.js';
+import { MASK_VOTES_STRICT, dilate, erode, threeFrameDifference, thresholdMask, thresholdMaskAuto, majority3x3 } from '../mask.js';
 import { boxBlur } from '../blur.js';
 
 function makePixels(...pixels) {
@@ -240,5 +240,42 @@ describe('dilate and erode (the close that fills holes)', () => {
     expect(count(grown)).toBe(25);
     const shrunk = erode(rect(4, 3, 8, 6), W, H, 1, new Uint8Array(W * H));
     expect(shrunk).toEqual(rect(5, 4, 6, 4));
+  });
+});
+
+describe('thresholdMaskAuto (per-pixel noise floor)', () => {
+  const sigma = (levels) => (levels / 255) ** 2; // variance of a per-pixel σ in levels
+
+  it('a difference must clear its own noise as well as the global floor', () => {
+    // σ = 4 levels: 2.5·σ·√2 ≈ 14.1 mean-channel levels, far above a floor of 8.
+    const difference = Uint16Array.of(30, 60, 0);
+    const variance = Float32Array.of(sigma(4), sigma(4), sigma(4));
+    const out = thresholdMaskAuto(difference, variance, 8, 2.5, false, new Uint8Array(3));
+    expect(Array.from(out)).toEqual([0, 1, 0]); // 30 < noise ≈ 42 (sum units); 60 clears it; 0 never moves
+  });
+
+  it('where the pixel is quiet the global floor still rules', () => {
+    // σ = 1 level: the noise bar ≈ 10.6 in sum units, under a floor of 8·3 = 24.
+    const difference = Uint16Array.of(20, 24);
+    const variance = Float32Array.of(sigma(1), sigma(1));
+    const out = thresholdMaskAuto(difference, variance, 8, 2.5, false, new Uint8Array(2));
+    expect(Array.from(out)).toEqual([0, 1]);
+  });
+
+  it('blurred frames carry a third of the noise, so the bar drops with them', () => {
+    // σ = 4 levels: unblurred bar ≈ 42 in sum units, blurred ≈ 14.
+    const difference = Uint16Array.of(30, 30);
+    const variance = Float32Array.of((4 / 255) ** 2, (4 / 255) ** 2);
+    const sharp = thresholdMaskAuto(difference, variance, 8, 2.5, false, new Uint8Array(2));
+    const blurred = thresholdMaskAuto(difference, variance, 8, 2.5, true, new Uint8Array(2));
+    expect(Array.from(sharp)).toEqual([0, 0]);
+    expect(Array.from(blurred)).toEqual([1, 1]);
+  });
+
+  it('matches thresholdMask when the variance is zero', () => {
+    const difference = Uint16Array.of(0, 23, 24, 700);
+    const fixed = thresholdMask(difference, 8, new Uint8Array(4));
+    const auto = thresholdMaskAuto(difference, new Float32Array(4), 8, 2.5, false, new Uint8Array(4));
+    expect(Array.from(auto)).toEqual(Array.from(fixed));
   });
 });
