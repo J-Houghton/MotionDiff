@@ -201,7 +201,12 @@ export function initShell({ root, session }) {
     root.style.setProperty('--chrome-h', `${chrome}px`);
   }
   new ResizeObserver(measureChrome).observe(root.querySelector('.cap'));
-  window.addEventListener('resize', () => applyLayout());
+  window.addEventListener('resize', () => {
+    applyLayout();
+    // The margin-sharing rule holds through resizes too: a window narrowed
+    // with both open would shrink the picture below the size rule.
+    if (view.panel && readings.isOpen() && window.innerWidth < 1800) readings.close();
+  });
 
   function setTheme(theme) {
     document.documentElement.dataset.theme = theme;
