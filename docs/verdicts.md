@@ -720,5 +720,14 @@ motion mask, and the history length of motion history, so those lookbacks read
 as a picture like gap, spread and trail do. The ruler also appears in the
 Viewfinder layout (fullscreen and phones), where today only the Plate has it.
 
-**Result:** pending.
+**Result:** built. The second gap is an ink flag ("2ND", draggable, shown at
+its effective value: never nearer than the gap plus one frame); the history
+length reuses the hatched band with a "HISTORY" marker where trail modes
+show "TRAIL". Markers were restructured as transparent hit boxes with the
+2 px line as a pseudo-element, so on phones they grow to 44 px for thumbs —
+the audit's touch-target rule passes (it measures the element, which the old
+±9 px pseudo grab area failed). Viewfinder shows the ruler between scrub and
+transport at 72 px. Audited on the phone in motion history: min contrast
+5.63, no overlap, no clipping, no small targets. Screenshots in the tier's
+critique round.
 
