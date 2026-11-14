@@ -38,7 +38,7 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 | Particle traces (wind-map display) | **done**, session 4 | Streams that show direction and speed at a glance: two opposed streams on `traffic` | | `docs/particles.md`, verdict V6 |
 | Traces keep flowing while the video is paused | **done**, session 5 (Session A) | A paused frame shows the streamlines of that instant, like a wind map of one moment | | Verdict VA1; `docs/particles.md` on what the paused picture means |
 | Direction legend | **done**, session 5 (Session A) | A hue wheel in the corner makes heading colours readable without the help text (flow, history, schlieren direction) | | Verdict IA2 |
-| Traces drawn at display resolution | planned | Crisp hair-lines on a large screen instead of soft ones | Small-medium | Today they are drawn at the processing size |
+| Traces drawn at display resolution | **done**, session 5 (Session A) | Crisp hair-lines on a large screen instead of soft ones | | Verdict VA3, design `docs/display-layer.md`; arrows ride the same layer; phone frame rate unmeasured here |
 | Asynchronous readback of the particle field | planned only if a phone needs it | No visible effect; a frame-rate measure | Small | The one per-frame readback; fine on desktop, unmeasured on phones |
 | Second-gap marker on the time ruler | **done**, session 5 (Session A) | The ruler shows the mask's second gap and the history length | | Verdict IA3 |
 | The time ruler in the Viewfinder layout | **done**, session 5 (Session A) | Gap and trail read as a ruler in fullscreen and on phones, as on the Plate | | Verdict IA3 |

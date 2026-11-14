@@ -137,18 +137,25 @@ export function renderArrows(renderer, key, field, opts) {
     }
   }
 
+  // The picture target holds black; the arrows land on the canvas after the
+  // composite, crisp at the backing size (docs/display-layer.md).
   gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.pictureFramebuffer);
   gl.viewport(0, 0, width, height);
   gl.clearColor(0, 0, 0, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
 
   if (drawn > 0) {
-    const lines = renderer.program('arrows:lines', LINE_FRAG, {}, LINE_VERT);
-    gl.useProgram(lines.prog);
-    gl.uniform2f(lines.u.uPicture, width, height);
-    gl.uniform1i(lines.u.uHeadingColour, opts.colour === 'plain' ? 0 : 1);
-    gl.uniform3f(lines.u.uTint, 1, 1, 1);
-    renderer.drawLines(v, drawn * 6, renderer.pictureFramebuffer, width, height);
+    renderer.addOverlay((r) => {
+      const g = r.gl;
+      const lines = r.program('arrows:lines', LINE_FRAG, {}, LINE_VERT);
+      g.useProgram(lines.prog);
+      // Vertices are in picture coordinates; the larger viewport rasterises
+      // the same clip-space arrows as hairlines.
+      g.uniform2f(lines.u.uPicture, width, height);
+      g.uniform1i(lines.u.uHeadingColour, opts.colour === 'plain' ? 0 : 1);
+      g.uniform3f(lines.u.uTint, 1, 1, 1);
+      r.drawLines(v, drawn * 6, null, r.canvasWidth || width, r.canvasHeight || height);
+    });
   }
   return { drawn };
 }

@@ -18,6 +18,8 @@ const session = new Session({
   noFloat: query.has('nofloat'),
   processWidth: phone ? PHONE_DEFAULTS.processWidth : undefined,
   ringBudgetBytes: phone ? PHONE_DEFAULTS.ringBudgetBytes : undefined,
+  // Widest canvas backing for the crisp display layer (docs/display-layer.md).
+  displayCap: phone ? 1280 : 2048,
 });
 
 initShell({ root, session });

@@ -11,7 +11,7 @@
  * it reports a change.
  */
 import { MODES, getMode } from '../app/modes/index.js';
-import { TEST_CLIPS } from '../app/clips.js';
+import { TEST_CLIPS, getPreset } from '../app/clips.js';
 import { initPanel } from './panel.js';
 import { initRuler } from './ruler.js';
 import { initLegend } from './legend.js';
@@ -436,9 +436,10 @@ export function initShell({ root, session }) {
     samples.append(Object.assign(document.createElement('span'), { textContent: 'Samples' }));
     for (const clip of TEST_CLIPS) {
       const sample = button(clip.label, run(() => session.loadSample(clip)));
-      if (clip.mode) {
+      const preset = clip.preset ? getPreset(clip.preset) : null;
+      if (preset) {
         // Says which mode the sample opens in.
-        sample.append(Object.assign(document.createElement('small'), { textContent: getMode(clip.mode).label }));
+        sample.append(Object.assign(document.createElement('small'), { textContent: getMode(preset.params.algorithm).label }));
         sample.title = clip.credit || '';
       }
       samples.append(sample);

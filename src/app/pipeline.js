@@ -125,6 +125,9 @@ export class Pipeline {
     this._outputCanvas = outputCanvasEl;
     this._ringOptions = options.ringBudgetBytes ? { budgetBytes: options.ringBudgetBytes } : undefined;
     if (options.processWidth) this._processWidth = options.processWidth;
+    // Widest canvas backing the display layer may use (phones get less:
+    // trail memory and fill rate).
+    this._displayCap = options.displayCap || 2048;
     // 2D capture canvas: the worker fallback's frame source, and how
     // sampleBursts reads pixels for auto-configure on either path.
     this._capCanvas = document.createElement('canvas');
@@ -644,9 +647,24 @@ export class Pipeline {
       this.readings = frame.readings;
       if (this._hasMagnitude && this._currentMode === 'data') gl.renderDataView(mode.data.kind);
     }
+    // Crisp line work registered during render lands after the composite,
+    // at the canvas size (docs/display-layer.md).
+    gl.flushOverlays(this._currentMode);
 
     // Keep the ring warm in every mode so switching modes has history.
     this._storeCurrentFrame(time, step, mode);
+  }
+
+  /**
+   * The canvas element's CSS box in device pixels: the backing store may
+   * grow toward it so line work drawn after the composite is crisp
+   * (docs/display-layer.md). Pass 0 to pin the backing to the processing
+   * size (the filmstrip tool does, for comparable strips).
+   * @returns {boolean} Whether the backing size changed
+   */
+  setCanvasSize(cssWidth, cssHeight) {
+    if (!this._useWebGL || !this._glRenderer) return false;
+    return this._glRenderer.setCanvasSize(cssWidth, cssHeight, this._displayCap || 2048);
   }
 
   /** Keep the frame just captured as history for the frames that follow. */

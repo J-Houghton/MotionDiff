@@ -13,6 +13,7 @@ import { CanvasRecorder } from './exporter.js';
 import { render, renderBlank, renderMagnify } from './renderer.js';
 import { buildSourceProfile } from './source-profile.js';
 import { getMode } from './modes/index.js';
+import { getPreset } from './clips.js';
 import { analyzeSample } from '../core/analyze.js';
 
 /**
@@ -117,6 +118,12 @@ export class Session {
     this._pausedTickMs = 0;
     /** Tooling that steps frames deterministically turns this off. */
     this.pausedFlow = true;
+    /**
+     * The canvas backing follows the element's size so line work is crisp
+     * (docs/display-layer.md). Tooling that compares strips pins it off;
+     * call syncDisplayScale after changing.
+     */
+    this.displayScale = true;
     this._ctx2d = null;
 
     const { pipeline, video, canvas } = this;
@@ -134,6 +141,9 @@ export class Session {
 
     video.addEventListener('seeked', () => this._onSeeked());
     video.addEventListener('resize', () => this._onResize());
+    if (this.webgl && typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => this.syncDisplayScale()).observe(canvas);
+    }
     video.addEventListener('ended', () => { if (!video.loop) this._setPlaying(false); });
     document.addEventListener('visibilitychange', () => this._onVisibility());
     window.addEventListener('pagehide', () => this.audio.dispose());
@@ -170,6 +180,16 @@ export class Session {
     if (!this.webgl && !mode.worker) return `${mode.label} needs WebGL2`;
     if (this.webgl && mode.needsFloat && !this.floatTargets) return `${mode.label} needs float render targets, which this GPU lacks`;
     return null;
+  }
+
+  /**
+   * Apply a preset (PARAMETER_PRESETS, or a user-saved one): its params, and
+   * its display when it names one.
+   * @param {{name: string, display?: string, params: object}} preset
+   */
+  applyPreset(preset) {
+    if (preset.display) this.setDisplay(preset.display);
+    this.setParams({ ...preset.params });
   }
 
   setParams(params) {
@@ -238,6 +258,17 @@ export class Session {
     this._pausedRafId = requestAnimationFrame(tick);
   }
 
+  /** Follow the canvas element's size (or stop, when displayScale is off). */
+  syncDisplayScale() {
+    if (!this.webgl) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const changed = this.displayScale && rect.width > 0
+      ? this.pipeline.setCanvasSize(rect.width * dpr, rect.height * dpr)
+      : this.pipeline.setCanvasSize(0, 0);
+    if (changed) this._redrawIfPaused();
+  }
+
   _syncCanvasSize() {
     if (this.webgl) return;
     this.canvas.width = this.pipeline.width || 1;
@@ -271,8 +302,8 @@ export class Session {
    * @param {{label: string, url: string, mode?: string, params?: object, display?: string}} clip
    */
   loadSample(clip) {
-    if (clip.display) this.setDisplay(clip.display);
-    if (clip.mode) this.setParams({ ...clip.params, algorithm: clip.mode });
+    const preset = clip.preset ? getPreset(clip.preset) : null;
+    if (preset) this.applyPreset(preset);
     this._beginLoad();
     this.setStatus('Loading…', 'info');
     this._pendingSource = { kind: 'url', label: clip.label };
