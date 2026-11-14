@@ -104,5 +104,10 @@ read one frame late (a roadmap item).
   removed). Heading colours, the default, do show it.
 - Traces are drawn at the processing size and scaled up with the picture, so they are
   soft on a large display.
-- A paused video shows the traces frozen. Letting them keep flowing through the frozen
-  field (true streamlines of that instant) is on the roadmap.
+- A paused video keeps its traces flowing (session 5, Session A): the measured field of
+  the paused instant is frozen, and the particles keep being stepped through it on the
+  wall clock. What is drawn while paused is therefore the **streamlines** of that one
+  moment — the wind-map reading — where a playing video draws pathlines through a
+  changing field. The frame itself, and every other mode's feedback state, stays still:
+  the session redraws the frame as a repeat and only the particle step receives the
+  wall-clock time (`frame.pausedDt`, `mode.animates`).

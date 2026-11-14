@@ -84,7 +84,7 @@ export class Pipeline {
     // Per-frame context handed to the active mode's render(); reused.
     this._frame = {
       gl: null, ring: null, time: 0, step: 'first', dtMs: 0, stepMs: 0, trailAgeStep: 0,
-      params: this.params, display: 'diff', layers: [0, 0, 0],
+      pausedDt: 0, params: this.params, display: 'diff', layers: [0, 0, 0],
     };
     // A mode may say something about what it sees (frame.note): passed on to
     // the status line when the text changes, at most about once a second.
@@ -513,8 +513,12 @@ export class Pipeline {
    * @param {HTMLVideoElement} video
    * @param {{mediaTime?: number}} [frameMeta] - requestVideoFrameCallback
    *   metadata for the frame being presented, when the caller has it
+   * @param {{pausedDt?: number}} [extra] - pausedDt: wall-clock seconds since
+   *   the previous paused redraw, for displays that keep moving while the
+   *   video is paused (particle traces). 0 for a normal frame.
    */
-  process(video, frameMeta) {
+  process(video, frameMeta, extra) {
+    this._frame.pausedDt = extra?.pausedDt || 0;
     // The worker takes one frame at a time. Skip before stamping so the
     // next frame it does take is classified against the last one it saw.
     if (!this._useWebGL && this._workerBusy) return;

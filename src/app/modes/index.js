@@ -25,6 +25,11 @@
  *   lookback(params)  optional: [shortest, longest] distance it reads back
  *             into the frame ring, in 1/30 s. Defaults to the gap and the
  *             gap plus two spreads.
+ *   animates(params)  optional: true when the current settings make the
+ *             picture move on its own (particle traces). The session then
+ *             keeps redrawing while the video is paused, passing the wall
+ *             clock as frame.pausedDt; everything else in the frame is a
+ *             repeat.
  *   render(frame)  draw one frame on the GPU. `frame` is the context built
  *             in Pipeline.process: { gl, ring, time, step, dtMs, stepMs,
  *             trailAgeStep, params, display, layers, note }. dtMs is the media

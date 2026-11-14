@@ -685,7 +685,33 @@ so the still frame reads like a wind map of one moment.
   repeat) still hold for trails, history and background.
 - Applies to the optical flow mode's traces and schlieren's experimental traces.
 
-**Result:** pending.
+**Result: accepted.**
+
+Built as `mode.animates(params)` on flow (particles) and schlieren (traces), a
+wall-clock redraw loop in `Session._syncPausedFlow` (about 30 redraws a
+second, clamped after a backgrounded tab, idle while seeking), and a
+`frame.pausedDt` that only the particle step consumes: the frame stays a
+repeat, so trails, history, background and magnify advance by nothing.
+
+| Check | Result |
+|---|---|
+| Blind judge, two pairs of paused screenshots 2 s apart, unlabeled (K = before from master, W = after; the judge was not told which or what changed) | Pair K "identical to the eye… byte-for-byte identical". Pair W "visibly different… the same live scene re-rendered a moment later — the streak/filament texture has advected or regenerated while the overall coloured regions stayed roughly in place" — the written expectation, in the judge's own words |
+| The video frame does not move | `currentTime` identical at both captures (4.980238 s), element paused |
+| Before and after, numerically | Before: the two captures have the same SHA-256. After: they differ |
+| A mode that does not animate stays still | Posy, paused, same build: both captures one SHA-256 |
+| No regression while playing | Focused filmstrips (flow colour, flow particles both colourings, traffic particles, plume traces, dots traces) rendered on master and on this change: numeric guard below |
+
+Regression guard (`npm run filmstrip compare`, before = master): **all six
+strips byte-identical** — flow colour, flow particles (heading and plain),
+traffic particles, plume traces, dots traces: 0% of pixels changed, flicker
+and mean colour equal to the last digit.
+
+One thing the guard caught: the first after-render of `traffic-particles`
+differed by 7.8%, because the new wall-clock loop also ran between the
+filmstrip tool's paused steps and advanced the traces nondeterministically.
+`Session.pausedFlow` (public, default true) now lets tooling turn the
+feature off, and `scripts/page/render.js` does so before stepping; the
+re-render matched master exactly. Live behaviour is unchanged by the switch.
 
 ### VA2. Arrow grid for flow — visual
 **What it is.** A third display for the optical flow mode: a sparse regular

@@ -240,6 +240,7 @@ export default {
     ...TRACE_PARAMS.map((param) => ({ ...param, when: (p) => p.schlierenShow === 'traces' })),
   ],
   lookback: () => [2, 2],
+  animates: (params) => params.schlierenShow === 'traces',
   summary(params) {
     const side = 2 * params.schlierenWindow + 1;
     const against = params.schlierenHold ? 'a held reference' : `the average of the last ${(params.schlierenReference / 30).toFixed(1)} s`;
@@ -312,6 +313,7 @@ export default {
     renderParticles(renderer, 'schlieren', particleField(renderer, 'schlieren', smoothed), {
       dt: seconds,
       repeat,
+      pausedDt: frame.pausedDt,
       density: params.traceDensity,
       seconds: params.traceLength / 30,
       minSpeed: fullSpeed * FLOW_FLOOR,

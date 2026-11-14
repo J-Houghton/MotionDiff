@@ -85,6 +85,9 @@ if (args.synthetic) {
   md.session?.setManual?.(false);
   await md.pause();
 }
+// Displays that keep moving while paused (particle traces) would advance on
+// the wall clock between steps and make the strip nondeterministic: off.
+if (md.session && 'pausedFlow' in md.session) md.session.pausedFlow = false;
 if (args.width) { md.setWidth(args.width); await wait(200); }
 md.setDisplay(args.display || 'diff');
 md.setParams(args.params || {});

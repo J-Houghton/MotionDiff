@@ -140,6 +140,7 @@ export default {
     ...TRACE_PARAMS.map((param) => ({ ...param, when: (p) => p.flowShow === 'particles' })),
   ],
   lookback: (params) => [params.flowGap, params.flowGap],
+  animates: (params) => params.flowShow === 'particles',
   summary(params) {
     return `Compares frames ${asMs(params.flowGap)} apart. Full brightness is ${params.flowRange}% of the picture's width per second; a shorter gap follows faster motion, a longer one finds slower.`;
   },
@@ -166,6 +167,7 @@ export default {
       renderParticles(renderer, 'flow', field, {
         dt: frame.stepMs / 1000,
         repeat: frame.step === 'repeat',
+        pausedDt: frame.pausedDt,
         density: params.traceDensity,
         seconds: params.traceLength / 30,
         minSpeed: full * FLOW_FLOOR,
