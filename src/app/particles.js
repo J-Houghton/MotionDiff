@@ -136,6 +136,9 @@ export function particleField(renderer, key, velocity) {
  * @param {object} opts
  * @param {number} opts.dt - Media time since the previous frame, seconds
  * @param {boolean} [opts.repeat] - The same frame again: redraw, do not step
+ * @param {number} [opts.pausedDt] - Wall-clock seconds since the previous
+ *   paused redraw: on a repeat, step the particles by this through the
+ *   frozen field (the streamlines of that instant) instead of standing still
  * @param {number} opts.density - Particles per 1,000 picture pixels
  * @param {number} opts.seconds - How long a trace stays visible
  * @param {number} opts.minSpeed - Picture pixels per second below which nothing is drawn
@@ -174,9 +177,11 @@ export function renderParticles(renderer, key, field, opts) {
     }
   }
 
-  if (!(opts.repeat && state.drawn)) {
+  const flowing = opts.repeat && opts.pausedDt > 0;
+  if (!(opts.repeat && state.drawn) || flowing) {
+    const dt = flowing ? opts.pausedDt : opts.dt;
     state.buffers = readField(renderer, field, state.buffers);
-    const moving = stepParticles(state.particles, { width: field.width, height: field.height, values: state.buffers.values, stride: 4 }, opts.dt, {
+    const moving = stepParticles(state.particles, { width: field.width, height: field.height, values: state.buffers.values, stride: 4 }, dt, {
       width, height, minSpeed: opts.minSpeed, fullSpeed: opts.fullSpeed, gain: opts.gain,
     });
     const { segments } = state.particles;
@@ -197,7 +202,7 @@ export function renderParticles(renderer, key, field, opts) {
     const fade = renderer.program('particles:fade', FADE_FRAG, { uTrail: 0 });
     gl.useProgram(fade.prog);
     renderer.bind(0, from.tex);
-    gl.uniform1f(fade.u.uKeep, traceFade(opts.dt, opts.seconds));
+    gl.uniform1f(fade.u.uKeep, traceFade(dt, opts.seconds));
     renderer.draw(to.fb, width, height);
 
     const lines = renderer.program('particles:lines', LINE_FRAG, {}, LINE_VERT);

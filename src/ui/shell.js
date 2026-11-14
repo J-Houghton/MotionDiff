@@ -14,6 +14,8 @@ import { MODES, getMode } from '../app/modes/index.js';
 import { TEST_CLIPS } from '../app/clips.js';
 import { initPanel } from './panel.js';
 import { initRuler } from './ruler.js';
+import { initLegend } from './legend.js';
+import { initGuide } from './guide.js';
 import { initKeys, SHORTCUTS } from './keys.js';
 
 const RATES = [0.25, 0.5, 1, 1.5, 2];
@@ -59,6 +61,7 @@ const TEMPLATE = `
     <div class="vf vf-actions chrome">
       <button type="button" id="btnSource2">Source</button>
       <button type="button" id="btnParams">Params</button>
+      <button type="button" id="btnSplit2" aria-pressed="false" aria-label="Split compare against the original">Split</button>
     </div>
 
     <div class="empty" id="empty">
@@ -89,7 +92,8 @@ const TEMPLATE = `
     <button type="button" id="btnForward" aria-label="Step forward one frame">▸</button>
     <span class="clock"><time id="timeNow">0:00.00</time><span id="timeTotal"></span></span>
     <button type="button" id="btnRate" aria-label="Playback speed">1×</button>
-    <button type="button" id="btnFlip" aria-label="Flip camera" hidden>⟲ Flip</button>
+    <button type="button" id="btnSplit" aria-pressed="false" aria-label="Split compare against the original">◧<span class="btn-word"> Split</span></button>
+    <button type="button" id="btnFlip" aria-label="Switch between front and back camera" hidden>⇄ Flip</button>
     <button type="button" id="btnRec" aria-pressed="false">● Rec</button>
     <button type="button" id="btnExit" class="immersive-only">✕ Exit</button>
   </div>
@@ -150,6 +154,7 @@ export function initShell({ root, session }) {
     immersive: false,   // fullscreen viewfinder on a desktop
     hidden: false,      // H: picture only
     fill: null,         // viewfinder: true = crop to fill, false = show it all, null = decide by shape
+    mirror: false,      // front camera shown as a mirror
     panel: !phone.matches,
     scrubbing: false,
   };
@@ -162,6 +167,7 @@ export function initShell({ root, session }) {
     root.dataset.immersive = String(view.immersive && !phone.matches);
     root.dataset.panel = view.panel ? 'open' : 'closed';
     root.dataset.hidden = String(view.hidden);
+    root.dataset.mirror = String(view.mirror);
     root.dataset.source = session.loaded ? 'ready' : 'empty';
     // In the viewfinder the picture fills the screen, cropping what does not
     // fit, unless that would lose more than half of it (a landscape clip on
@@ -170,6 +176,17 @@ export function initShell({ root, session }) {
     const screen = window.innerWidth / window.innerHeight;
     const kept = Math.min(shape / screen, screen / shape);
     root.dataset.fit = (view.fill ?? kept >= 0.5) ? 'fill' : 'whole';
+    // Where the picture actually is inside a letterboxed viewfinder, so
+    // chrome that belongs to the picture (the split divider) can clip to it
+    // and cards can prefer the empty bands.
+    let picTop = 0;
+    let picSide = 0;
+    if (viewfinder && root.dataset.fit === 'whole') {
+      if (shape > screen) picTop = (1 - screen / shape) / 2 * 100;
+      else picSide = (1 - shape / screen) / 2 * 100;
+    }
+    stage.style.setProperty('--pic-top', `${picTop}%`);
+    stage.style.setProperty('--pic-side', `${picSide}%`);
     measureChrome();
     $('btnPanel').setAttribute('aria-expanded', String(view.panel));
     $('panel').inert = !view.panel;
@@ -213,6 +230,8 @@ export function initShell({ root, session }) {
     const on = view.split && session.loaded;
     split.hidden = !on;
     $('tagOriginal').hidden = $('tagMode').hidden = !on;
+    $('btnSplit').setAttribute('aria-pressed', String(on));
+    $('btnSplit2').setAttribute('aria-pressed', String(on));
     // The video lies over the canvas, transparent (see .frame video in
     // main.css). Showing the original is making it opaque, clipped to the
     // left of the split or not at all.
@@ -237,6 +256,47 @@ export function initShell({ root, session }) {
     view.splitAt = Math.min(0.97, Math.max(0.03, view.splitAt + step));
     applySplit();
   });
+
+  // ── Pinch zoom for a camera ─────────────────────────────────
+  // Two fingers on the picture drive the camera's own zoom where the driver
+  // exposes one (most phone back cameras; iOS Safari exposes none).
+  const pinch = { pointers: new Map(), startDist: 0, startZoom: 1, active: false, warned: false, busy: false };
+  stage.addEventListener('pointerdown', (event) => {
+    if (session.source?.kind !== 'camera') return;
+    if (event.target.closest('.split, button, .panel, .sheet, input')) return;
+    pinch.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinch.pointers.size !== 2) return;
+    const info = session.cameraZoom();
+    if (!info) {
+      if (!pinch.warned) session.setStatus('This camera exposes no zoom control', 'info');
+      pinch.warned = true;
+      return;
+    }
+    const [a, b] = [...pinch.pointers.values()];
+    pinch.active = true;
+    pinch.startDist = Math.hypot(a.x - b.x, a.y - b.y);
+    pinch.startZoom = info.value;
+  });
+  stage.addEventListener('pointermove', (event) => {
+    if (!pinch.pointers.has(event.pointerId)) return;
+    pinch.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (!pinch.active || pinch.busy || pinch.pointers.size !== 2) return;
+    const [a, b] = [...pinch.pointers.values()];
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    if (!(pinch.startDist > 0 && dist > 0)) return;
+    const zoom = pinch.startZoom * (dist / pinch.startDist);
+    pinch.busy = true;
+    session.setCameraZoom(zoom).then((ok) => {
+      pinch.busy = false;
+      if (ok) session.setStatus(`Zoom ${(session.cameraZoom()?.value ?? zoom).toFixed(1)}×`, 'info');
+    });
+  });
+  const endPinch = (event) => {
+    pinch.pointers.delete(event.pointerId);
+    if (pinch.pointers.size < 2) pinch.active = false;
+  };
+  stage.addEventListener('pointerup', endPinch);
+  stage.addEventListener('pointercancel', endPinch);
 
   // ── Mode caption ────────────────────────────────────────────
   function applyMode() {
@@ -267,6 +327,8 @@ export function initShell({ root, session }) {
   // ── Source info, transport ──────────────────────────────────
   function applySource() {
     const { source, pipeline } = session;
+    // The mirror stands only while the front camera is the source.
+    if (view.mirror && !(source?.kind === 'camera' && session.cameraFacing === 'user')) view.mirror = false;
     if (pipeline.width && pipeline.height) {
       stage.style.setProperty('--aspect', `${pipeline.width} / ${pipeline.height}`);
       stage.style.setProperty('--ar', String(pipeline.width / pipeline.height));
@@ -281,7 +343,7 @@ export function initShell({ root, session }) {
     scrub.hidden = session.loaded && session.isLive; // nothing to seek in a live source
     $('timeTotal').textContent = !session.loaded ? '' : session.isLive ? ' · live' : ` / ${formatTime(session.duration, false)}`;
     for (const id of ['btnBack', 'btnForward', 'btnRate']) $(id).disabled = !session.loaded || session.isLive;
-    $('btnPlay').disabled = $('btnRec').disabled = !session.loaded;
+    $('btnPlay').disabled = $('btnRec').disabled = $('btnSplit').disabled = $('btnSplit2').disabled = !session.loaded;
     applyLayout();
     applySplit();
   }
@@ -343,7 +405,17 @@ export function initShell({ root, session }) {
     const row = document.createElement('div');
     row.className = 'sources-row';
     row.append(button('Open a file…', () => fileInput.click(), primary === 'file' ? 'primary' : ''));
-    if (navigator.mediaDevices?.getUserMedia) row.append(button('Camera', run(() => session.loadCamera()), primary === 'camera' ? 'primary' : ''));
+    if (navigator.mediaDevices?.getUserMedia) {
+      row.append(button('Camera', run(() => { view.mirror = false; session.loadCamera(); }), primary === 'camera' ? 'primary' : ''));
+      // Mirror: the front camera, flipped like a mirror, fullscreen — an
+      // installation where viewers see their own motion.
+      row.append(button('Mirror', run(() => {
+        view.mirror = true;
+        session.loadCamera('user');
+        if (!phone.matches && !view.immersive) actions.fullscreen();
+        else applyLayout();
+      })));
+    }
     if (navigator.mediaDevices?.getDisplayMedia && !phone.matches) row.append(button('Screen', run(() => session.loadScreen())));
 
     const url = document.createElement('form');
@@ -414,6 +486,8 @@ export function initShell({ root, session }) {
   // ── Actions (buttons and keys share them) ───────────────────
   const panel = initPanel({ container: $('paneHost'), session });
   const ruler = initRuler({ container: $('ruler'), session });
+  const legend = initLegend({ stage, session });
+  const guide = initGuide({ stage, session });
 
   const actions = {
     toggle: () => session.toggle(),
@@ -480,6 +554,8 @@ export function initShell({ root, session }) {
   click('btnForward', () => actions.step(1));
   click('btnRate', () => session.setRate(RATES[(RATES.indexOf(session.rate) + 1) % RATES.length] || 1));
   click('btnRec', actions.record);
+  click('btnSplit', actions.split);
+  click('btnSplit2', actions.split);
   click('btnFlip', () => session.flipCamera());
   const cycleMode = (direction) => actions.mode((MODES.indexOf(session.mode) + direction + MODES.length) % MODES.length);
   click('vfPrev', () => cycleMode(-1));
@@ -499,9 +575,9 @@ export function initShell({ root, session }) {
   // ── React to the session ────────────────────────────────────
   session.on((event) => {
     if (event === 'status') showStatus();
-    else if (event === 'source') { applySource(); applyMode(); panel.refresh(); }
+    else if (event === 'source') { applySource(); applyMode(); panel.refresh(); legend.update(); guide.update(); }
     else if (event === 'play' || event === 'recording') { applyPlay(); if (event === 'recording') panel.rebuild(); }
-    else if (event === 'params' || event === 'display') { applyMode(); ruler.update(); panel.refresh(); applySource(); }
+    else if (event === 'params' || event === 'display') { applyMode(); ruler.update(); panel.refresh(); applySource(); legend.update(); guide.update(); }
     else if (event === 'time') applyTime();
     else if (event === 'busy') root.dataset.busy = String(session.busy);
   });

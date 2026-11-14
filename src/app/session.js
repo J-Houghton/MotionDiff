@@ -113,6 +113,10 @@ export class Session {
     this._seekToken = 0;
     this._sampling = false;
     this._toolStepping = false;
+    this._pausedRafId = null;   // redraw loop for displays that move while paused
+    this._pausedTickMs = 0;
+    /** Tooling that steps frames deterministically turns this off. */
+    this.pausedFlow = true;
     this._ctx2d = null;
 
     const { pipeline, video, canvas } = this;
@@ -196,6 +200,42 @@ export class Session {
 
   _redrawIfPaused() {
     if (this.loaded && this.video.paused) this._process();
+    this._syncPausedFlow();
+  }
+
+  /**
+   * Displays that keep moving while the video is paused (particle traces,
+   * `mode.animates`) are redrawn on the wall clock: the frame is a repeat,
+   * so nothing else advances, and the traces flow through the frozen field —
+   * the streamlines of that instant. Runs only while such a display is up.
+   */
+  _syncPausedFlow() {
+    const want = this.loaded && this.webgl && this.video.paused
+      && this.pausedFlow && !this.manual && !this._sampling && !this._toolStepping
+      && Boolean(this.mode.animates?.(this.pipeline.params));
+    if (want === (this._pausedRafId !== null)) return;
+    if (!want) {
+      cancelAnimationFrame(this._pausedRafId);
+      this._pausedRafId = null;
+      return;
+    }
+    this._pausedTickMs = 0;
+    const tick = (now) => {
+      this._pausedRafId = null;
+      if (!this.loaded || !this.video.paused || !this.pausedFlow || !this.mode.animates?.(this.pipeline.params)) return;
+      this._pausedRafId = requestAnimationFrame(tick);
+      if (this.video.seeking) return;
+      const dt = this._pausedTickMs > 0 ? (now - this._pausedTickMs) / 1000 : 0;
+      // About 30 redraws a second is enough for a trace; a long gap (a
+      // backgrounded tab) is clamped so the traces resume instead of leaping.
+      if (dt < 0.03) {
+        if (dt === 0) this._pausedTickMs = now;
+        return;
+      }
+      this._pausedTickMs = now;
+      this.pipeline.process(this.video, undefined, { pausedDt: Math.min(dt, 0.1) });
+    };
+    this._pausedRafId = requestAnimationFrame(tick);
   }
 
   _syncCanvasSize() {
@@ -239,17 +279,49 @@ export class Session {
     return this._loadVideo(clip.url, false);
   }
 
-  async loadCamera() {
+  /** @param {'user'|'environment'} [facing] - Which camera; default the one used last */
+  async loadCamera(facing) {
     if (!navigator.mediaDevices?.getUserMedia) {
       this.setStatus('This browser has no camera access (it needs HTTPS)', 'error');
       return;
     }
+    if (facing) this._facingMode = facing;
     try {
       this.setStatus('Requesting camera…', 'info');
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: this._facingMode }, audio: false });
       await this._loadStream(stream, 'camera');
     } catch {
       this.setStatus('Camera access denied', 'error');
+    }
+  }
+
+  get cameraFacing() { return this._facingMode; }
+
+  /**
+   * The camera's zoom control, or null when the source is not a camera or
+   * its driver exposes none (iOS Safari exposes none).
+   * @returns {{min: number, max: number, step: number, value: number}|null}
+   */
+  cameraZoom() {
+    const track = this._stream?.getVideoTracks?.()[0];
+    const caps = track?.getCapabilities?.();
+    if (this.source?.kind !== 'camera' || !caps || !('zoom' in caps) || !caps.zoom) return null;
+    const { min = 1, max = 1, step = 0.1 } = caps.zoom;
+    if (!(max > min)) return null;
+    return { min, max, step: step || 0.1, value: track.getSettings?.().zoom ?? min };
+  }
+
+  /** @returns {Promise<boolean>} false when the camera has no zoom */
+  async setCameraZoom(value) {
+    const info = this.cameraZoom();
+    if (!info) return false;
+    const track = this._stream.getVideoTracks()[0];
+    const zoom = Math.min(info.max, Math.max(info.min, value));
+    try {
+      await track.applyConstraints({ advanced: [{ zoom }] });
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -496,6 +568,7 @@ export class Session {
     if (this.playing === playing) return;
     this.playing = playing;
     this._emit('play');
+    this._syncPausedFlow();
   }
 
   async play() {

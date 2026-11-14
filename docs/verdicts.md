@@ -629,3 +629,222 @@ the 49 MB candle clip after 1.0 to 1.4 s). The picker passes the interface audit
 desktop and phone sizes. Rejected after rendering: the intersection in Optical flow
 (dim, the vehicles move too far per frame). Not checked: loading on a phone or a slow
 connection, and browsers other than Chrome (the candle clip is a QuickTime file).
+
+---
+
+## Session A (Display)
+
+Session 5, display work: `src/ui/` and how results are drawn. Branch
+`session-a-display`.
+
+### IA1. On-screen button for split compare — interface
+Split compare (the S key) gets a visible control: a Split button in the transport
+on the Plate and in the fullscreen Viewfinder, and in the top action plate on
+phones, where the transport row has no room for it. Active state by `aria-pressed`
+and the accent fill; the split handle widened to 44 px on phones.
+
+**Result:** audit passes with split on at desktop (1440×700: no overlap, no
+clipping, min contrast 5.6) and phone (390×844, touch targets all ≥ 44 px,
+min contrast 11.5). Screenshots in the tier's critique round.
+
+### IA2. Direction legend — interface
+A hue wheel in the picture's corner, shown while the current view colours by
+heading (optical flow colour view and heading-coloured traces, motion history
+direction, schlieren direction), so the colours read without the help sheet.
+The wheel must match the shaders' hue(): right red, down yellow-green, left
+cyan, up violet — arrows on the wheel say so. Hidden in the data display, when
+nothing is loaded, and (like all chrome) when idle in the Viewfinder.
+
+**Result:** built as `ui/legend.js` (a CSS conic gradient turned a quarter
+turn so hue 0 sits at the right, matching `hue()` in the shaders; four arrow
+glyphs in the wheel's hole). Audit passes in the states that show it: flow
+colour on the Plate (min contrast 5.97, nothing clipped, overlapping or off
+screen), history direction on the phone (11.46, touch targets unaffected —
+the legend is not interactive). In the Viewfinder it sits under the meta
+plate, clear of the brackets and the bottom bar, and yields to the open
+panel. Screenshots in the tier's critique round.
+
+### VA1. Traces keep flowing while the video is paused — visual
+**What it is.** A paused frame holds the measured velocity field of that
+instant; the particle traces keep being stepped through it on the wall clock,
+so the still frame reads like a wind map of one moment.
+
+**Expected effect, written before building:**
+- *On `traffic`, optical flow with particle traces, paused:* two screenshots of
+  the paused picture a second or two apart are visibly different: the traces
+  have flowed on along the same streams (same two opposed directions, same
+  regions). Today the two screenshots are identical.
+- *The video frame itself does not change* while paused: the original under the
+  traces (overlay display) is pixel-identical between the two moments.
+- *The streams stay where the motion was:* no traces appear over the still
+  background while paused (the frozen field is zero there).
+- *Resume is clean:* stepping or playing on after a paused spell shows no seam,
+  pile-up or flash; trails fade as they did before.
+- *No regression:* with traces hidden (colour view) a paused frame is as still
+  as today; other modes untouched; the feedback-state rules (recompute on
+  repeat) still hold for trails, history and background.
+- Applies to the optical flow mode's traces and schlieren's experimental traces.
+
+**Result: accepted.**
+
+Built as `mode.animates(params)` on flow (particles) and schlieren (traces), a
+wall-clock redraw loop in `Session._syncPausedFlow` (about 30 redraws a
+second, clamped after a backgrounded tab, idle while seeking), and a
+`frame.pausedDt` that only the particle step consumes: the frame stays a
+repeat, so trails, history, background and magnify advance by nothing.
+
+| Check | Result |
+|---|---|
+| Blind judge, two pairs of paused screenshots 2 s apart, unlabeled (K = before from master, W = after; the judge was not told which or what changed) | Pair K "identical to the eye… byte-for-byte identical". Pair W "visibly different… the same live scene re-rendered a moment later — the streak/filament texture has advected or regenerated while the overall coloured regions stayed roughly in place" — the written expectation, in the judge's own words |
+| The video frame does not move | `currentTime` identical at both captures (4.980238 s), element paused |
+| Before and after, numerically | Before: the two captures have the same SHA-256. After: they differ |
+| A mode that does not animate stays still | Posy, paused, same build: both captures one SHA-256 |
+| No regression while playing | Focused filmstrips (flow colour, flow particles both colourings, traffic particles, plume traces, dots traces) rendered on master and on this change: numeric guard below |
+
+Regression guard (`npm run filmstrip compare`, before = master): **all six
+strips byte-identical** — flow colour, flow particles (heading and plain),
+traffic particles, plume traces, dots traces: 0% of pixels changed, flicker
+and mean colour equal to the last digit.
+
+One thing the guard caught: the first after-render of `traffic-particles`
+differed by 7.8%, because the new wall-clock loop also ran between the
+filmstrip tool's paused steps and advanced the traces nondeterministically.
+`Session.pausedFlow` (public, default true) now lets tooling turn the
+feature off, and `scripts/page/render.js` does so before stepping; the
+re-render matched master exactly. Live behaviour is unchanged by the switch.
+
+### VA2. Arrow grid for flow — visual
+**What it is.** A third display for the optical flow mode: a sparse regular
+grid of arrows over the picture, each showing the measured heading, with
+length proportional to speed (at the set speed range), hidden where confidence
+is low or nothing is measured. Reverses the roadmap's deferral at the owner's
+decision: arrows give a reading a still frame can carry unambiguously, which
+plain traces were judged not to (session 4).
+
+**Expected effect, written before building:**
+- *On `flow` (known truth):* arrows in the band point right, on the block
+  down-left, around the disc square to the radius; arrow length near the
+  disc's rim is visibly longer (about three times) than a third of the way
+  out. No arrows on the still background, none inside the flat centre where
+  nothing is measured.
+- *On `traffic`:* the two carriageways carry arrows in opposite directions; a
+  judge reads both directions and the faster lane from one still frame.
+- *Against the colour view and the traces, blind:* the judge tells the three
+  apart, reads direction from a single arrow still without a colour key, and
+  does not find the arrows to obscure the picture more than the traces do.
+- *Known limits for the help text:* an arrow is the mean of its cell, so a
+  boundary between movers blends; arrows are drawn at a fixed grid, not on
+  objects; speeds beyond the range setting clip at full length.
+- *No regression:* colour and particle displays unchanged (numeric guard on
+  their filmstrips).
+
+**Result: accepted.**
+
+Built as `app/arrows.js` (reads the same reduced field the particles read;
+3 segments per arrow drawn with the line machinery; arrows centred on a
+28 px grid, hidden below the presence and speed floors) behind an "Arrow
+grid" option in the flow mode's Show select. The blind judge was given the
+three displays unlabeled (Q = colour, J = particles, X = arrows) on the
+known-truth `flow` clip and on `traffic`, with the plain footage:
+
+| Check | Judge (blind) |
+|---|---|
+| Tells the three apart | "Trivially distinguishable at a glance: solid fields vs. fine streaks vs. discrete arrows" |
+| Direction from a single still, `flow` | Band "arrows all pointing right"; square "arrows pointing diagonally down-left"; disc "arrows arranged tangentially… i.e. clockwise rotation". "Most confident from a single frame: X. The arrowheads give signed direction with no legend needed" — the particles' known 180° ambiguity named unprompted |
+| Length means speed, disc | "Rim marks are noticeably longer… marks nearer the centre shrink to short stubs… a small empty patch at the very centre with no mark at all… exactly the velocity profile of rigid rotation, readable from one frame" |
+| `traffic` from one still | Two carriageways opposite ways, "the right/approaching side is faster in every method… longest arrows in X, with speed growing toward the bottom of the frame" |
+| Not cluttered | "Nothing is cluttered; X errs on too little ink, not too much". Rankings: direction X > J > Q; speed J > X > Q; pleasantness J > Q > X |
+| No regression | The colour and particle strips of the same moments are byte-identical to master (VA1's guard table covers them) |
+
+Defect the judge found, kept and added to the help text: the sparse grid
+undersamples small and slow movers (distant traffic "reduce[s] to a handful
+of faint specks"). The particles stay the default display. (Housekeeping:
+the renderer file itself landed one commit early, unwired, inside IA2's
+commit.)
+
+### IA3. Time ruler: the mask's second gap and the history length; the ruler in the Viewfinder — interface
+The ruler learns two more markers: the second gap of the modes built on the
+motion mask, and the history length of motion history, so those lookbacks read
+as a picture like gap, spread and trail do. The ruler also appears in the
+Viewfinder layout (fullscreen and phones), where today only the Plate has it.
+
+**Result:** built. The second gap is an ink flag ("2ND", draggable, shown at
+its effective value: never nearer than the gap plus one frame); the history
+length reuses the hatched band with a "HISTORY" marker where trail modes
+show "TRAIL". Markers were restructured as transparent hit boxes with the
+2 px line as a pseudo-element, so on phones they grow to 44 px for thumbs —
+the audit's touch-target rule passes (it measures the element, which the old
+±9 px pseudo grab area failed). Viewfinder shows the ruler between scrub and
+transport at 72 px. Audited on the phone in motion history: min contrast
+5.63, no overlap, no clipping, no small targets. Screenshots in the tier's
+critique round.
+
+
+### IA4. Mirror mode, and camera zoom by pinch — interface
+**What it is.** A Mirror source button: the front camera, flipped like a
+mirror, fullscreen viewfinder — an installation where viewers see their own
+motion. The flip is display-only (CSS on the video and canvas): nothing
+measured changes, and the direction legend flips with the picture so its
+arrows and hues keep telling the truth about what is on screen. The mirror
+stands only while the front camera is the source (flipping to the back
+camera or loading a clip removes it). And, at the owner's request: two
+fingers on the picture drive the camera's own zoom where the driver exposes
+one (`track.getCapabilities().zoom`), with a status readout; a camera
+without a zoom control says so once (iOS Safari exposes none).
+
+**Result:** verified with headless Chrome's fake camera: the Mirror button
+loads the user-facing camera into the fullscreen viewfinder with the canvas
+flipped (`matrix(-1, 0, 0, 1, 0, 0)`; the fake camera's burnt-in timestamp
+reads backwards); the fake camera has no zoom capability, so the graceful
+path ran (`cameraZoom()` null, `setCameraZoom` false, the status message).
+**Needs the owner's eyes on a real phone:** the real front camera in Mirror
+(including a heading-coloured mode, to see the flipped legend read
+correctly), pinch zoom on the back camera (range, smoothness, whether the
+driver animates it), and that fullscreen sticks on the phone browser.
+
+
+### IA5. Schlieren: a step-by-step setup guide in the picture — interface
+**What it is.** A checklist card on the stage for the schlieren mode:
+textured background, camera still, let it settle, hold then light — each
+step with a live state dot and reading from the mode's own judgement of the
+setup, published as `pipeline.readings` (Session B's contract: mode
+'schlieren', setup {problem, usable, camera, noise, seen, held}). Opens by
+itself the first time schlieren meets a live camera; a Setup-guide chip
+reopens it; without readings (Session B's branch not yet merged, a mode
+reporting none, the Canvas 2D fallback) the steps show no live state, which
+is still the checklist.
+
+**Result:** audited at desktop and phone with the readings stubbed in three
+states: all-good (green dots, "72% measurable", "held — light the candle"),
+plain background (step 1 red with "12% measurable"), settling (step 3
+waiting). No overlap, nothing clipped, touch targets pass after the close
+button grew to 44 px, min contrast 10.7 on the phone. The live wiring runs
+against the stub exactly as it will against Session B's readings; checking
+it against the real field needs their branch merged, and the camera flow
+end-to-end needs the owner's phone.
+
+### IA6. The tier's critique round — interface
+A fresh critic (who had not seen the work) reviewed nine screenshots of the
+new chrome against the brief. Verdict: "the two languages are real and
+distinct — nothing here reads as a generic component library", with three
+send-backs, all acted on:
+
+| Send-back | Fix |
+|---|---|
+| The phone split divider ran the full viewport, through the title and letterbox ("looks like a rendering bug") | The shell now publishes the letterboxed picture's bounds (`--pic-top`); the divider clips to them |
+| The phone setup guide covered the picture while the letterbox band above sat empty | The card starts in the band under the action plate, and a step already satisfied drops its instruction line, so a healthy card fits the band entirely |
+| GAP/TRAIL label collision on the phone ruler | Already fixed before the round (IA3's foot anchor); the critique screenshot predated it |
+
+Nits acted on: the guide card re-set in the Viewfinder's voice (condensed
+caps and mono, not the Plate's serif); "2ND" flag relabelled "2ND GAP";
+the desktop legend became a round, larger card (no dead corners, arrows
+legible); the guide's held state reads "reference held" (the green dot had
+contradicted "light the candle"); the camera Flip glyph is now ⇄.
+
+Nits noted, kept deliberately: the red GAP flag inside the amber Viewfinder
+stays — red-means-R-channel/gap is a cross-layout semantic shared with the
+R/G/B spread flags; the hatched band keeps its TRAIL/HISTORY marker as its
+label; the legend says direction only (brightness-means-speed stays in the
+help); the phone clock drops the total duration for space, as before this
+tier. Re-audited after the fixes: phone split and desktop flow states show
+nothing clipped, overlapping, off screen or under 44 px.

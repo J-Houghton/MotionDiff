@@ -74,9 +74,12 @@ export function initRuler({ container, session }) {
   const markB = marker('ruler-mark-b', 'channelSpread', 'RGB spread', (p) => p.frameOffset + p.channelSpread * 2, (units) => (units - session.params.frameOffset) / 2);
   const markG = el('div', 'ruler-mark ruler-mark-g');
   markG.append(el('b'));
+  // The second frame the mask compares against (always behind the gap).
+  const mark2 = marker('ruler-mark-2', 'secondGap', 'Second gap', (p) => Math.max(p.secondGap, p.frameOffset + 1), (units) => units);
   const markTrail = marker('ruler-mark-trail', 'trailLength', 'Trail length', (p) => p.trailLength, (units) => units);
+  const markHistory = marker('ruler-mark-trail', 'historyLength', 'History length', (p) => p.historyLength, (units) => units);
 
-  track.append(trail, ticks, axis, ...labels, markTrail.node, markB.node, markG, markR.node, now);
+  track.append(trail, ticks, axis, ...labels, markTrail.node, markHistory.node, markB.node, markG, mark2.node, markR.node, now);
   container.append(track, readout);
 
   const place = (node, units) => { node.style.right = `${Math.min(100, ((units * UNIT_SECONDS) / span) * 100)}%`; };
@@ -99,7 +102,14 @@ export function initRuler({ container, session }) {
 
     const spread = has('channelSpread') ? params.channelSpread : 0;
     const trailUnits = has('trailLength') ? params.trailLength : 0;
-    const reach = Math.max((params.frameOffset + spread * 2) * 1.2, trailUnits * 1.1) * UNIT_SECONDS;
+    const historyUnits = has('historyLength') ? params.historyLength : 0;
+    const secondUnits = has('secondGap') ? Math.max(params.secondGap, params.frameOffset + 1) : 0;
+    const reach = Math.max(
+      (params.frameOffset + spread * 2) * 1.2,
+      secondUnits * 1.2,
+      trailUnits * 1.1,
+      historyUnits * 1.1,
+    ) * UNIT_SECONDS;
     span = SPANS.find((s) => s >= reach) || SPANS[SPANS.length - 1];
     labels[0].textContent = `−${span} s`;
     labels[1].textContent = `−${span / 2} s`;
@@ -118,12 +128,25 @@ export function initRuler({ container, session }) {
       markB.node.setAttribute('aria-valuetext', `${asMs(spread)} per channel`);
     }
 
-    trail.hidden = markTrail.node.hidden = !has('trailLength');
-    if (has('trailLength')) {
-      trail.style.width = `${Math.min(100, ((trailUnits * UNIT_SECONDS) / span) * 100)}%`;
-      place(markTrail.node, trailUnits);
-      markTrail.tag.textContent = `TRAIL ${asMs(trailUnits)}`;
-      markTrail.node.setAttribute('aria-valuetext', asMs(trailUnits));
+    mark2.node.hidden = !secondUnits;
+    if (secondUnits) {
+      place(mark2.node, secondUnits);
+      mark2.tag.textContent = `2ND GAP ${asMs(secondUnits)}`;
+      mark2.node.setAttribute('aria-valuetext', asMs(secondUnits));
+    }
+
+    // One hatched band: how long a mark stays in the picture (the trail, or
+    // the history of the modes built on the mask).
+    const bandUnits = trailUnits || historyUnits;
+    trail.hidden = !bandUnits;
+    markTrail.node.hidden = !trailUnits;
+    markHistory.node.hidden = !historyUnits;
+    if (bandUnits) {
+      trail.style.width = `${Math.min(100, ((bandUnits * UNIT_SECONDS) / span) * 100)}%`;
+      const mark = trailUnits ? markTrail : markHistory;
+      place(mark.node, bandUnits);
+      mark.tag.textContent = `${trailUnits ? 'TRAIL' : 'HISTORY'} ${asMs(bandUnits)}`;
+      mark.node.setAttribute('aria-valuetext', asMs(bandUnits));
     }
   }
 
