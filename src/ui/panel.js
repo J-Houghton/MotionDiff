@@ -150,7 +150,7 @@ export function initPanel({ container, session }) {
     look.addBinding(ui, 'preset', { label: 'Preset', options: presetOptions() }).on('change', (event) => {
       const preset = event.value && findPreset(event.value);
       if (!preset) return;
-      session.setParams(preset.params);
+      session.applyPreset(preset);
       session.setStatus(`Preset: ${preset.name}`, 'success');
     });
     look.addButton({ title: 'Save current as preset…' }).on('click', () => {
