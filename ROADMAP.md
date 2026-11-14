@@ -3,9 +3,14 @@
 Status of everything planned for MotionDiff. Updated at the end of every working
 session. Statuses: **done**, **in progress**, **planned**, **deferred**.
 
-Last updated: 2026-11-14 (session 5. Session A small tier: display work — legend,
-ruler, paused traces, arrows, mirror, setup guide. Session B small tier: flow
-readouts, too-fast warning, JSDoc type check, magnify sample).
+Last updated: 2026-11-14 (session 5. Session A: display small and medium tiers
+(legend, ruler, paused traces, arrows, mirror, setup guide, readings panel,
+display-resolution layer). Session B: measurement small and medium tiers (flow
+readouts and warning, JSDoc type check, magnify sample; measured ribbon colours,
+hole filling, flow gates, per-pixel threshold, lighting normalisation, magnify
+quiet gate). Both sessions stopped before the large tier at the owner's
+instruction; camera compensation waits on the shared-stage pipeline design,
+docs/combined-modes.md §8).
 
 The governing rule for every item: lightweight, and easy to maintain and debug by hand.
 Visual work is accepted under the rules in `docs/development.md`; results are logged in
@@ -28,7 +33,7 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 | Mirror: the front camera flipped like a mirror, fullscreen | **done**, session 5 (Session A) | An installation where viewers see their own motion | | Verdict IA4. Display-only flip; the legend flips with it. Needs the owner's phone |
 | Camera zoom by pinch (owner's request) | **done**, session 5 (Session A) | Two fingers zoom the camera where the driver allows it | | In IA4. iOS Safari exposes no zoom control; needs the owner's phone |
 | Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. Would replace the experimental traces view on real footage |
-| Camera compensation (global motion, then subtract it) | planned | On `handheld`, `highway` and `river` (whose camera moves forward, as flow revealed) the scenery goes dark and only real movers remain, in every mode | Medium | The flow and its median shift exist; needs a zoom term for `river` |
+| Camera compensation (global motion, then subtract it) | planned | On `handheld`, `highway` and `river` (whose camera moves forward, as flow revealed) the scenery goes dark and only real movers remain, in every mode | Medium | The flow and its median shift exist (`pipeline.readings.camera`); deliberately waits for the shared-stage pipeline restructure, docs/combined-modes.md §8 |
 | Real-time stabiliser | planned, after compensation | `handheld` plays back steady | Medium | |
 | Sonification | done; **deferred** beyond keeping it working | | | Could be driven by flow speed and heading |
 
