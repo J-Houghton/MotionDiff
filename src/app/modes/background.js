@@ -25,7 +25,7 @@ import {
 } from '../../core/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH } from '../../core/trails.js';
 import { GAP, THRESHOLD, TRAIL } from './params.js';
-import { maskDifference, maskDraw } from './mask.js';
+import { MASK_FILL, closeMask, maskDifference, maskDraw } from './mask.js';
 import { lookbackTime } from '../../core/timebase.js';
 
 const DECIDE_FRAG = `#version 300 es
@@ -128,6 +128,7 @@ const STATES = new WeakMap();
  * @param {boolean} [opts.repeat] - The same frame again: recompute, do not advance
  * @param {boolean} opts.clean - 3x3 majority vote on the foreground
  * @param {'cutout'|'solid'} opts.show
+ * @param {number} [opts.fill] - Close radius for filling holes, 0 = off
  */
 export function renderBackground(renderer, opts) {
   const gl = renderer.gl;
@@ -191,8 +192,12 @@ export function renderBackground(renderer, opts) {
   state.empty = false;
   state.drawn = true;
 
-  maskDraw(renderer, decision.tex, renderer.diffFramebuffer, { clean: opts.clean, output: opts.show });
-  maskDraw(renderer, decision.tex, data, { clean: opts.clean, output: 'data' });
+  // With a fill, the vote happens inside closeMask (see renderMask).
+  const fill = opts.fill || 0;
+  const final = fill > 0 ? closeMask(renderer, decision.tex, { clean: opts.clean, radius: fill }, 'background') : decision;
+  const clean = fill > 0 ? false : opts.clean;
+  maskDraw(renderer, final.tex, renderer.diffFramebuffer, { clean, output: opts.show });
+  maskDraw(renderer, final.tex, data, { clean, output: 'data' });
 }
 
 export default /** @type {import('./index.js').Mode} */ ({
@@ -214,6 +219,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     { key: 'absorbSeconds', label: 'Absorb after', type: 'range', min: 0.5, max: 20, step: 0.5, default: 4, format: (v) => `${v} s` },
     THRESHOLD,
     { key: 'maskShow', label: 'Show', type: 'select', default: 'cutout', options: { 'Cut-out': 'cutout', 'Solid mask': 'solid' } },
+    MASK_FILL,
     GAP,
     TRAIL,
   ],
@@ -243,6 +249,7 @@ export default /** @type {import('./index.js').Mode} */ ({
       repeat: frame.step === 'repeat',
       clean: true,
       show: params.maskShow,
+      fill: params.maskFill,
     });
 
     renderer.renderTrail({

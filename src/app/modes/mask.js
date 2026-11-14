@@ -106,6 +106,68 @@ void main() {
   else fragColor = vec4(texelFetch(uCurrent, p, 0).rgb * moving, 1.0);
 }`;
 
+// Mirrors dilate and erode (core/mask.js): min or max of the decisions in a
+// square window, strength carried through the same min/max. Outside the
+// image a dilate sees "not set" and an erode "set" (both: skip the cell), so
+// a close neither grows in from the border nor eats shapes touching it.
+const MORPH_FRAG = `#version 300 es
+precision highp float;
+
+uniform sampler2D uMask;    // R = decision, G = strength
+uniform int uRadius;
+uniform int uMode;          // 0 = dilate, 1 = erode
+
+out vec4 fragColor;
+
+void main() {
+  ivec2 size = textureSize(uMask, 0);
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  vec2 picked = uMode == 0 ? vec2(0.0) : vec2(1.0);
+  for (int dy = -2; dy <= 2; dy++) {
+    for (int dx = -2; dx <= 2; dx++) {
+      if (abs(dx) > uRadius || abs(dy) > uRadius) continue;
+      ivec2 q = p + ivec2(dx, dy);
+      if (q.x < 0 || q.y < 0 || q.x >= size.x || q.y >= size.y) continue;
+      vec2 cell = texelFetch(uMask, q, 0).rg;
+      picked = uMode == 0 ? max(picked, cell) : min(picked, cell);
+    }
+  }
+  fragColor = vec4(picked, 0.0, 1.0);
+}`;
+
+/**
+ * Vote, then close: the 3x3 vote first (so speckle is gone before anything
+ * dilates), then dilate and erode by `radius`, which fills holes up to twice
+ * the radius across without growing the cut-out. Returns a decision texture
+ * for maskDraw with `clean: false`.
+ *
+ * @param {*} renderer
+ * @param {WebGLTexture} decision - R = 0 or 1, G = strength
+ * @param {{clean: boolean|number, radius: number}} opts
+ * @param {string} [key] - Names this caller's targets
+ * @returns {{tex: *, fb: *, width: number, height: number}}
+ */
+export function closeMask(renderer, decision, opts, key = 'mask') {
+  const gl = renderer.gl;
+  const { width, height } = renderer;
+  // Targets before binds.
+  const voted = renderer.target(`${key}:voted`, width, height);
+  const dilated = renderer.target(`${key}:dilated`, width, height);
+  const closed = renderer.target(`${key}:closed`, width, height);
+  maskDraw(renderer, decision, voted.fb, { clean: opts.clean, output: 'data' });
+  const morph = renderer.program('mask:morph', MORPH_FRAG, { uMask: 0 });
+  const pass = (source, target, mode) => {
+    gl.useProgram(morph.prog);
+    renderer.bind(0, source.tex);
+    gl.uniform1i(morph.u.uRadius, opts.radius);
+    gl.uniform1i(morph.u.uMode, mode);
+    renderer.draw(target.fb, width, height);
+  };
+  pass(voted, dilated, 0);
+  pass(dilated, closed, 1);
+  return closed;
+}
+
 /**
  * Pass 1 for the frame in the renderer's current texture.
  *
@@ -161,21 +223,27 @@ export function maskDraw(renderer, decision, framebuffer, opts) {
  * Both passes: fills the diff target with the picture and the data target
  * with the mask.
  * @param {*} renderer
- * @param {{layers: number[], threshold: number, blur: boolean, clean: boolean, show: 'cutout'|'solid'}} opts - maskDifference's, plus clean and show
+ * @param {{layers: number[], threshold: number, blur: boolean, clean: boolean, show: 'cutout'|'solid', fill?: number}} opts - maskDifference's, plus clean, show and fill (close radius, 0 = off)
  */
 export function renderMask(renderer, opts) {
   const data = renderer.dataFramebuffer(renderer.width, renderer.height);
   const raw = maskDifference(renderer, opts);
+  const fill = opts.fill || 0;
+  // With a fill, the vote happens inside closeMask; maskDraw then must not
+  // vote again, or the close's filling is carved back out.
+  const decision = fill > 0 ? closeMask(renderer, raw.tex, { clean: opts.clean, radius: fill }) : raw;
+  const clean = fill > 0 ? false : opts.clean;
   // The picture, where the trail and compositing passes expect a diff.
-  maskDraw(renderer, raw.tex, renderer.diffFramebuffer, { clean: opts.clean, output: opts.show });
+  maskDraw(renderer, decision.tex, renderer.diffFramebuffer, { clean, output: opts.show });
   // The mask as data: R = moving (0 or 1), G = strength.
-  maskDraw(renderer, raw.tex, data, { clean: opts.clean, output: 'data' });
+  maskDraw(renderer, decision.tex, data, { clean, output: 'data' });
 }
 
 /** Controls shared by the modes built on the mask. */
 export const SECOND_GAP = { key: 'secondGap', label: 'Second gap', type: 'range', min: 2, max: 120, step: 1, default: 30, format: asMs };
 export const MASK_BLUR = { key: 'maskBlur', label: 'Blur first', type: 'toggle', default: true };
 export const MASK_CLEAN = { key: 'maskClean', label: 'Clean up', type: 'toggle', default: true };
+export const MASK_FILL = { key: 'maskFill', label: 'Fill holes', type: 'select', default: 0, options: { 'Off': 0, '1 px': 1, '2 px': 2 } };
 
 /** The second gap is always behind the first. */
 const secondGap = (params) => Math.max(params.secondGap, params.frameOffset + 1);
@@ -205,6 +273,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     'A flat-coloured object shows only its leading edge: differencing cannot see inside a single colour.',
     'A stopped object disappears.',
     'For the first moments after loading or seeking there is no second frame yet, and it behaves like Raw.',
+    'Fill holes closes gaps in a cut-out up to twice its size across, after the clean-up vote, without growing the cut-out.',
   ],
   data: { kind: 'mask', what: '1 where the pixel is moving, 0 where it is still; G holds the strength of the difference' },
   composite: true,
@@ -215,6 +284,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     THRESHOLD,
     MASK_BLUR,
     MASK_CLEAN,
+    MASK_FILL,
     { key: 'maskShow', label: 'Show', type: 'select', default: 'cutout', options: { 'Cut-out': 'cutout', 'Solid mask': 'solid' } },
     TRAIL,
   ],
@@ -233,6 +303,7 @@ export default /** @type {import('./index.js').Mode} */ ({
       blur: params.maskBlur,
       clean: params.maskClean,
       show: params.maskShow,
+      fill: params.maskFill,
     });
 
     renderer.renderTrail({

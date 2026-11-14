@@ -75,6 +75,68 @@ export const MASK_VOTES = 5;
 export const MASK_VOTES_STRICT = 7;
 
 /**
+ * Dilate: a pixel is set when any cell within `radius` of it (a square
+ * window) is set. Cells outside the image count as not set, so nothing grows
+ * in from the border.
+ *
+ * @param {Uint8Array} mask - width*height values, 0 or 1
+ * @param {number} width
+ * @param {number} height
+ * @param {number} radius - 1, 2…
+ * @param {Uint8Array} out - Must not be `mask`
+ * @returns {Uint8Array} out
+ */
+export function dilate(mask, width, height, radius, out) {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let set = 0;
+      for (let dy = -radius; dy <= radius && !set; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        for (let dx = -radius; dx <= radius; dx++) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= width) continue;
+          if (mask[ny * width + nx]) { set = 1; break; }
+        }
+      }
+      out[y * width + x] = set;
+    }
+  }
+  return out;
+}
+
+/**
+ * Erode: a pixel stays set only when every cell within `radius` of it is
+ * set. Cells outside the image count as SET, so a close (dilate, then erode)
+ * does not eat shapes touching the border.
+ *
+ * @param {Uint8Array} mask - width*height values, 0 or 1
+ * @param {number} width
+ * @param {number} height
+ * @param {number} radius - 1, 2…
+ * @param {Uint8Array} out - Must not be `mask`
+ * @returns {Uint8Array} out
+ */
+export function erode(mask, width, height, radius, out) {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let set = 1;
+      for (let dy = -radius; dy <= radius && set; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        for (let dx = -radius; dx <= radius; dx++) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= width) continue;
+          if (!mask[ny * width + nx]) { set = 0; break; }
+        }
+      }
+      out[y * width + x] = set;
+    }
+  }
+  return out;
+}
+
+/**
  * 3x3 vote: a pixel is set when at least `votes` of the nine cells around it
  * (itself included) are set. Cells outside the image count as not set. With
  * five (a majority) it removes lone speckles and one-pixel lines and fills

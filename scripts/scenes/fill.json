@@ -1,0 +1,9 @@
+{ "scenes": [
+  {"name":"traffic-mask-off","clip":"traffic","at":3,"frames":6,"every":5,"display":"diff","params":{"algorithm":"mask","frameOffset":3,"secondGap":30,"threshold":15,"trailLength":0,"maskBlur":true,"maskClean":true,"maskFill":0,"maskShow":"cutout"}},
+  {"name":"traffic-mask-fill","clip":"traffic","at":3,"frames":6,"every":5,"display":"diff","params":{"algorithm":"mask","frameOffset":3,"secondGap":30,"threshold":15,"trailLength":0,"maskBlur":true,"maskClean":true,"maskFill":2,"maskShow":"cutout"}},
+  {"name":"bees-mask-off","clip":"bees","at":4,"frames":6,"every":5,"display":"diff","params":{"algorithm":"mask","frameOffset":3,"secondGap":30,"threshold":20,"trailLength":0,"maskBlur":true,"maskClean":true,"maskFill":0,"maskShow":"cutout"}},
+  {"name":"bees-mask-fill","clip":"bees","at":4,"frames":6,"every":5,"display":"diff","params":{"algorithm":"mask","frameOffset":3,"secondGap":30,"threshold":20,"trailLength":0,"maskBlur":true,"maskClean":true,"maskFill":2,"maskShow":"cutout"}},
+  {"name":"crossing-bg-off","clip":"crossing","at":8,"frames":6,"every":10,"warmup":6,"display":"diff","params":{"algorithm":"background","absorbSeconds":4,"frameOffset":5,"threshold":20,"trailLength":0,"maskFill":0,"maskShow":"cutout"}},
+  {"name":"crossing-bg-fill","clip":"crossing","at":8,"frames":6,"every":10,"warmup":6,"display":"diff","params":{"algorithm":"background","absorbSeconds":4,"frameOffset":5,"threshold":20,"trailLength":0,"maskFill":2,"maskShow":"cutout"}},
+  {"name":"truth-mask-fill","clip":"truth","at":2,"frames":6,"every":3,"display":"diff","readData":true,"params":{"algorithm":"mask","frameOffset":5,"secondGap":30,"threshold":20,"trailLength":0,"maskBlur":true,"maskClean":true,"maskFill":1,"maskShow":"cutout"}}
+] }

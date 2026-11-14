@@ -56,7 +56,7 @@ Ranked by visible effect for the effort.
 | 3 | Combining several frame gaps | planned | On `traffic`, the slow far carriageway and the fast near one both show fully at one setting; in flow, slow and fast motion in one picture | Medium | Maximum over two or three gaps |
 | 4 | Magnify: per-level amplification | planned | On `face`, the pulse shows as a colour change of the skin without the amplified edges and noise | Medium-large | Biggest quality gain found in research |
 | 5 | Lighting normalisation (gradient-image differencing) | planned | On `sunset`, and on a camera with auto-exposure, a brightness change no longer lights the whole frame | Medium | Would also help schlieren under changing light |
-| 6 | Morphological open and close | planned | On `traffic`, mask and background-model cut-outs lose their holes and ragged rims | Small-medium | |
+| 6 | Morphological open and close | **done**, Session B (close; the vote already removes salt) | On `traffic`, mask and background-model cut-outs lose their holes and ragged rims | | `maskFill` on the mask and background modes, V-B5 |
 | 7 | Magnify: pulse and motion presets, deeper pooling | planned | On `face`, one click gives a visible pulse | Small | |
 | 8 | Flow at moving edges | planned | The ragged outlines of movers in the flow colour view become clean | Medium | A median or an edge-aware window |
 
@@ -67,6 +67,8 @@ Ranked by visible effect for the effort.
 | Type checking through JSDoc: `npm run typecheck` holds the mode contract, worker messages and params to their typedefs | `a24f191` | V-B2 |
 | Schlieren publishes its setup judgement as data (`pipeline.readings.setup`), for Session A's in-picture setup guide | `2f6520c` | |
 | Magnify sample that is not a face: *Sleeping Kitten*, plus the `kitten` reference clip | with this update | V-B3 |
+| History ribbons in measured flow colours (`historyShow: 'measured'`) | `5ab27a9` | V-B4 |
+| Fill holes in mask and background cut-outs (morphological close, `maskFill`) | with this update | V-B5 |
 
 ## Deferred
 | Item | Why |

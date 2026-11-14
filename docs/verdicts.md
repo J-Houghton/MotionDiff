@@ -1011,3 +1011,47 @@ from the preset path switches any footage to motion history with its
 settings, and the select offers all 14 looks. 296 unit tests and the
 typecheck pass. No pixels change: the same settings apply as before, from
 one list instead of two.
+### V-B5. Filling holes in mask cut-outs (morphological close) — visual
+`maskFill` (Off / 1 px / 2 px) on the Motion mask and Background model modes:
+after the 3×3 vote has removed speckle, the decision is dilated then eroded by
+the chosen radius, so holes up to twice the radius across are filled and
+ragged rims are smoothed, without growing the cut-out (a close returns solid
+shapes to their own outline). Core `dilate`/`erode` in core/mask.js are the
+source of truth; the shader mirrors them. Off keeps today's path untouched.
+Design: docs/combined-modes.md §5.
+
+**Expectations, written before building:**
+- *On `traffic`, mask cut-out, fill 2 px vs off:* vehicle cut-outs lose their
+  interior holes (dark panels, windows) and read as solid shapes; rims
+  smoother. A blind judge tells the strips apart and says one shows whole
+  vehicles where the other shows fragments or perforated ones.
+- *On `bees`, mask cut-out:* each bee one solid blob instead of fragments.
+- *On `crossing`, background-model cut-out, fill 2 px:* the same for cars and
+  pedestrians being carved out of the model.
+- *Speckle must not return:* the vote runs before the close, so lone noise
+  pixels are gone before anything dilates. Flicker in static areas must not
+  rise against the off strips.
+- *Truth check (`truth-mask` scene, fill 1):* the share of the square's
+  outline filled rises or holds against off; the share marked "elsewhere"
+  stays within a point or two.
+- *No regression:* with fill off, mask and background strips byte-identical
+  to before the change.
+
+**Result: accepted; visible exactly where there are holes to fill.** One blind
+judge, three pairs, unlabeled and shuffled:
+
+| Check | Clip | Judge (blind) | Numeric guard |
+|---|---|---|---|
+| Visible and intended | traffic (mask) | Told apart "clearly": with fill, "cars are whole, filled shapes"; without, "riddled with dark holes, black outlines, cracks"; rims smoother with fill | 1.8% of pixels changed; flicker 0.20 → 0.18 |
+| Bees | bees (mask) | "Barely" told apart — at these settings the bee cut-outs were not actually perforated, so there was almost nothing to fill | 0.57% changed, at the invisibility floor |
+| Crossing | crossing (background) | "Nearly identical for the cars and pedestrians. Both are solid" — the model's cut-outs had no holes; fill only thickened faint shadow patches slightly | 1.0% changed; flicker 0.22 → 0.24 |
+| No speckle returns | all three | "No variant showed background speckle in any pair" (the vote runs before the close) | |
+| Nothing lost or grown | all three | "No mover present in one and missing in the other"; with fill the traffic shapes read "slightly puffier" (a close rounds concavities) | |
+| Truth check | truth | Fill 1 vs off: marks on the current outline 100% both, elsewhere 0 both, outline coverage identical — the close invents nothing on a mask without holes | |
+| No regression | truth, truth-noisy, highway, background scenes | | Fill off: 0% changed, max diff 0 on all five guard scenes; parity probes exact on both fill cases (and all seven probes pass on the rebased tree); 301 tests |
+
+The expectation for `bees` was wrong about the footage, not the change: a
+hole-filler that finds no holes alters nothing, which the truth check
+confirms is the designed behaviour. An *open* (salt removal) was not built:
+the 3×3 vote already does that job. Samples keep fill off — it is a remedy
+for footage whose cut-outs are actually perforated, like `traffic`.
