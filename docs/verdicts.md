@@ -1030,7 +1030,16 @@ geometry; measurement untouched at processing size).
 - *Recording carries the crisp lines*; split, Mirror, fullscreen unchanged.
 - *A real phone's frame rate* cannot be measured here (software GL): owner's list.
 
-**Result:** pending.
+**Result: accepted.**
+
+| Check | Result |
+|---|---|
+| Blind judge, before/after full-window traffic traces, unlabeled random names | Told apart "easily"; the after named the higher-resolution render at 95% confidence ("~1 px lines, smooth, continuous… individual streamlines separable" against "classic upscaled-low-res signs"); geometry "the same in both… no region with a genuine geometry difference" |
+| Glow keeps glowing (`clouds` preset, second blind judge) | After "reads as glowing: bright core + soft halo… clearly the better rendering"; before "flat marks… opaque marker scribbles". Caveats kept: streaks wash out over the brightest sky (a visibility trade-off), and a faint pre-existing top-left speck, much reduced in the after |
+| Numeric guard at the pinned size | All six strips (flow colour, both particle colourings, traffic particles, plume and dots traces) byte-identical to master: 0% changed, maxDiff 0 — which is also the at-or-below-processing-size invariant |
+| Arrows | Hairline shafts and clean heads at the display size (my reading of the full-window still; geometry unchanged by construction) |
+| Facts | Backing 878×494 follows a 1900-px window (processing 640×360); `displayScale` pin returns it to exactly 640×360 (`scripts/page/render.js` uses it, so every strip baseline stays valid); split clips the one canvas; a record start/stop ran through the display-res canvas |
+| Needs the owner's phone | Frame rate with canvas-sized trail buffers (cap 1280 there), and that recordings look right on a real GPU |
 
 ### VA4. Motion-over-time strip — visual
 Design: `docs/motion-strip.md` (a strip under the scrub from the pooled

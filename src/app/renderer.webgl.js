@@ -1586,7 +1586,8 @@ export class WebGLRenderer {
    * @returns {boolean} Whether the backing size changed
    */
   setCanvasSize(cssWidth, cssHeight, cap = 2048) {
-    this._cssSize = { w: Math.max(1, Math.round(cssWidth)), h: Math.max(1, Math.round(cssHeight)), cap };
+    // Non-positive pins the backing to the processing size (tooling).
+    this._cssSize = cssWidth > 0 ? { w: Math.round(cssWidth), h: Math.max(1, Math.round(cssHeight)), cap } : null;
     return this._applyCanvasSize();
   }
 
