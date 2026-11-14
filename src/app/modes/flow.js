@@ -172,6 +172,7 @@ export function reportReadings(frame, velocity, full) {
       : ' · camera still';
 
   frame.readings = {
+    mode: 'flow',
     ...readings,
     cameraSpeed,
     width: renderer.width,

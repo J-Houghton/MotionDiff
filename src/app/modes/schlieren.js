@@ -202,6 +202,7 @@ function measure(frame) {
       held: params.schlierenHold,
     });
     setup.measured = { dx: shift.dx * factor, dy: shift.dy * factor };
+    setup.problem = problem;
     if (problem) {
       frame.note?.(...NOTES[problem]({ usable: setup.usable, camera: setup.measured }));
     } else {
@@ -209,6 +210,21 @@ function measure(frame) {
       frame.note?.(`${Math.round(setup.usable * 100)}% measurable · shifts over ${floor.toFixed(2)} px show · reference ${params.schlierenHold ? 'held' : 'follows'}`, 'info');
     }
   }
+  // The setup judgement as data, for the interface (the in-picture setup
+  // guide): the same numbers the status sentence is written from, in
+  // picture pixels.
+  frame.readings = {
+    mode: 'schlieren',
+    setup: {
+      problem: setup.problem ?? null,
+      usable: setup.usable,
+      camera: setup.measured || { dx: 0, dy: 0 },
+      noise: setup.noise * factor,
+      floor: Math.max(0.01, setup.noise * factor * 2.5),
+      seen: setup.seen ?? 0,
+      held: !!params.schlierenHold,
+    },
+  };
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   return { flow, factor, setup };
 }
