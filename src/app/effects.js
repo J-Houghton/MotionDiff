@@ -85,6 +85,13 @@ export const EFFECTS = [
           { label: 'filled in', params: { maskFill: 2 } },
         ],
       },
+      {
+        label: 'Movers',
+        options: [
+          { label: 'plain', params: { maskTrack: false } },
+          { label: 'boxed & numbered', params: { maskTrack: true } },
+        ],
+      },
     ],
     controls: ['threshold', 'absorbSeconds'],
     sample: 'Bees at the Hive',
