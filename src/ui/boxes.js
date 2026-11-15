@@ -9,6 +9,8 @@
  * overhung (crop) to keep registration with the drawn pixels.
  */
 
+import { formatSpeed } from './calibrate.js';
+
 /** Seconds of travel the arrow ahead of a box shows. */
 const LEAD_SECONDS = 1;
 
@@ -107,7 +109,7 @@ export function initBoxes({ root, stage, session }) {
       const labelled = o.w * o.h >= 1800;
       n.label.style.display = labelled ? '' : 'none';
       n.plate.style.display = labelled ? '' : 'none';
-      const text = `${o.id} · ${Math.round(speed)} px/s`;
+      const text = `${o.id} · ${formatSpeed(speed, session.calibration)}`;
       n.label.textContent = text;
       n.label.setAttribute('font-size', String(fontSize));
       const lx = Math.max(2, o.x);

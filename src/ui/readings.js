@@ -43,9 +43,10 @@ const fmt = {
  * @param {HTMLElement} options.root
  * @param {HTMLElement} options.plate - The .plate grid the column joins
  * @param {import('../app/session.js').Session} options.session
+ * @param {() => void} [options.onCalibrate] - Starts the mark-a-known-length flow
  * @returns {{toggle: () => void, update: () => void}}
  */
-export function initReadings({ root, plate, session }) {
+export function initReadings({ root, plate, session, onCalibrate }) {
   const aside = el('aside', 'readings chrome');
   aside.setAttribute('aria-label', 'Readings');
   const head = el('div', 'rd-head');
@@ -61,7 +62,11 @@ export function initReadings({ root, plate, session }) {
   const list = el('dl', 'rd-list');
   all.append(list);
   const note = el('p', 'rd-note');
-  aside.append(head, instruments, all, note);
+  const calibrateLink = el('button', 'rd-calibrate', 'Calibrate: mark a known length ');
+  calibrateLink.type = 'button';
+  calibrateLink.append(Object.assign(document.createElement('kbd'), { textContent: 'C' }));
+  if (onCalibrate) calibrateLink.addEventListener('click', onCalibrate);
+  aside.append(head, instruments, all, calibrateLink, note);
   // Before the parameter panel: picture, readings, parameters.
   plate.insertBefore(aside, plate.querySelector('.panel'));
 
@@ -100,6 +105,10 @@ export function initReadings({ root, plate, session }) {
       return s.problem ? s.problem : `ok · ${fmt.pct(s.usable)} usable · floor ${s.floor?.toFixed?.(2) ?? '—'} px`;
     }],
     ['tracked movers', 'boxes with IDs now', (ctx) => (ctx.r?.objects ? String(ctx.r.objects.length) : null)],
+    ['scale', 'cm per pixel · true at the marked depth (C resets)', () => {
+      const m = session.calibration?.metresPerPixel;
+      return m ? (m * 100).toFixed(1) : null;
+    }],
     ['overall motion', 'pooled grid, 0..1 of mode scale', (ctx) => (ctx.gridMean === null ? null : fmt.two(ctx.gridMean))],
     ['centre of motion', 'share of frame, from pooled grid', (ctx) => (ctx.centre ? `${fmt.pct(ctx.centre.x)}, ${fmt.pct(ctx.centre.y)}` : null)],
     ['quiet for', 's since motion in the grid', (ctx) => (ctx.quiet === null ? null : `${ctx.quiet.toFixed(1)} s`)],
@@ -182,7 +191,8 @@ export function initReadings({ root, plate, session }) {
   // ── Instruments (promoted readings; docs/readings-panel.md) ─
   const peak = el('div', 'rd-peak');
   const peakValue = el('b', '', '—');
-  peak.append(peakValue, el('span', '', 'peak px/s · fastest moving cells'));
+  const peakUnit = el('span', '', 'peak px/s · fastest moving cells');
+  peak.append(peakValue, peakUnit);
   const lineBox = el('div', 'rd-line');
   const lineCanvas = el('canvas');
   lineCanvas.width = 220;
@@ -202,7 +212,9 @@ export function initReadings({ root, plate, session }) {
 
   function drawInstruments(ctx) {
     const r = ctx.r?.mode === 'flow' ? ctx.r : null;
-    peakValue.textContent = r ? fmt.px(r.peak) : '—';
+    const scale = session.calibration?.metresPerPixel;
+    peakValue.textContent = r ? (scale ? (r.peak * scale).toFixed(1) : fmt.px(r.peak)) : '—';
+    peakUnit.textContent = scale ? 'peak m/s · fastest moving cells' : 'peak px/s · fastest moving cells';
     // Instruments that measure nothing in this mode are not shown at all: a
     // dimmed dash is still an empty box. The pen line stays in every mode.
     peak.hidden = !r;

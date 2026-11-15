@@ -19,6 +19,7 @@ import { initLegend } from './legend.js';
 import { initGuide } from './guide.js';
 import { initReadings } from './readings.js';
 import { initBoxes } from './boxes.js';
+import { initCalibrate } from './calibrate.js';
 import { initKeys, SHORTCUTS } from './keys.js';
 
 const RATES = [0.25, 0.5, 1, 1.5, 2];
@@ -30,7 +31,7 @@ const PHONE_QUERY = '(max-width: 720px), (pointer: coarse)';
 
 const TEMPLATE = `
 <header class="mast chrome">
-  <strong class="brand">MotionDiff</strong>
+  <button type="button" class="brand" aria-label="Back to the effects page">MotionDiff</button>
   <span class="mast-info" id="sourceInfo"></span>
   <span class="status" id="status" role="status" aria-live="polite"></span>
   <nav class="mast-actions" aria-label="Application">
@@ -78,6 +79,7 @@ const TEMPLATE = `
       </div>
       <div class="atlas" id="atlas"></div>
       <p class="empty-hint">or drop a video file anywhere · your video never leaves the browser</p>
+      <p class="version" id="versionEmpty"></p>
     </div>
   </div>
   <aside class="panel chrome" id="panel" aria-label="Parameters">
@@ -111,7 +113,7 @@ const TEMPLATE = `
 </footer>
 
 <div class="sheet" id="sourceSheet" role="dialog" aria-modal="true" aria-labelledby="sourceTitle" hidden>
-  <div class="sheet-body">
+  <div class="sheet-body" tabindex="-1">
     <h2 id="sourceTitle">Choose a source</h2>
     <div class="sources" id="sheetSources"></div>
     <button type="button" class="sheet-close" data-close>Close <kbd>Esc</kbd></button>
@@ -119,13 +121,14 @@ const TEMPLATE = `
 </div>
 
 <div class="sheet" id="keysSheet" role="dialog" aria-modal="true" aria-labelledby="keysTitle" hidden>
-  <div class="sheet-body sheet-wide">
+  <div class="sheet-body sheet-wide" tabindex="-1">
     <h2 id="keysTitle">Keys</h2>
     <dl class="keys" id="keysList"></dl>
     <h2 id="helpTitle"></h2>
     <p id="helpBlurb"></p>
     <ul class="help" id="helpList"></ul>
     <p class="help-data" id="helpData"></p>
+    <p class="version" id="versionKeys"></p>
     <button type="button" class="sheet-close" data-close>Close <kbd>Esc</kbd></button>
   </div>
 </div>
@@ -168,6 +171,7 @@ export function initShell({ root, session }) {
     panel: !phone.matches,
     scrubbing: false,
     fan: false,         // viewfinder: the active effect's looks fanned out
+    atlas: false,       // the effects page shown over loaded footage (the brand)
   };
 
   // ── Layout, theme, idle ─────────────────────────────────────
@@ -180,6 +184,7 @@ export function initShell({ root, session }) {
     root.dataset.hidden = String(view.hidden);
     root.dataset.mirror = String(view.mirror);
     root.dataset.source = session.loaded ? 'ready' : 'empty';
+    root.dataset.atlas = String(view.atlas && session.loaded);
     // In the viewfinder the picture fills the screen, cropping what does not
     // fit, unless that would lose more than half of it (a landscape clip on
     // an upright phone): then it is shown whole. A double tap switches.
@@ -433,6 +438,8 @@ export function initShell({ root, session }) {
   // ── Source info, transport ──────────────────────────────────
   function applySource() {
     const { source, pipeline } = session;
+    // A new source puts the picture first again.
+    view.atlas = false;
     // The mirror stands only while the front camera is the source.
     if (view.mirror && !(source?.kind === 'camera' && session.cameraFacing === 'user')) view.mirror = false;
     if (pipeline.width && pipeline.height) {
@@ -618,7 +625,9 @@ export function initShell({ root, session }) {
     returnFocus = document.activeElement;
     const sheet = $(id);
     sheet.hidden = false;
-    sheet.querySelector('button, input')?.focus();
+    // Focus the scrollable body itself: a sheet taller than a short window
+    // must answer PageUp and the arrows.
+    sheet.querySelector('.sheet-body')?.focus();
     wake();
   }
   function closeSheets() {
@@ -645,8 +654,9 @@ export function initShell({ root, session }) {
   const ruler = initRuler({ container: $('ruler'), session });
   const legend = initLegend({ stage, session });
   const guide = initGuide({ stage, session });
-  const readings = initReadings({ root, plate: root.querySelector('.plate'), session });
   initBoxes({ root, stage, session });
+  const calibrate = initCalibrate({ root, stage, session });
+  const readings = initReadings({ root, plate: root.querySelector('.plate'), session, onCalibrate: () => calibrate.toggle() });
   // The instrument margin is the desktop default; the full controls wait
   // behind P. (On a window wide enough for both, both.)
   if (!phone.matches && window.innerWidth >= 1150) {
@@ -693,6 +703,7 @@ export function initShell({ root, session }) {
       if (readings.toggle() && view.panel && window.innerWidth < 1800) { view.panel = false; applyLayout(); }
     },
     keys: () => ($('keysSheet').hidden ? openSheet('keysSheet') : closeSheets()),
+    calibrate: () => calibrate.toggle(),
     auto: () => session.autoConfigure(),
     record: () => session.toggleRecord(),
     hide: () => { view.hidden = !view.hidden; applyLayout(); },
@@ -706,6 +717,8 @@ export function initShell({ root, session }) {
       } catch { /* the viewfinder layout works without true fullscreen */ }
     },
     escape: () => {
+      if (calibrate.isArming()) { calibrate.cancel(); return; }
+      if (view.atlas) { view.atlas = false; applyLayout(); return; }
       if (closeSheets()) return;
       if (view.hidden) { view.hidden = false; applyLayout(); return; }
       if (view.immersive) actions.fullscreen();
@@ -716,6 +729,11 @@ export function initShell({ root, session }) {
     if (!document.fullscreenElement && view.immersive) { view.immersive = false; applyLayout(); }
   });
 
+  root.querySelector('.brand').addEventListener('click', () => {
+    if (!session.loaded) return;
+    view.atlas = !view.atlas;
+    applyLayout();
+  });
   const click = (id, fn) => $(id).addEventListener('click', fn);
   click('btnSource', actions.source);
   click('btnSource2', actions.source);
@@ -763,6 +781,11 @@ export function initShell({ root, session }) {
     buildSources($('sheetSources'));
     applyLayout();
   });
+
+  // The version footer: which build this is, on the landing and under Keys.
+  const stamp = typeof __BUILD_STAMP__ === 'string' ? `MotionDiff ${__BUILD_STAMP__}` : 'MotionDiff dev';
+  $('versionEmpty').textContent = stamp;
+  $('versionKeys').textContent = stamp;
 
   setTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
   applySource();

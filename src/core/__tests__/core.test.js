@@ -244,7 +244,7 @@ describe('migratePresetParams', () => {
   });
 
   it('built-in presets are stored in current units', () => {
-    const subtle = PARAMETER_PRESETS.find((preset) => preset.name === 'Subtle Wind');
+    const subtle = PARAMETER_PRESETS.find((preset) => preset.name === 'Trees in Wind'); // Subtle Wind, renamed for its sample
     const contrast = PARAMETER_PRESETS.find((preset) => preset.name === 'High Contrast');
     expect(subtle.params.threshold).toBe(16); // was 8 in half-difference units
     expect(contrast.params.threshold).toBe(5); // Raw: unchanged
