@@ -181,7 +181,7 @@ export function initReadings({ root, plate, session }) {
   // ── Instruments (promoted readings; docs/readings-panel.md) ─
   const peak = el('div', 'rd-peak');
   const peakValue = el('b', '', '—');
-  peak.append(peakValue, el('span', '', 'peak px/s'));
+  peak.append(peakValue, el('span', '', 'peak px/s · 95th pct'));
   const lineBox = el('div', 'rd-line');
   const lineCanvas = el('canvas');
   lineCanvas.width = 220;
@@ -189,10 +189,15 @@ export function initReadings({ root, plate, session }) {
   lineBox.append(lineCanvas, el('span', '', 'moving share · last 60 s'));
   const roseBox = el('div', 'rd-rose');
   const roseCanvas = el('canvas');
-  roseCanvas.width = 88;
-  roseCanvas.height = 88;
+  roseCanvas.width = 96;
+  roseCanvas.height = 96;
   roseBox.append(roseCanvas, el('span', '', 'heading of moving cells'));
-  instruments.append(peak, lineBox, roseBox);
+  // The camera, as a lamp: green and still, or amber with the drift it reads.
+  const cameraBox = el('div', 'rd-camera');
+  const cameraLamp = el('i', 'rd-lamp');
+  const cameraText = el('b', '', '—');
+  cameraBox.append(cameraLamp, cameraText, el('span', '', 'camera · median of measured'));
+  instruments.append(peak, lineBox, roseBox, cameraBox);
 
   function drawInstruments(ctx) {
     const r = ctx.r?.mode === 'flow' ? ctx.r : null;
@@ -201,6 +206,13 @@ export function initReadings({ root, plate, session }) {
     // dimmed dash is still an empty box. The pen line stays in every mode.
     peak.hidden = !r;
     roseBox.hidden = !r;
+    cameraBox.hidden = !r || r.camera.share < 0.5;
+    if (!cameraBox.hidden) {
+      const speed = Math.hypot(r.camera.dx, r.camera.dy);
+      const still = speed < (r.width || 640) * 0.025;
+      cameraLamp.dataset.state = still ? 'ok' : 'warn';
+      cameraText.textContent = still ? 'still' : `${SECTOR_ARROWS[Math.round(((Math.atan2(r.camera.dy, r.camera.dx) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) % 8]} ${fmt.px(speed)} px/s`;
+    }
 
     const ink = getComputedStyle(aside).color;
     const accent = getComputedStyle(aside).getPropertyValue('--accent') || '#c2301a';
@@ -238,9 +250,18 @@ export function initReadings({ root, plate, session }) {
     const { width: rw } = roseCanvas;
     const c = rw / 2;
     rg.clearRect(0, 0, rw, rw);
+    // A compass card: the ring, faint cross hairs, then a petal per sector.
     rg.strokeStyle = ink;
     rg.globalAlpha = 0.3;
     rg.beginPath(); rg.arc(c, c, c - 1, 0, Math.PI * 2); rg.stroke();
+    rg.globalAlpha = 0.12;
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI) / 4;
+      rg.beginPath();
+      rg.moveTo(c - Math.cos(a) * (c - 1), c - Math.sin(a) * (c - 1));
+      rg.lineTo(c + Math.cos(a) * (c - 1), c + Math.sin(a) * (c - 1));
+      rg.stroke();
+    }
     rg.globalAlpha = 1;
     if (r) {
       const most = Math.max(...r.rose, 0.0001);
@@ -249,14 +270,19 @@ export function initReadings({ root, plate, session }) {
         if (share <= 0) continue;
         const angle = (i * Math.PI) / 4; // bin 0 = right, y down = clockwise
         const len = (c - 3) * (share / most);
-        rg.strokeStyle = `hsl(${(i * 45) % 360} 85% 45%)`;
-        rg.lineWidth = 5;
-        rg.lineCap = 'round';
+        // A filled petal in the legend's hue for that heading.
+        const spread = Math.PI / 10;
+        rg.fillStyle = `hsl(${(i * 45) % 360} 80% 45%)`;
+        rg.globalAlpha = 0.9;
         rg.beginPath();
         rg.moveTo(c, c);
+        rg.lineTo(c + Math.cos(angle - spread) * len * 0.82, c + Math.sin(angle - spread) * len * 0.82);
         rg.lineTo(c + Math.cos(angle) * len, c + Math.sin(angle) * len);
-        rg.stroke();
+        rg.lineTo(c + Math.cos(angle + spread) * len * 0.82, c + Math.sin(angle + spread) * len * 0.82);
+        rg.closePath();
+        rg.fill();
       }
+      rg.globalAlpha = 1;
     }
   }
 

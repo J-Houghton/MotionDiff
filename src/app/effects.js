@@ -239,7 +239,7 @@ export function effectParams(effect, params) {
 
 /** The promoted controls, resolved against the active mode's param defs. */
 export function effectControls(effect, params) {
-  const defs = /** @type {import('./modes/params.js').ParamDef[]} */ (getMode(params.algorithm).params);
+  const defs = /** @type {import('./modes/params.js').ParamDef[]} */ ((/** @type {*} */ (getMode(params.algorithm))).params);
   return effect.controls
     .map((key) => defs.find((def) => def.key === key))
     .filter((def) => def && (!def.when || def.when(params)));

@@ -205,9 +205,12 @@ export function initShell({ root, session }) {
   // The frame takes whatever height the mast and caption leave (see .frame
   // in main.css), so tell the stylesheet how tall they are.
   function measureChrome() {
+    const cap = root.querySelector('.cap').offsetHeight;
     const chrome = view.hidden ? 0 : root.querySelector('.mast').offsetHeight
-      + root.querySelector('.plates').offsetHeight + root.querySelector('.cap').offsetHeight + 52;
+      + root.querySelector('.plates').offsetHeight + cap + 52;
     root.style.setProperty('--chrome-h', `${chrome}px`);
+    // Where the caption plate ends, so the question strip can sit above it.
+    root.style.setProperty('--cap-h', `${cap}px`);
   }
   new ResizeObserver(measureChrome).observe(root.querySelector('.cap'));
   window.addEventListener('resize', () => {
@@ -393,6 +396,10 @@ export function initShell({ root, session }) {
     $('modeIndex').textContent = `Plate ${effect.numeral} · ${mode.label}`;
     $('modeBlurb').textContent = session.modeProblem() || effect.promise;
     buildChoices($('capChoices'), effect);
+    const all = Object.assign(document.createElement('button'), { type: 'button', className: 'choice-all', textContent: 'All controls' });
+    all.append(Object.assign(document.createElement('kbd'), { textContent: 'P' }));
+    all.addEventListener('click', () => { if (!view.panel) actions.panel(); });
+    $('capChoices').append(all);
     applyPlates(effect);
     applyAsk(effect);
     $('vfNum').textContent = `PLATE ${effect.numeral}`;
@@ -630,6 +637,12 @@ export function initShell({ root, session }) {
   const legend = initLegend({ stage, session });
   const guide = initGuide({ stage, session });
   const readings = initReadings({ root, plate: root.querySelector('.plate'), session });
+  // The instrument margin is the desktop default; the full controls wait
+  // behind P. (On a window wide enough for both, both.)
+  if (!phone.matches && window.innerWidth >= 1150) {
+    readings.toggle();
+    if (window.innerWidth < 1800) view.panel = false;
+  }
 
   const actions = {
     toggle: () => session.toggle(),
