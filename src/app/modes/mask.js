@@ -14,11 +14,10 @@
  * The data output is the mask.
  */
 import { lookbackTime } from '../../core/timebase.js';
-import { BG_HOLD_SECONDS, BG_K, backgroundAlpha } from '../../core/background.js';
+import { BG_K } from '../../core/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH } from '../../core/trails.js';
 import { MASK_VOTES } from '../../core/mask.js';
 import { GAP, MASK_FILL, THRESHOLD, TRAIL, asMs } from './params.js';
-import { learnMask, updateBackground } from './background.js';
 
 // Pass 1. Mirrors boxBlur (core/blur.js) on each frame, then
 // threeFrameDifference and thresholdMask (core/mask.js).
@@ -210,6 +209,8 @@ export function closeMask(renderer, decision, opts, key = 'mask') {
  *   becomes max(global, BG_K·σ·√2), as in core thresholdMaskAuto
  * @param {boolean} [opts.gradient] - Difference edge strength (lumaSobel)
  *   instead of brightness: a lighting change stops marking the frame
+ * @param {string} [opts.key] - Names the target this variant draws into, so
+ *   two variants computed in one frame do not overwrite each other
  * @returns {{tex: *, fb: *, width: number, height: number}} The target holding R = raw decision, G = strength
  */
 export function maskDifference(renderer, opts) {
@@ -217,7 +218,7 @@ export function maskDifference(renderer, opts) {
   const { width, height } = renderer;
   // Targets before binds: creating one binds its texture, which would
   // disturb the units set up for a draw.
-  const raw = renderer.target('mask:raw', width, height);
+  const raw = renderer.target(opts.key || 'mask:raw', width, height);
   const difference = renderer.program('mask:difference', DIFFERENCE_FRAG, { uCurrent: 0, uRing: 1, uVariance: 2 });
   gl.useProgram(difference.prog);
   renderer.bind(0, renderer.currentTexture);
@@ -261,11 +262,11 @@ export function maskDraw(renderer, decision, framebuffer, opts) {
  * Both passes: fills the diff target with the picture and the data target
  * with the mask.
  * @param {*} renderer
- * @param {{layers: number[], threshold: number, blur: boolean, clean: boolean, show: 'cutout'|'solid', fill?: number, variance?: WebGLTexture, gradient?: boolean}} opts - maskDifference's, plus clean, show and fill (close radius, 0 = off)
+ * @param {{layers?: number[], threshold?: number, blur?: boolean, clean: boolean, show: 'cutout'|'solid', fill?: number, variance?: WebGLTexture, gradient?: boolean, raw?: {tex: *}}} opts - maskDifference's, plus clean, show and fill (close radius, 0 = off). With `raw` (a decision already measured, stages.maskRaw), the difference pass is skipped and layers/threshold/blur are not needed.
  */
 export function renderMask(renderer, opts) {
   const data = renderer.dataFramebuffer(renderer.width, renderer.height);
-  const raw = maskDifference(renderer, opts);
+  const raw = opts.raw || maskDifference(renderer, /** @type {*} */ (opts));
   const fill = opts.fill || 0;
   // With a fill, the vote happens inside closeMask; maskDraw then must not
   // vote again, or the close's filling is carved back out.
@@ -335,31 +336,20 @@ export default /** @type {import('./index.js').Mode} */ ({
   lookback: maskLookback,
   render(frame) {
     const { gl: renderer, params } = frame;
-    const layers = maskLayers(frame);
-    if (!layers) {
+    // The raw decision is a shared stage (with auto threshold it keeps the
+    // background model's variance learning, computed once however many
+    // views want it).
+    const raw = frame.stages.maskRaw();
+    if (!raw) {
       renderer.renderBlank('raw', false);
       return false;
     }
 
-    // Auto threshold keeps the background model's variance learning, the
-    // same way the background mode and the flow gate do.
-    const model = params.maskAuto ? updateBackground(renderer, {
-      mask: learnMask(frame).tex,
-      alpha: backgroundAlpha(frame.stepMs, params.absorbSeconds),
-      holdStep: frame.stepMs / 1000 / BG_HOLD_SECONDS,
-      threshold: params.threshold,
-      repeat: frame.step === 'repeat',
-    }) : null;
-
     renderMask(renderer, {
-      layers,
-      threshold: params.threshold,
-      blur: params.maskBlur,
+      raw,
       clean: params.maskClean,
       show: params.maskShow,
       fill: params.maskFill,
-      variance: model ? model.variance : undefined,
-      gradient: params.maskGradient,
     });
 
     renderer.renderTrail({

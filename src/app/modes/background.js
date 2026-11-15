@@ -21,7 +21,7 @@
  * slow learning rate asks for.
  */
 import {
-  BG_HOLD_SECONDS, BG_K, BG_MIN_STEP, BG_VAR_INIT, BG_VAR_MAX, BG_VAR_MIN, backgroundAlpha,
+  BG_K, BG_MIN_STEP, BG_VAR_INIT, BG_VAR_MAX, BG_VAR_MIN,
 } from '../../core/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH } from '../../core/trails.js';
 import { GAP, MASK_FILL, THRESHOLD, TRAIL } from './params.js';
@@ -121,18 +121,21 @@ const STATES = new WeakMap();
  *
  * @param {*} renderer - WebGLRenderer
  * @param {object} opts
- * @param {WebGLTexture} opts.mask - Motion mask, R > 0.5 where moving
- * @param {number} opts.alpha - core backgroundAlpha
- * @param {number} opts.holdStep - Media time since the previous frame, in holds
- * @param {number} opts.threshold - Mean channel difference, 0..255
+ * @param {WebGLTexture} [opts.mask] - Motion mask, R > 0.5 where moving
+ * @param {number} [opts.alpha] - core backgroundAlpha
+ * @param {number} [opts.holdStep] - Media time since the previous frame, in holds
+ * @param {number} [opts.threshold] - Mean channel difference, 0..255
  * @param {boolean} [opts.repeat] - The same frame again: recompute, do not advance
  * @param {boolean} opts.clean - 3x3 majority vote on the foreground
  * @param {'cutout'|'solid'} opts.show
  * @param {number} [opts.fill] - Close radius for filling holes, 0 = off
+ * @param {{tex: *}} [opts.decision] - The model's decision already advanced
+ *   this frame (stages.background): the update is then skipped and mask,
+ *   alpha, holdStep, threshold and repeat are not needed
  */
 export function renderBackground(renderer, opts) {
   const data = renderer.dataFramebuffer(renderer.width, renderer.height);
-  const decision = updateBackground(renderer, opts);
+  const decision = opts.decision || updateBackground(renderer, /** @type {*} */ (opts));
   // With a fill, the vote happens inside closeMask (see renderMask).
   const fill = opts.fill || 0;
   const final = fill > 0 ? closeMask(renderer, decision.tex, { clean: opts.clean, radius: fill }, 'background') : decision;
@@ -234,7 +237,7 @@ export function learnMask(frame) {
   const near = frame.ring.nearest(lookbackTime(frame.time, params.frameOffset, 0, 0), frame.time);
   if (near >= 0) {
     const layer = frame.ring.slotAt(near);
-    const raw = maskDifference(renderer, { layers: [layer, layer], threshold: params.threshold, blur: true });
+    const raw = maskDifference(renderer, { key: 'learn:raw', layers: [layer, layer], threshold: params.threshold, blur: true });
     maskDraw(renderer, raw.tex, mask.fb, { clean: true, output: 'data' });
   } else {
     // No history yet (the very first frame): nothing is known to be moving.
@@ -271,14 +274,10 @@ export default /** @type {import('./index.js').Mode} */ ({
   ],
   render(frame) {
     const { gl: renderer, params } = frame;
-    const mask = learnMask(frame);
-
+    // The model's update is a shared stage: advanced once this frame,
+    // whoever else (a gate, auto threshold) also pulls it.
     renderBackground(renderer, {
-      mask: mask.tex,
-      alpha: backgroundAlpha(frame.stepMs, params.absorbSeconds),
-      holdStep: frame.stepMs / 1000 / BG_HOLD_SECONDS,
-      threshold: params.threshold,
-      repeat: frame.step === 'repeat',
+      decision: frame.stages.background(),
       clean: true,
       show: params.maskShow,
       fill: params.maskFill,

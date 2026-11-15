@@ -15,14 +15,12 @@
  *
  * Needs float render targets.
  */
-import { BG_HOLD_SECONDS, backgroundAlpha } from '../../core/background.js';
 import { FLOW_MAX_STEP, flowReadings } from '../../core/flow.js';
 import { lookbackTime } from '../../core/timebase.js';
 import { FLOW_PRELUDE, flowBetween, flowLuma, flowPass, flowSmooth, readField } from '../flow.js';
 import { particleField, reduceField, renderParticles } from '../particles.js';
 import { renderArrows } from '../arrows.js';
-import { learnMask, updateBackground } from './background.js';
-import { maskDifference, maskDraw, maskLayers, maskLookback } from './mask.js';
+import { maskDraw, maskLookback } from './mask.js';
 import { THRESHOLD, asMs } from './params.js';
 
 /** Flow is solved on a copy of the frame at most this wide. */
@@ -92,7 +90,7 @@ export const TRACE_PARAMS = [
 ];
 
 /** Speed range in picture pixels per second, from the control (percent of the width per second). */
-const fullSpeed = (params, width) => (params.flowRange / 100) * width;
+export const fullSpeed = (params, width) => (params.flowRange / 100) * width;
 
 // The gate at the working size: maximum of the voted decision over each
 // texel's footprint (any moving pixel gates its cell in)…
@@ -135,44 +133,21 @@ void main() {
 }`;
 
 /**
- * The full-size decision that gates the flow, or null to measure everywhere:
- * the three-frame mask ('mask'), or the background model's foreground
- * ('foreground', updating the model from this frame as the background mode
- * would).
- * @param {import('./index.js').ModeFrame} frame
- */
-function gateDecision(frame) {
-  const { gl: renderer, params } = frame;
-  if (params.flowOnly === 'mask') {
-    const layers = maskLayers(frame);
-    if (!layers) return null; // no second frame yet: measure everywhere
-    return maskDifference(renderer, { layers, threshold: params.threshold, blur: true });
-  }
-  return updateBackground(renderer, {
-    mask: learnMask(frame).tex,
-    alpha: backgroundAlpha(frame.stepMs, params.absorbSeconds),
-    holdStep: frame.stepMs / 1000 / BG_HOLD_SECONDS,
-    threshold: params.threshold,
-    repeat: frame.step === 'repeat',
-  });
-}
-
-/**
  * The gate at the working size (R = 1 where flow may keep its confidence),
- * or null when nothing gates this frame.
- * @param {import('./index.js').ModeFrame} frame
+ * from a full-size decision texture (the plain mask or the model's
+ * foreground, R = moving/foreground — which one is decided by the stage
+ * layer). Null when nothing gates this frame.
+ * @param {*} renderer - WebGLRenderer
  * @param {number} width - The working size flow is solved at
  * @param {number} height
+ * @param {{tex: *}|null} decision
  */
-export function flowGate(frame, width, height) {
-  const { gl: renderer, params } = frame;
-  if (params.flowOnly !== 'mask' && params.flowOnly !== 'foreground') return null;
+export function flowGate(renderer, width, height, decision) {
+  if (!decision) return null;
   // Targets before binds.
   const voted = renderer.target('flow:gate-voted', renderer.width, renderer.height);
   const reduced = renderer.target('flow:gate-reduced', width, height);
   const gate = renderer.target('flow:gate', width, height);
-  const decision = gateDecision(frame);
-  if (!decision) return null;
   maskDraw(renderer, decision.tex, voted.fb, { clean: true, output: 'data' });
   flowPass(renderer, 'flow:gate-reduce', GATE_REDUCE_FRAG, { uDecision: 0 }, reduced, [voted.tex], (gl, u) => gl.uniform1i(u.uFactor, flowFactor(renderer.width)));
   return flowPass(renderer, 'flow:gate-dilate', GATE_DILATE_FRAG, { uGate: 0 }, gate, [reduced.tex]);
@@ -181,11 +156,13 @@ export function flowGate(frame, width, height) {
 /**
  * The velocity field for this frame, or null while there is no older frame.
  * @param {import('./index.js').ModeFrame} frame - The per-frame context from Pipeline.process
+ * @param {{tex: *}|null} [gateDecision] - The full-size decision that gates
+ *   the flow (stages.velocity decides which), or null to measure everywhere
  * @returns {VelocityField|null} RG = picture pixels per second,
  *   averaged over time by confidence, zero where nothing is measured;
  *   B = how present a measurement is, 0..1
  */
-export function flowVelocity(frame) {
+export function flowVelocity(frame, gateDecision = null) {
   const { gl: renderer, ring, time, params } = frame;
   const age = ring.nearest(lookbackTime(time, params.flowGap, 0, 0), time);
   if (age < 0) return null;
@@ -198,7 +175,7 @@ export function flowVelocity(frame) {
   const velocity = renderer.target('flow:velocity', current.width, current.height, { float: true });
   const gated = renderer.target('flow:gated', current.width, current.height, { float: true });
   let flow = flowBetween(renderer, 'flow', older, current, { levels: flowLevels(current.width) });
-  const gate = flowGate(frame, current.width, current.height);
+  const gate = flowGate(renderer, current.width, current.height, gateDecision);
   if (gate) flow = flowPass(renderer, 'flow:gate-apply', GATE_APPLY_FRAG, { uFlow: 0, uGate: 1 }, gated, [flow.tex, gate.tex]);
   flowPass(renderer, 'flow:velocity', VELOCITY_FRAG, { uFlow: 0 }, velocity, [flow.tex], (gl, u) => gl.uniform1f(u.uScale, factor / gapSeconds));
 
@@ -307,6 +284,7 @@ export function reportReadings(frame, velocity, full) {
     const headingPart = readings.coherence < 0.25 ? 'mixed headings' : `${arrow} ${name}`;
     frame.note(`${headingPart} · peak ${pct(readings.peak)}%/s · ${Math.round(readings.moving * 100)}% of frame${cameraPart}`, 'info');
   }
+  return frame.readings;
 }
 
 export default /** @type {import('./index.js').Mode} */ ({
@@ -353,7 +331,9 @@ export default /** @type {import('./index.js').Mode} */ ({
   },
   render(frame) {
     const { gl: renderer, params } = frame;
-    const velocity = flowVelocity(frame);
+    // The field and its readback are shared stages: measured once, whoever
+    // else draws from them.
+    const velocity = frame.stages.velocity();
     if (!velocity) {
       renderer.renderBlank('raw', false);
       return false;
@@ -370,7 +350,7 @@ export default /** @type {import('./index.js').Mode} */ ({
       gl.uniform1i(u.uOutput, output);
     });
     show(data, 1);
-    reportReadings(frame, velocity, full);
+    frame.stages.flowReadings();
     if (params.flowShow === 'arrows') {
       renderArrows(renderer, 'flow', field, {
         minSpeed: full * FLOW_FLOOR,
