@@ -115,11 +115,17 @@ export function initReadings({ root, plate, session }) {
       return info ? `${info.frames} · ${(info.bytes / (1024 * 1024)).toFixed(0)}` : null;
     }],
   ];
+  // One row per reading: name and value share a line (a long value wraps
+  // under the name), the unit sits beneath in small type. The old two-column
+  // grid broke down when a value was wide: it crushed the name column to a
+  // word a line and pushed the value out of the margin.
   const rowNodes = ROWS.map(([label, unit]) => {
     const dt = el('dt');
-    dt.append(label, el('i', '', unit));
     const dd = el('dd', '', '');
-    list.append(dt, dd);
+    const top = el('div', 'rd-row');
+    top.append(el('span', 'rd-name', label), dd);
+    dt.append(top, el('i', '', unit));
+    list.append(dt);
     return { dt, dd };
   });
 
@@ -162,7 +168,7 @@ export function initReadings({ root, plate, session }) {
     const ctx = sample();
     for (let i = 0; i < ROWS.length; i++) {
       const value = session.loaded ? ROWS[i][2](ctx) : null;
-      rowNodes[i].dt.hidden = rowNodes[i].dd.hidden = value === null;
+      rowNodes[i].dt.hidden = value === null;
       if (value !== null) rowNodes[i].dd.textContent = value;
     }
     const mode = session.mode;
@@ -191,8 +197,10 @@ export function initReadings({ root, plate, session }) {
   function drawInstruments(ctx) {
     const r = ctx.r?.mode === 'flow' ? ctx.r : null;
     peakValue.textContent = r ? fmt.px(r.peak) : '—';
-    peak.classList.toggle('rd-idle', !r);
-    roseBox.classList.toggle('rd-idle', !r);
+    // Instruments that measure nothing in this mode are not shown at all: a
+    // dimmed dash is still an empty box. The pen line stays in every mode.
+    peak.hidden = !r;
+    roseBox.hidden = !r;
 
     const ink = getComputedStyle(aside).color;
     const accent = getComputedStyle(aside).getPropertyValue('--accent') || '#c2301a';

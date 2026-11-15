@@ -1282,3 +1282,19 @@ down/down-right with an opposed up-stream the mean hides).
 
 Needs nothing from the owner's phone (desktop only). Screenshots for the
 tier's critique round.
+
+### IA8a. Readings panel layout rework — interface (owner's report)
+The owner found the raw list unreadable in use (dark Plate, schlieren): the
+two-column grid let a wide value crush the name column to a word a line and
+push values out of the margin, and the flow-only instruments sat as dimmed
+empty boxes in modes that measure no flow.
+
+**Result:** each reading is now one row — name and value share a line (a
+long value wraps beneath, right-aligned), the unit below in small type; the
+margin no longer scrolls sideways. Instruments that measure nothing in the
+current mode are hidden, not dimmed: schlieren shows the pen line and the
+note, no dash-boxes. The margin-sharing rule now also holds through window
+resizes. Audited clean (flow with the panel open: nothing clipped,
+overlapping or off screen; min contrast 5.97). A white picture in the
+owner's screenshot was schlieren settling its reference (2 s), reproduced
+on old master identically — not a panel effect.
