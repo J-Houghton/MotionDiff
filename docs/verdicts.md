@@ -1322,3 +1322,33 @@ Also: the interface audit rules hold at desktop and phone sizes with the
 margin open (picture share, contrast, overlaps, 44 px targets), and a fresh
 critique finds the result distinct and of one piece with the Plate, not a
 generic dashboard.
+
+**Result (same protocol, fresh agents, 2026-11-15).** All four goals reached:
+
+| Goal | Before | After |
+|---|---|---|
+| 1. Traffic direction | reached, 1 step (labelled sample) | reached, 3 steps via the effect's own name (the sample path remains) |
+| 2. Own URL → gull paths | sample fallback after 10 actions; URL abandoned | trails in 1 effective click; URL typing was blocked by the test harness (focus bug in the driver, not the app), Escape-"reset" and mid-test resets were the harness reloading the page |
+| 3. Trails by true direction | NOT reached (near-miss accepted) | **reached**: "Coloured by: true measured direction" found in 2 clicks |
+| 4a. Kitten breathing | reached, 1 step | reached, 2 steps |
+| 4b. Mute the amplified noise | NOT reached in 12 actions | **reached** in 1 further click ("Still areas: muted") |
+
+Testers' words: "the control labels are excellent — 'Leave trails' and
+'Coloured by true measured direction' read exactly like my goal";
+"'Still areas: amplified too / muted' was a perfectly worded control for
+exactly the noise problem."
+
+Interface audit: clean at 1440×900 (picture share 0.525, min contrast 4.78,
+nothing clipped/overlapping) and at 390×844 (share 1, min contrast 11.46,
+all targets ≥ 44 px), and on the landing (min contrast 5.63). Blind
+critique verdict: "distinct-and-coherent … nothing here reads as a generic
+dashboard", with defects that were fixed in the same branch (stale caption
+and empty instrument on the landing, a pill-label wrap, phone/desktop
+effect-name drift, a jargon label) or logged: arrows-on-black defaults,
+the desktop legend wheel is unlabelled, "Mirror" is ambiguous beside
+Camera, near-black specimen strips for the dark effects. One real bug the
+test caught and this branch fixes: the hue legend now also shows in the
+trails' measured view.
+
+Found and fixed along the way: picking an effect with nothing loaded now
+scrolls the atlas to that effect's row (two testers got lost exactly there).

@@ -46,6 +46,7 @@ Useful URL switches in a dev build: `?renderer=canvas2d` forces the Canvas 2D fa
 │   │   ├── analyze.js              Auto-configure: noise floor, threshold and gap
 │   │   └── energy.js               Motion grid to pitch and pan, for sonification
 │   ├── app/
+│   │   ├── effects.js              The six effects: modes folded by what they do, variants as visible choices
 │   │   ├── modes/                  The mode registry: one module per mode, index.js, shared params
 │   │   ├── session.js              Everything the interface drives: sources, transport, recording
 │   │   ├── pipeline.js             Per-frame orchestration, renderer selection

@@ -181,7 +181,7 @@ export function initReadings({ root, plate, session }) {
   // ── Instruments (promoted readings; docs/readings-panel.md) ─
   const peak = el('div', 'rd-peak');
   const peakValue = el('b', '', '—');
-  peak.append(peakValue, el('span', '', 'peak px/s · 95th pct'));
+  peak.append(peakValue, el('span', '', 'peak px/s · fastest moving cells'));
   const lineBox = el('div', 'rd-line');
   const lineCanvas = el('canvas');
   lineCanvas.width = 220;

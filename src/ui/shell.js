@@ -323,6 +323,12 @@ export function initShell({ root, session }) {
     if (Object.keys(next).length) session.setParams(next);
     view.fan = false;
     applyMode();
+    // With nothing loaded yet, the pick leads to the effect's own page of
+    // the atlas, where its footage waits.
+    if (!session.loaded) {
+      const at = [...$('atlas').children][EFFECTS.indexOf(effect)];
+      at?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
   }
 
   /** The variants of an effect as rows of pills; shared by caption and fan. */
@@ -394,7 +400,9 @@ export function initShell({ root, session }) {
     const effect = effectForMode(mode.id);
     $('modeName').textContent = effect.label;
     $('modeIndex').textContent = `Plate ${effect.numeral} · ${mode.label}`;
-    $('modeBlurb').textContent = session.modeProblem() || effect.promise;
+    // The promise already carried the landing; the caption keeps its room
+    // for what needs saying now (a mode that cannot run here).
+    $('modeBlurb').textContent = session.modeProblem() || '';
     buildChoices($('capChoices'), effect);
     const all = Object.assign(document.createElement('button'), { type: 'button', className: 'choice-all', textContent: 'All controls' });
     all.append(Object.assign(document.createElement('kbd'), { textContent: 'P' }));

@@ -61,7 +61,7 @@ export const EFFECTS = [
     sample: 'Trees in Wind',
     also: ['Flowing River', 'Flower Opening'],
     strip: 'atlas/highlight.jpg',
-    ask: 'MOTION',
+    ask: 'HIGHLIGHT',
   },
   {
     id: 'cutout',
@@ -90,7 +90,7 @@ export const EFFECTS = [
     sample: 'Bees at the Hive',
     also: ['Crossing from Above'],
     strip: 'atlas/cutout.jpg',
-    ask: 'CUT-OUTS',
+    ask: 'CUT OUT',
   },
   {
     id: 'trails',
@@ -136,7 +136,7 @@ export const EFFECTS = [
         options: [
           { label: 'everything', params: { flowOnly: 'all' } },
           { label: 'only the movers', params: { flowOnly: 'mask' } },
-          { label: 'all but the background', params: { flowOnly: 'foreground' } },
+          { label: 'except the background', params: { flowOnly: 'foreground' } },
         ],
       },
     ],
@@ -166,7 +166,7 @@ export const EFFECTS = [
     sample: 'Sleeping Kitten',
     also: [],
     strip: 'atlas/magnify.jpg',
-    ask: 'TINY CHANGES',
+    ask: 'MAGNIFY',
   },
   {
     id: 'heat',
