@@ -16,10 +16,12 @@ import { backgroundStep, createBackgroundState } from '../core/background.js';
 import { renderBackground } from './modes/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH, createTrailState, trailStep } from '../core/trails.js';
 import { flowLuma as coreFlowLuma, pyramidFlow, reducedSize, smoothFlow, smoothedVector } from '../core/flow.js';
-import { flowBetween, flowLuma, flowSmooth, readField } from './flow.js';
+import { FLOW_PRELUDE, flowBetween, flowLuma, flowPass, flowSmooth, readField } from './flow.js';
 import { averageStep, referenceAlpha, shiftStrength, shiftWeight } from '../core/schlieren.js';
 import schlieren, { SCHLIEREN_TRUSTED } from './modes/schlieren.js';
 import { warpFrame } from '../core/flow.js';
+import { displacementStep, velocityBandStep, warpByField, emaAlpha } from '../core/magnify.js';
+import { MOTION_WARP_FRAG, motionBandStep } from './modes/magnify.js';
 import { WARP_FRAG } from './stages.js';
 
 /**
@@ -1015,4 +1017,98 @@ export function debugWarpParity(pipeline) {
   if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
   const share = offByMore / (width * height * 3);
   return { maxDiff, offByMore, share: +share.toFixed(5), pass: maxDiff <= 2 && share < 0.005 };
+}
+
+/**
+ * Dev-only parity probe for motion-guided magnification: the same uniform
+ * velocity sequence through core velocityBandStep + displacementStep and
+ * the shader band (modes/magnify.js motionBandStep), then one warp by the
+ * resulting constant field through MWARP and core warpByField (a constant
+ * field makes bilinear and nearest sampling identical).
+ */
+export function debugMotionMagnifyParity(pipeline) {
+  const gl = pipeline?._glRenderer;
+  if (!gl) return null;
+  if (!gl.floatTargets) return { skipped: 'no float render targets', pass: true };
+  const width = 40;
+  const height = 24;
+  const restoreWidth = gl.width;
+  const restoreHeight = gl.height;
+  const restoreFrames = gl.ringFrames;
+  gl.setSize(width, height, 2);
+
+  const frame = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const at = (y * width + x) * 4;
+      frame[at] = (x * 11 + y * 7) % 256;
+      frame[at + 1] = (x * 5 + y * 13) % 256;
+      frame[at + 2] = (x * 3 + y * 17) % 256;
+      frame[at + 3] = 255;
+    }
+  }
+  gl.uploadPixels(new ImageData(frame, width, height));
+
+  const FILL_FRAG = `${FLOW_PRELUDE}
+uniform vec2 uV;
+void main() { fragColor = vec4(uV, 1.0, 1.0); }`;
+
+  const dtMs = 1000 / 30;
+  const alphaFast = emaAlpha(2.0, dtMs);
+  const alphaSlow = emaAlpha(0.2, dtMs);
+  const count = width * height;
+  const fast = new Float32Array(count * 2);
+  const slow = new Float32Array(count * 2);
+  const disp = new Float32Array(count * 2);
+  const band = new Float32Array(count * 2);
+  const velocity = new Float32Array(count * 2);
+  const velocityTarget = gl.target('probe:mm-velocity', width, height, { float: true });
+  let shaderDisp = null;
+  for (let k = 0; k < 40; k++) {
+    const vx = 20 * Math.sin((2 * Math.PI * 0.8 * k) / 30);
+    const vy = -8 * Math.sin((2 * Math.PI * 0.8 * k) / 30);
+    flowPass(gl, 'probe:mm-fill', FILL_FRAG, {}, velocityTarget, [], (ctx, u) => ctx.uniform2f(u.uV, vx, vy));
+    shaderDisp = motionBandStep(gl, velocityTarget, { alphaFast, alphaSlow, dt: 1 / 30, repeat: false }).disp;
+    for (let i = 0; i < count; i++) { velocity[i * 2] = vx; velocity[i * 2 + 1] = vy; }
+    velocityBandStep(fast, slow, velocity, count, alphaFast, alphaSlow, band);
+    displacementStep(disp, band, count, 1 / 30, alphaSlow);
+  }
+  const read = readField(gl, { fb: shaderDisp.fb, width, height });
+  let stateDiff = 0;
+  for (let i = 0; i < count; i++) {
+    stateDiff = Math.max(stateDiff,
+      Math.abs(read.values[i * 4] - disp[i * 2]),
+      Math.abs(read.values[i * 4 + 1] - disp[i * 2 + 1]));
+  }
+
+  // One warp by the (constant) final field, both sides.
+  const AMP = 5;
+  const CAP = 32;
+  const warped = gl.target('probe:mm-warped', width, height);
+  flowPass(gl, 'mag:warp', MOTION_WARP_FRAG, { uFrame: 0, uDisp: 1, uVel: 2 }, warped,
+    [gl.currentTexture, shaderDisp.tex, velocityTarget.tex], (ctx, u) => {
+      ctx.uniform2f(u.uProc, width, height);
+      ctx.uniform1f(u.uAmp, AMP);
+      ctx.uniform1f(u.uCap, CAP);
+    });
+  const ctx = gl.gl;
+  const pixels = new Uint8Array(width * height * 4);
+  ctx.bindFramebuffer(ctx.FRAMEBUFFER, warped.fb);
+  ctx.readPixels(0, 0, width, height, ctx.RGBA, ctx.UNSIGNED_BYTE, pixels);
+  const core = warpByField(frame, width, height, disp, width, height, AMP, CAP);
+  let offByMore = 0;
+  for (let y = 2; y < height - 2; y++) {
+    for (let x = 2; x < width - 2; x++) {
+      for (let channel = 0; channel < 3; channel++) {
+        const got = pixels[((height - 1 - y) * width + x) * 4 + channel];
+        const want = core[(y * width + x) * 4 + channel];
+        // 8-bit bilinear at float32 fractional positions: single levels
+        // flip freely; what matters is nothing beyond the visual guard.
+        if (Math.abs(got - want) > 4) offByMore++;
+      }
+    }
+  }
+  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
+  const share = offByMore / ((width - 4) * (height - 4) * 3);
+  return { stateDiff: +stateDiff.toFixed(5), warpOffShare: +share.toFixed(4), pass: stateDiff < 0.01 && share < 0.01 };
 }

@@ -53,5 +53,6 @@ if (import.meta.env.DEV) {
     window.__motionDiffFlowParity = () => probes.debugFlowParity(session.pipeline);
     window.__motionDiffSchlierenParity = () => probes.debugSchlierenParity(session.pipeline);
     window.__motionDiffWarpParity = () => probes.debugWarpParity(session.pipeline);
+    window.__motionDiffMotionMagnifyParity = () => probes.debugMotionMagnifyParity(session.pipeline);
   });
 }

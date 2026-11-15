@@ -155,6 +155,13 @@ export const EFFECTS = [
     base: { algorithm: 'magnify' },
     choices: [
       {
+        label: 'Amplify',
+        options: [
+          { label: 'brightness changes', params: { magMode: 'brightness' } },
+          { label: 'measured motion', params: { magMode: 'motion' } },
+        ],
+      },
+      {
         label: 'Still areas',
         options: [
           { label: 'amplified too', params: { magQuiet: false } },
