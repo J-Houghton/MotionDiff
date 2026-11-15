@@ -1298,3 +1298,27 @@ resizes. Audited clean (flow with the panel open: nothing clipped,
 overlapping or off screen; min contrast 5.97). A white picture in the
 owner's screenshot was schlieren settling its reference (2 s), reproduced
 on old master identically — not a panel effect.
+
+## Session 6
+
+### X-1. The app reorganised around effects (owner's pick from three mockups)
+**Expected, written before the after-test ran.** The owner picked, from
+docs/design/effects/: the atlas structure and landing (A), the instrument
+margin as the data display (B), the question strip in the Viewfinder (C).
+Success is measured the way the brief asked — a fresh agent that has never
+seen the app gets a goal in plain words and must reach the right picture,
+same four goals and 12-action cap as the baseline of 2026-11-15:
+
+1. "Show which way the traffic is moving" — stays a one-step success.
+2. "Load your own clip by URL, show the gulls' paths" — reached without
+   abandoning the URL path, or the sample fallback found faster.
+3. "Trails coloured by each mover's true direction" — the built combination
+   (history × flow) is actually reached: historyShow = 'measured', not a
+   flow-traces near-miss.
+4. "Kitten breathing, then mute the amplified noise" — both parts reached:
+   magQuiet on, through the UI.
+
+Also: the interface audit rules hold at desktop and phone sizes with the
+margin open (picture share, contrast, overlaps, 44 px targets), and a fresh
+critique finds the result distinct and of one piece with the Plate, not a
+generic dashboard.
