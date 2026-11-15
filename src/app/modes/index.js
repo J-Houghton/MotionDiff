@@ -37,6 +37,9 @@
  *   consumes it, everything else treats the frame as a repeat
  * @property {(message: string, type?: 'info'|'error') => void} note - Puts a
  *   sentence on the status line (a setup problem, a reading); rate-limited
+ * @property {import('../stages.js').Stages} stages - The shared measurement
+ *   stages for this frame (docs/pipeline-stages.md): each computed once per
+ *   frame on first request, however many views pull it. WebGL path only
  * @property {object|null} [readings] - A mode may set this: a small object of
  *   live measurements for this frame; the pipeline exposes the latest one as
  *   pipeline.readings for the interface and tools

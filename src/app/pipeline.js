@@ -10,6 +10,7 @@ import {
   storeInterval,
 } from '../core/timebase.js';
 import { defaultParams, getMode } from './modes/index.js';
+import { Stages } from './stages.js';
 
 const DEFAULT_PROCESS_WIDTH = 640;
 
@@ -86,6 +87,9 @@ export class Pipeline {
       gl: null, ring: null, time: 0, step: 'first', dtMs: 0, stepMs: 0, trailAgeStep: 0,
       pausedDt: 0, params: this.params, display: 'diff', layers: [0, 0, 0],
     };
+    // The shared measurement stages (docs/pipeline-stages.md): begun afresh
+    // for every WebGL frame and handed to the mode as frame.stages.
+    this._stages = new Stages();
     // A mode may say something about what it sees (frame.note): passed on to
     // the status line when the text changes, at most about once a second.
     this._frame.note = (message, type = 'info') => this._note(message, type);
@@ -643,6 +647,7 @@ export class Pipeline {
       frame.params = this.params;
       frame.display = this._currentMode;
       frame.readings = null;
+      frame.stages = this._stages.begin(frame);
       this._hasMagnitude = mode.render(frame) !== false;
       this.readings = frame.readings;
       if (this._hasMagnitude && this._currentMode === 'data') gl.renderDataView(mode.data.kind);

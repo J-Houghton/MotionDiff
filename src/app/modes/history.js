@@ -16,10 +16,9 @@
  * rounding.
  */
 import { HISTORY_MAX_DELTA } from '../../core/history.js';
-import { MASK_VOTES_STRICT } from '../../core/mask.js';
 import { AGE_COLORS, GAP, THRESHOLD, asMs } from './params.js';
-import { SECOND_GAP, maskDifference, maskDraw, maskLayers, maskLookback } from './mask.js';
-import { FLOW_PRESENT, SPEED_RANGE, flowVelocity } from './flow.js';
+import { SECOND_GAP, maskLookback } from './mask.js';
+import { FLOW_PRESENT, SPEED_RANGE } from './flow.js';
 
 /** Direction grid: one cell per this many pixels… */
 export const HISTORY_CELL = 8;
@@ -259,8 +258,9 @@ const hexToUnit = (hex, fallback) => {
 const STATES = new WeakMap();
 
 /**
- * Advance the history with a mask and draw it. Fills the picture target and
- * the data target.
+ * Advance the history for this frame without drawing what a mode shows: the
+ * age field, the pooled directions, and (measured view) the laid-down flow
+ * colours. The measurement half of renderHistory; stages.history memoizes it.
  *
  * @param {*} renderer - WebGLRenderer
  * @param {object} opts
@@ -268,13 +268,11 @@ const STATES = new WeakMap();
  * @param {number} opts.ageStep - Media time since the previous frame, in history lengths
  * @param {boolean} [opts.repeat] - The same frame again: recompute, do not advance
  * @param {'age'|'direction'|'measured'} opts.view
- * @param {string} [opts.colourNew] - Hex, age view
- * @param {string} [opts.colourOld]
  * @param {{tex: *, width: number, height: number}|null} [opts.velocity] - Measured
  *   view: the smoothed velocity field (flowVelocity), or null while there is none
- * @param {number} [opts.full] - Measured view: speed at full brightness, px/s
+ * @returns {{age: {tex: *}, pooled: {tex: *}, vel: {tex: *}|null}}
  */
-export function renderHistory(renderer, opts) {
+export function advanceHistory(renderer, opts) {
   const gl = renderer.gl;
   const { width, height } = renderer;
   const cols = Math.ceil(width / HISTORY_CELL);
@@ -289,7 +287,6 @@ export function renderHistory(renderer, opts) {
   const gradient = renderer.target('history:gradient', width, height, { float: true });
   const cellSums = renderer.target('history:cells', cols, rows, { float: true });
   const pooled = renderer.target('history:pooled', cols, rows, { float: true });
-  const data = renderer.dataFramebuffer(width, height);
 
   let state = STATES.get(renderer);
   if (!state || state.epoch !== renderer.epoch || ages[0].fresh || ages[1].fresh) {
@@ -365,13 +362,42 @@ export function renderHistory(renderer, opts) {
   gl.uniform1i(pool.u.uSpread, HISTORY_SPREAD);
   renderer.draw(pooled.fb, cols, rows);
 
+  return { age, pooled, vel: vels ? vels[state.current] : null };
+}
+
+/**
+ * Advance the history with a mask and draw it. Fills the picture target and
+ * the data target.
+ *
+ * @param {*} renderer - WebGLRenderer
+ * @param {object} opts - advanceHistory's (mask, ageStep, repeat, velocity —
+ *   not needed with `state`), plus:
+ * @param {{age: {tex: *}, pooled: {tex: *}, vel: {tex: *}|null}} [opts.state] -
+ *   The history already advanced this frame (stages.history): the advance is
+ *   then skipped
+ * @param {WebGLTexture} [opts.mask]
+ * @param {number} [opts.ageStep]
+ * @param {boolean} [opts.repeat]
+ * @param {{tex: *, width: number, height: number}|null} [opts.velocity]
+ * @param {'age'|'direction'|'measured'} opts.view
+ * @param {string} [opts.colourNew] - Hex, age view
+ * @param {string} [opts.colourOld]
+ * @param {number} [opts.full] - Measured view: speed at full brightness, px/s
+ */
+export function renderHistory(renderer, opts) {
+  const state = opts.state || advanceHistory(renderer, /** @type {*} */ (opts));
+  const gl = renderer.gl;
+  const { width, height } = renderer;
+  // Targets before binds.
+  const data = renderer.dataFramebuffer(width, height);
+
   const show = renderer.program('history:show', SHOW_FRAG, { uAge: 0, uPooled: 1, uVelocity: 2 });
   gl.useProgram(show.prog);
-  renderer.bind(0, age.tex);
-  renderer.bind(1, pooled.tex);
-  renderer.bind(2, vels ? vels[state.current].tex : age.tex);
+  renderer.bind(0, state.age.tex);
+  renderer.bind(1, state.pooled.tex);
+  renderer.bind(2, state.vel ? state.vel.tex : state.age.tex);
   gl.uniform1i(show.u.uCell, HISTORY_CELL);
-  gl.uniform1i(show.u.uView, measured ? 2 : opts.view === 'direction' ? 1 : 0);
+  gl.uniform1i(show.u.uView, opts.view === 'measured' ? 2 : opts.view === 'direction' ? 1 : 0);
   gl.uniform1f(show.u.uFull, Math.max(1, opts.full || 0));
   gl.uniform3fv(show.u.uNew, hexToUnit(opts.colourNew, '#ff4400'));
   gl.uniform3fv(show.u.uOld, hexToUnit(opts.colourOld, '#0044ff'));
@@ -409,28 +435,20 @@ export default /** @type {import('./index.js').Mode} */ ({
   lookback: maskLookback,
   render(frame) {
     const { gl: renderer, params } = frame;
-    const layers = maskLayers(frame);
-    if (!layers) {
+    // The strict-voted mask feed and the advanced ages are shared stages;
+    // the measured view pulls the flow field through the same stage the
+    // flow mode uses.
+    const state = frame.stages.history(params.historyShow);
+    if (!state) {
       renderer.renderBlank('raw', false);
       return false;
     }
-    const { width, height } = renderer;
-    const mask = renderer.target('history:mask', width, height);
-    const raw = maskDifference(renderer, { layers, threshold: params.threshold, blur: true });
-    // The strict vote: a hairline in the mask would stripe the history.
-    maskDraw(renderer, raw.tex, mask.fb, { clean: MASK_VOTES_STRICT, output: 'data' });
-
-    // Measured colours ask the flow solver for this frame's velocity field.
-    const velocity = params.historyShow === 'measured' ? flowVelocity(frame) : null;
     renderHistory(renderer, {
-      mask: mask.tex,
-      ageStep: frame.stepMs / 1000 / (params.historyLength / 30),
-      repeat: frame.step === 'repeat',
+      state,
       view: params.historyShow,
       colourNew: params.ageColorNew,
       colourOld: params.ageColorOld,
-      velocity,
-      full: (params.flowRange / 100) * width,
+      full: (params.flowRange / 100) * renderer.width,
     });
     renderer.renderComposite(frame.display, 'raw', false);
     return true;

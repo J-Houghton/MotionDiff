@@ -1,9 +1,8 @@
 // @ts-check
-import { BG_HOLD_SECONDS, BG_VAR_MIN, backgroundAlpha } from '../../core/background.js';
+import { BG_VAR_MIN } from '../../core/background.js';
 import { emaAlpha } from '../../core/magnify.js';
 import { readField } from '../flow.js';
 import { reduceField } from '../particles.js';
-import { learnMask, updateBackground } from './background.js';
 import { BLUR } from './params.js';
 
 /** The gate opens between these multiples of the frame's quiet σ (25th percentile). */
@@ -30,25 +29,19 @@ void main() {
 const QUIET_BUFFERS = new WeakMap();
 
 /**
- * The mute-still-areas gate for this frame: maintain the background model,
- * estimate the frame's quiet σ from a small readback of its variance, and
- * write keep = smoothstep over σ. Null while there is no history yet.
+ * The mute-still-areas gate for this frame: from the background model's
+ * variance (advanced by the stage layer), estimate the frame's quiet σ from
+ * a small readback and write keep = smoothstep over σ.
  *
  * @param {import('./index.js').ModeFrame} frame
+ * @param {{variance: *}} model - stages.background()
  * @returns {{tex: *, fb: *, width: number, height: number}|null}
  */
-export function quietGate(frame) {
-  const { gl: renderer, params } = frame;
+export function quietGate(frame, model) {
+  const { gl: renderer } = frame;
   const { width, height } = renderer;
   // Targets before binds.
   const gate = renderer.target('magnify:gate', width, height);
-  const model = updateBackground(renderer, {
-    mask: learnMask(frame).tex,
-    alpha: backgroundAlpha(frame.stepMs, params.absorbSeconds),
-    holdStep: frame.stepMs / 1000 / BG_HOLD_SECONDS,
-    threshold: params.threshold,
-    repeat: frame.step === 'repeat',
-  });
 
   // The frame's quiet level: the 25th-percentile σ of a reduced copy.
   const reduced = reduceField(renderer, 'magnify:noise', { tex: model.variance, width, height }, 64);
@@ -111,7 +104,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     }
     // The band must lie above the low cutoff whatever order the sliders are in.
     const low = Math.min(params.magFreqLow, params.magFreqHigh - 0.05);
-    const gate = params.magQuiet ? quietGate(frame) : null;
+    const gate = params.magQuiet ? frame.stages.quietGate() : null;
     // frame.dtMs is media time, so the pass band is in Hz of the scene at
     // any playback rate; a repeated frame advances the filters by nothing.
     const ok = gl.renderMagnify({
