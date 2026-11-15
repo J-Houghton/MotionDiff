@@ -102,6 +102,11 @@ export function initBoxes({ root, stage, session }) {
         n.arrow.style.display = 'none';
       }
 
+      // A box too small to read a label beside gets only its box: the far
+      // field stays legible.
+      const labelled = o.w * o.h >= 1800;
+      n.label.style.display = labelled ? '' : 'none';
+      n.plate.style.display = labelled ? '' : 'none';
       const text = `${o.id} · ${Math.round(speed)} px/s`;
       n.label.textContent = text;
       n.label.setAttribute('font-size', String(fontSize));

@@ -78,20 +78,20 @@ describe('stepTracks', () => {
   it('coasts a lost mover briefly, then lets it die', () => {
     let state = run(Array.from({ length: 5 }, (_, k) => [det(100 + 4 * k, 50)]));
     // Lost for three frames: coasts, same ID on return.
-    for (let k = 0; k < 3; k++) state = stepTracks(state.tracks, [], { dt, nextId: state.nextId });
+    for (let k = 0; k < 3; k++) state = stepTracks(state.tracks, [], { dt, nextId: state.nextId, coast: 5 });
     expect(state.tracks).toHaveLength(1);
     expect(state.tracks[0].miss).toBe(3);
     state = stepTracks(state.tracks, [det(100 + 4 * 8, 50)], { dt, nextId: state.nextId });
     expect(state.tracks[0].id).toBe(1);
     expect(state.tracks[0].miss).toBe(0);
     // Lost for longer than the coast: gone.
-    for (let k = 0; k < 6; k++) state = stepTracks(state.tracks, [], { dt, nextId: state.nextId });
+    for (let k = 0; k < 6; k++) state = stepTracks(state.tracks, [], { dt, nextId: state.nextId, coast: 5 });
     expect(state.tracks).toHaveLength(0);
   });
 
   it('never reuses an ID', () => {
     let state = run(Array.from({ length: TRACK_BIRTH + 1 }, () => [det(10, 10)]));
-    for (let k = 0; k < 7; k++) state = stepTracks(state.tracks, [], { dt, nextId: state.nextId });
+    for (let k = 0; k < 7; k++) state = stepTracks(state.tracks, [], { dt, nextId: state.nextId, coast: 5 });
     expect(state.tracks).toHaveLength(0);
     state = stepTracks(state.tracks, [det(10, 10)], { dt, nextId: state.nextId });
     expect(state.tracks[0].id).toBe(2);

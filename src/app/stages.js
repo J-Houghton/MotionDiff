@@ -437,13 +437,14 @@ export class Stages {
       // Vote, reduce to a coarse grid, read back.
       const voted = renderer.target('stage:track-voted', renderer.width, renderer.height);
       maskDraw(renderer, decision.tex, voted.fb, { clean: true, output: 'data' });
-      const reduced = reduceField(renderer, 'stage:track-grid', { tex: voted.tex, width: renderer.width, height: renderer.height }, 160);
+      const reduced = reduceField(renderer, 'stage:track-grid', { tex: voted.tex, width: renderer.width, height: renderer.height }, 192);
       state.buffers = readField(renderer, reduced, state.buffers);
       const { width: cols, height: rows } = reduced;
       const cell = renderer.width / cols;
       const grid = new Uint8Array(cols * rows);
-      // A block counts as moving when a quarter of its pixels did.
-      for (let i = 0; i < cols * rows; i++) grid[i] = state.buffers.values[i * 4] >= 0.25 ? 1 : 0;
+      // A block counts as moving when a good third of its pixels did: a
+      // lower bar bridges the gap between two cars nose to tail.
+      for (let i = 0; i < cols * rows; i++) grid[i] = state.buffers.values[i * 4] >= 0.35 ? 1 : 0;
 
       const detections = labelComponents(grid, cols, rows, 10).map((part) => ({
         cx: (part.cx + 0.5) * cell,

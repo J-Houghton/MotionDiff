@@ -73,8 +73,9 @@ export function labelComponents(mask, cols, rows, minArea = 4) {
 
 /** How many frames a new shape must persist before it is a mover. */
 export const TRACK_BIRTH = 5;
-/** How many frames a lost mover coasts on its prediction before it dies. */
-export const TRACK_COAST = 5;
+/** How many frames a lost mover coasts on its prediction before it dies —
+ * long enough to live through a merge with a neighbour and come back out. */
+export const TRACK_COAST = 15;
 /** EMA weight of the newest displacement in a track's velocity. */
 export const TRACK_SMOOTH = 0.35;
 
@@ -113,7 +114,16 @@ export function stepTracks(tracks, detections, options) {
     detections.forEach((d, di) => {
       const reach = gate * Math.max(d.w, d.h, 24);
       const dist = Math.hypot(t.px - d.cx, t.py - d.cy);
-      if (dist <= reach) pairs.push({ ti, di, dist });
+      if (dist > reach) return;
+      // A shape several times the track's size is a different thing (a
+      // queue merging into one blob must not steal a car's ID)…
+      const sizeRatio = Math.max(d.w * d.h, 64) / Math.max(t.w * t.h, 64);
+      if (sizeRatio > 6 || sizeRatio < 1 / 6) return;
+      // …and so is a match that implies the mover teleported.
+      const impliedSpeed = dist / dt;
+      const known = Math.hypot(t.vx, t.vy);
+      if (t.hits > 3 && impliedSpeed > known * 3 + 120) return;
+      pairs.push({ ti, di, dist });
     });
   });
   pairs.sort((a, b) => a.dist - b.dist);
