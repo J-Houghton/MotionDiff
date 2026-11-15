@@ -1308,7 +1308,9 @@ export class WebGLRenderer {
     gl.uniform1i(u.uGated, opts.gate ? 1 : 0);
     gl.uniform2f(u.uBandScale, this.width / (w * ds), this.height / (h * ds));
 
-    this._drawQuadTo(null, this.width, this.height);
+    // The canvas backing may be display-sized (docs/display-layer.md): the
+    // composite must fill it, or the picture sits in the GL origin's corner.
+    this._drawQuadTo(null, this.canvasWidth || this.width, this.canvasHeight || this.height);
 
     // This frame's motion magnitude comes from the amplified band, muted
     // by the same gate as the picture.

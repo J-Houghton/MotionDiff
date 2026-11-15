@@ -189,6 +189,8 @@ export class Session {
    */
   applyPreset(preset) {
     if (preset.display) this.setDisplay(preset.display);
+    /** The name the panel's Preset select shows as chosen. */
+    this.activePreset = preset.name || null;
     this.setParams({ ...preset.params });
   }
 
