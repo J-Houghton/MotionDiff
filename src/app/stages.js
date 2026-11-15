@@ -147,11 +147,13 @@ export class Stages {
       const { flowOnly } = frame.params;
       // Which decision gates the flow is decided here: the plain mask when
       // there is one (no second frame yet: measure everywhere), the model's
-      // foreground, or nothing.
-      const decision = flowOnly === 'mask' ? this.maskPlain()
-        : flowOnly === 'foreground' ? this.background()
+      // foreground, or nothing. Passed as a thunk so a stateful decision is
+      // only measured — and the model only advances — on a frame whose
+      // solve actually runs (see flowVelocity).
+      const source = flowOnly === 'mask' ? () => this.maskPlain()
+        : flowOnly === 'foreground' ? () => this.background()
           : null;
-      return flowVelocity(frame, decision);
+      return flowVelocity(frame, source);
     });
   }
 

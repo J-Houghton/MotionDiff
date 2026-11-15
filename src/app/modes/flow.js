@@ -156,13 +156,16 @@ export function flowGate(renderer, width, height, decision) {
 /**
  * The velocity field for this frame, or null while there is no older frame.
  * @param {import('./index.js').ModeFrame} frame - The per-frame context from Pipeline.process
- * @param {{tex: *}|null} [gateDecision] - The full-size decision that gates
- *   the flow (stages.velocity decides which), or null to measure everywhere
+ * @param {(() => {tex: *}|null)|null} [gateSource] - Measures the full-size
+ *   decision that gates the flow (stages.velocity decides which), or null to
+ *   measure everywhere. A function, not a texture: a stateful decision (the
+ *   background model) must not advance on a frame whose solve never runs,
+ *   so it is asked for only after the early-outs
  * @returns {VelocityField|null} RG = picture pixels per second,
  *   averaged over time by confidence, zero where nothing is measured;
  *   B = how present a measurement is, 0..1
  */
-export function flowVelocity(frame, gateDecision = null) {
+export function flowVelocity(frame, gateSource = null) {
   const { gl: renderer, ring, time, params } = frame;
   const age = ring.nearest(lookbackTime(time, params.flowGap, 0, 0), time);
   if (age < 0) return null;
@@ -175,7 +178,7 @@ export function flowVelocity(frame, gateDecision = null) {
   const velocity = renderer.target('flow:velocity', current.width, current.height, { float: true });
   const gated = renderer.target('flow:gated', current.width, current.height, { float: true });
   let flow = flowBetween(renderer, 'flow', older, current, { levels: flowLevels(current.width) });
-  const gate = flowGate(renderer, current.width, current.height, gateDecision);
+  const gate = gateSource ? flowGate(renderer, current.width, current.height, gateSource()) : null;
   if (gate) flow = flowPass(renderer, 'flow:gate-apply', GATE_APPLY_FRAG, { uFlow: 0, uGate: 1 }, gated, [flow.tex, gate.tex]);
   flowPass(renderer, 'flow:velocity', VELOCITY_FRAG, { uFlow: 0 }, velocity, [flow.tex], (gl, u) => gl.uniform1f(u.uScale, factor / gapSeconds));
 
