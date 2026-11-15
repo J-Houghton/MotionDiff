@@ -1436,3 +1436,24 @@ blobs still churn their numbers. Per-vehicle separation inside a merged
 clump needs a measurement the mask does not make (a flow-direction split);
 logged on the roadmap. Verdict: **pass on the registered truth criteria;
 partial on dense traffic, with the limit named.**
+
+### V-6K. Calibration to real units (docs/tracking.md §Calibration)
+**Expected, written before building.** Marking a known 100-px stretch of
+`truth` as 10 m makes the square's box read 12 ± 2.4 m/s; the audit stays
+clean with the marking overlay up; a fresh agent asked "how fast is that
+in real units?" finds the flow unaided.
+
+**Result (2026-11-15; effort capped by the owner).** Numeric: marking a
+100-px stretch of `truth` as 10 m set the scale to exactly 0.1 m/px, and
+the moving square's box read 11–14 m/s across runs — inside the 12 ± 2.4
+bar. The question is asked by a small in-place form, not a browser popup.
+Audit: clean with the marking overlay up (the audit now recognises an SVG
+text's backing rect as its plate — the rule's intent, extended to SVG
+overlays). The fresh-agent round **failed on discoverability**: the agent
+reached a px/s reading in two clicks and even derived ~12–13 m/s by hand —
+validating the number — but never found the calibration flow: the C key
+gives only a status-line sentence as feedback, the instrument-margin link
+the design called for had not been built (it has now), and the Keys sheet
+can sit taller than a short window with no keyboard scroll (pre-existing;
+logged for the fixes branch). No further rounds per the owner's cap; the
+branch carries the feature and the owner decides the merge.
