@@ -47,7 +47,12 @@ for (let node = walker.nextNode(); node; node = walker.nextNode()) {
   seen.add(el);
   if (el.closest('button:disabled, input:disabled, [aria-hidden="true"] .tp-sldv')) continue; // disabled controls are exempt
   // Text drawn straight over the video has no fixed background: flag it.
-  const onPicture = el.closest('.frame') && ![...(function* () { for (let n = el; n && !n.classList.contains('frame'); n = n.parentElement) yield n; })()]
+  // In an SVG overlay the plate is a filled rect laid just before the text,
+  // not a CSS background: that counts too.
+  const svgPlate = el instanceof SVGTextElement
+    && el.previousElementSibling instanceof SVGRectElement
+    && (parse(getComputedStyle(el.previousElementSibling).fill)[3] ?? 1) >= 1;
+  const onPicture = !svgPlate && el.closest('.frame') && ![...(function* () { for (let n = el; n && !n.classList.contains('frame'); n = n.parentElement) yield n; })()]
     .some((n) => (parse(getComputedStyle(n).backgroundColor)[3] ?? 1) >= 1);
   if (onPicture) { lowContrast.push(`${name(el)} sits on the picture with no plate`); continue; }
   const cs = getComputedStyle(el);

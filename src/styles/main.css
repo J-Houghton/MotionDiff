@@ -528,3 +528,18 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .boxes marker path { fill: var(--accent); }
 .boxes .boxes-plate { fill: var(--card); stroke: var(--ink); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .boxes text { fill: var(--ink); font-family: var(--mono); }
+
+/* calibration: the marked known-length line (ui/calibrate.js) */
+.cal { position: absolute; z-index: 5; inset: 0; overflow: visible; cursor: crosshair; }
+.cal line { stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-dasharray: 6 4; }
+.cal circle { fill: var(--accent); }
+.cal-ask { position: absolute; z-index: 6; left: 50%; top: 14px; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; background: var(--card); color: var(--ink); border: 1px solid var(--ink); box-shadow: 5px 6px 0 var(--shade); padding: 8px 12px; font: 400 12px/1 var(--mono); }
+.cal-ask input { width: 70px; background: var(--paper); border: 1px solid var(--ink); padding: 7px 8px; min-height: 36px; }
+.cal-ask button { background: none; border: 1px solid var(--ink); padding: 7px 10px; min-height: 36px; }
+.cal-ask button[type='submit'] { background: var(--ink); color: var(--paper); }
+#app[data-layout='viewfinder'] .cal-ask { background: #000; border-color: var(--rule); box-shadow: none; }
+
+/* the margin's entry to the calibration flow */
+.rd-calibrate { margin-top: 8px; background: none; border: 0; border-bottom: 1px solid var(--rule); padding: 4px 0; font: 400 11px/1 var(--mono); color: var(--soft); display: inline-flex; gap: 6px; align-items: baseline; }
+.rd-calibrate:hover { color: var(--ink); border-bottom-color: var(--ink); }
+.rd-calibrate kbd { font-size: 9px; padding: 1px 3px; }
