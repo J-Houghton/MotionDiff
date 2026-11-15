@@ -1298,3 +1298,50 @@ resizes. Audited clean (flow with the panel open: nothing clipped,
 overlapping or off screen; min contrast 5.97). A white picture in the
 owner's screenshot was schlieren settling its reference (2 s), reproduced
 on old master identically — not a panel effect.
+
+## Session 6 (measurement)
+
+### V-6C. Camera compensation (`cameraComp`, docs/camera-compensation.md)
+**Expected, written before the strips were rendered.**
+1. `handheld` + Raw diff: with compensation on, the wobbling scenery (building,
+   street) largely cancels — visibly darker static ground — while the marching
+   crowd remains. Off: the whole frame lights up with every wobble.
+2. `highway` + Motion mask: the road surface and verges stop speckling;
+   vehicles still cut out.
+3. `river` + Optical flow (colour): the camera drifts forward, which reads as
+   radial expansion; with the zoom term subtracted the banks and stones go
+   dark or near-dark while the water keeps its flow colours.
+4. `truth` (still camera) + mask: compensation on changes nothing a judge can
+   see (the fit reads ~zero); the numeric guard stays under its bar.
+
+Judged blind: unlabeled off/on strips in random order, a fresh agent names
+which shows less scenery response and whether real movers survive.
+
+**Result (blind judge, unlabeled off/on pairs in random order, 2026-11-15).**
+1. `handheld` + Raw: **pass.** The judge called the compensated strip apart at
+   once and the right way round: "the tree canopy and the buildings behind are
+   largely solid black… in [the other] the entire upper canopy is covered in a
+   dense stipple"; crowd "strongly lit". Artifacts noted: mild smearing at
+   moving heads.
+2. Motion mask on a wobbling camera: **pass**, on `handheld` rather than
+   `highway` — measurement showed highway's camera is effectively still
+   (share and dead band read it as zero), which is the no-false-positive
+   case, recorded under 5. The judge: compensated strip "keeps more of the
+   background black… the crowd survives fully"; artifacts: ghosted duplicate
+   limbs, holes inside flat signs (the mask's known flat-surface trait).
+3. `river` + flow colour: **pass with a caveat.** "In [the compensated
+   strip] most of the frame is black: the big boulder and much of the
+   foreground ground are dark"; the water's colours turn patchy — water
+   moving with the camera's drift partially cancels, which is what
+   subtracting the camera means; said in the help text.
+4. `truth` (still camera): compensation on versus off is **byte-identical**
+   in a like-for-like run. The guards that make it so: the fit only speaks
+   when ≥25% of the field backs it, below a stillness dead band it reads
+   zero, and a solve across a thinned ring (> 0.5 s) is refused.
+5. `highway` (near-still camera): off and on identical — the dead band
+   correctly refuses to invent camera motion.
+
+Tooling note, found on the way: a synthetic scene rendered after a real-clip
+scene in the same filmstrip run can differ slightly from the same scene
+rendered alone (reproduced on master, before any of this session's
+branches): compare strips rendered by runs with the same scene order.

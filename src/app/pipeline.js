@@ -76,9 +76,11 @@ export class Pipeline {
 
     this.hls = null;
 
-    // Every mode's params with their defaults (see modes/index.js), plus the
-    // processing fps cap, which belongs to no mode.
-    this.params = { ...defaultParams(), fpsCap: null };
+    // Every mode's params with their defaults (see modes/index.js), plus two
+    // that belong to no mode: the processing fps cap, and camera
+    // compensation, which the stage layer applies for every consumer
+    // (docs/camera-compensation.md).
+    this.params = { ...defaultParams(), fpsCap: null, cameraComp: false };
 
     /** Display mode for modes that composite: 'diff' | 'overlay' | 'glow' | 'data' */
     this._currentMode = 'diff';
