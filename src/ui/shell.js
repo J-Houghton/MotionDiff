@@ -77,6 +77,7 @@ const TEMPLATE = `
       </div>
       <div class="atlas" id="atlas"></div>
       <p class="empty-hint">or drop a video file anywhere · your video never leaves the browser</p>
+      <p class="version" id="versionEmpty"></p>
     </div>
   </div>
   <aside class="panel chrome" id="panel" aria-label="Parameters">
@@ -125,6 +126,7 @@ const TEMPLATE = `
     <p id="helpBlurb"></p>
     <ul class="help" id="helpList"></ul>
     <p class="help-data" id="helpData"></p>
+    <p class="version" id="versionKeys"></p>
     <button type="button" class="sheet-close" data-close>Close <kbd>Esc</kbd></button>
   </div>
 </div>
@@ -761,6 +763,11 @@ export function initShell({ root, session }) {
     buildSources($('sheetSources'));
     applyLayout();
   });
+
+  // The version footer: which build this is, on the landing and under Keys.
+  const stamp = typeof __BUILD_STAMP__ === 'string' ? `MotionDiff ${__BUILD_STAMP__}` : 'MotionDiff dev';
+  $('versionEmpty').textContent = stamp;
+  $('versionKeys').textContent = stamp;
 
   setTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
   applySource();
