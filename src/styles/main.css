@@ -186,6 +186,9 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .empty h2 { margin: 0; font: 600 clamp(30px, 5vw, 56px)/0.95 var(--serif); letter-spacing: -0.03em; }
 .empty p { margin: 0; max-width: 46ch; font: italic 400 15px/1.35 var(--serif); color: var(--soft); }
 .empty-hint { font: 400 12px/1 var(--mono) !important; max-width: none !important; }
+/* the version footer: small, quiet, present on the landing and in the keys sheet */
+.version { margin: 0; font: 400 10px/1 var(--mono) !important; color: var(--soft); opacity: 0.75; letter-spacing: 0.04em; max-width: none !important; }
+.sheet .version { justify-self: start; }
 .empty-head { display: grid; justify-items: center; gap: 12px; padding-bottom: 10px; }
 .empty-head p { justify-self: center; }
 
@@ -225,7 +228,8 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 /* caption strip */
 .cap { display: grid; grid-template-columns: minmax(280px, 1.25fr) minmax(280px, 2fr) auto; column-gap: 28px; row-gap: 6px; align-items: end; border-top: 1px solid var(--ink); padding-top: 8px; }
 .cap-mode h1 { margin: 0; font: 600 30px/0.95 var(--serif); letter-spacing: -0.03em; white-space: nowrap; }
-.cap-mode h1 small { font: 400 11px/1 var(--mono); letter-spacing: 0; color: var(--soft); margin-left: 8px; vertical-align: 8px; }
+/* the plate number on its own line: a long effect name must not push it into the neighbouring column */
+.cap-mode h1 small { display: block; font: 400 11px/1.4 var(--mono); letter-spacing: 0; color: var(--soft); margin: 2px 0 0; }
 .cap-mode p { margin: 4px 0 0; font: italic 400 13px/1.25 var(--serif); color: var(--soft); max-width: 44ch; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .cap-mode p:empty { display: none; }
 
@@ -543,3 +547,8 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .rd-calibrate { margin-top: 8px; background: none; border: 0; border-bottom: 1px solid var(--rule); padding: 4px 0; font: 400 11px/1 var(--mono); color: var(--soft); display: inline-flex; gap: 6px; align-items: baseline; }
 .rd-calibrate:hover { color: var(--ink); border-bottom-color: var(--ink); }
 .rd-calibrate kbd { font-size: 9px; padding: 1px 3px; }
+
+/* the brand doubles as the way back to the effects page */
+.brand { background: none; border: 0; padding: 0; cursor: pointer; }
+#app[data-source='ready'][data-atlas='true'] .empty { display: grid; }
+.sheet-body:focus-visible { outline-offset: -2px; }
