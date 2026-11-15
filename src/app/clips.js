@@ -17,16 +17,19 @@ export const TEST_CLIPS = [
   {
     label: 'Trees in Wind',
     url: 'https://videos.pexels.com/video-files/1254570/1254570-hd_1920_1080_30fps.mp4',
+    preset: 'Trees in Wind',
     credit: 'Pexels licence',
   },
   {
     label: 'Flowing River',
     url: 'https://videos.pexels.com/video-files/6981415/6981415-hd_1920_1080_25fps.mp4',
+    preset: 'Flowing Water',
     credit: 'Pexels licence',
   },
   {
     label: 'Sunset Timelapse',
     url: 'https://videos.pexels.com/video-files/5646694/5646694-hd_1920_1080_30fps.mp4',
+    preset: 'Sunset Timelapse',
     credit: 'Pexels licence',
   },
   // Samples that show off a mode, in mode order. Each was checked in its mode
@@ -86,7 +89,7 @@ export const TEST_CLIPS = [
   {
     label: 'Weir',
     url: 'https://videos.pexels.com/video-files/7876183/7876183-hd_1920_1080_30fps.mp4',
-    preset: 'Weir',
+    preset: 'Flowing Water',
     credit: 'Pexels licence',
   },
   {
@@ -136,9 +139,11 @@ export function migratePresetParams(params, version = 1) {
 // system. `display` is optional; a preset without one keeps the current
 // display.
 export const PARAMETER_PRESETS = [
-  // Hand-made Posy and Raw looks.
+  // Hand-made Posy and Raw looks. (Subtle Wind lives on as Trees in Wind,
+  // Atmosphere as Sunset Timelapse: the same tuning, named by the footage
+  // that shows it off.)
   {
-    name: 'Subtle Wind',
+    name: 'Trees in Wind',
     params: {
       frameOffset: 2,
       threshold: 16,
@@ -171,7 +176,7 @@ export const PARAMETER_PRESETS = [
     },
   },
   {
-    name: 'Atmosphere',
+    name: 'Sunset Timelapse',
     params: {
       frameOffset: 30,
       threshold: 12,
@@ -230,7 +235,8 @@ export const PARAMETER_PRESETS = [
     params: { algorithm: 'flow', flowShow: 'particles', flowGap: 4, flowRange: 10, flowSmoothing: 15, traceDensity: 25, traceLength: 15, traceGain: 1, traceColour: 'heading' },
   },
   {
-    name: 'Weir',
+    // One water look serves the river and the weir.
+    name: 'Flowing Water',
     display: 'diff',
     params: { algorithm: 'flow', flowShow: 'particles', flowGap: 2, flowRange: 20, flowSmoothing: 6, traceDensity: 25, traceLength: 15, traceGain: 1, traceColour: 'heading' },
   },
