@@ -18,6 +18,7 @@ import { initRuler } from './ruler.js';
 import { initLegend } from './legend.js';
 import { initGuide } from './guide.js';
 import { initReadings } from './readings.js';
+import { initBoxes } from './boxes.js';
 import { initKeys, SHORTCUTS } from './keys.js';
 
 const RATES = [0.25, 0.5, 1, 1.5, 2];
@@ -645,6 +646,7 @@ export function initShell({ root, session }) {
   const legend = initLegend({ stage, session });
   const guide = initGuide({ stage, session });
   const readings = initReadings({ root, plate: root.querySelector('.plate'), session });
+  initBoxes({ root, stage, session });
   // The instrument margin is the desktop default; the full controls wait
   // behind P. (On a window wide enough for both, both.)
   if (!phone.matches && window.innerWidth >= 1150) {

@@ -520,3 +520,11 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* tracked movers: boxes, IDs and arrows over the picture (ui/boxes.js) */
+.boxes { position: absolute; z-index: 3; pointer-events: none; overflow: visible; }
+.boxes rect { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.boxes line { stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.boxes marker path { fill: var(--accent); }
+.boxes .boxes-plate { fill: var(--card); stroke: var(--ink); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.boxes text { fill: var(--ink); font-family: var(--mono); }

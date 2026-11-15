@@ -19,6 +19,7 @@
  */
 import { BG_HOLD_SECONDS, backgroundAlpha } from '../core/background.js';
 import { MASK_VOTES_STRICT } from '../core/mask.js';
+import { bornTracks, labelComponents, stepTracks } from '../core/track.js';
 import { fitSimilarity } from '../core/flow.js';
 import { lookbackTime } from '../core/timebase.js';
 import { learnMask, updateBackground } from './modes/background.js';
@@ -80,6 +81,8 @@ export class Stages {
     this._track = { epoch: -1, entries: [], buffers: null };
     // The warp target pool: fixed keys, assigned in order each frame.
     this._warps = 0;
+    // Grouping and tracking state (docs/tracking.md), reset with the epoch.
+    this._objectsState = null;
   }
 
   /** Start a new frame: whatever was measured belonged to the last one. */
@@ -408,5 +411,73 @@ export class Stages {
   /** Magnify's mute-still-areas gate, built on the background model. */
   quietGate() {
     return this._get('quietGate', () => quietGate(this._frame, this.background()));
+  }
+
+  /**
+   * Grouping and tracking (docs/tracking.md): the voted decision read back
+   * on a coarse grid, shapes labelled, and the track step run once per
+   * frame. Publishes onto frame.readings and returns the born tracks in
+   * picture pixels, or null while there is nothing to track.
+   *
+   * @param {{tex: *}} decision - The mover decision (mask raw or the model's),
+   *   before the vote; the vote is applied here as the picture applies it
+   */
+  objects(decision) {
+    return this._get('objects', () => {
+      const frame = this._frame;
+      const renderer = frame.gl;
+      if (!decision) return null;
+      if (this._objectsState?.epoch !== renderer.epoch) {
+        this._objectsState = { epoch: renderer.epoch, tracks: [], nextId: 1, buffers: null, lastTime: NaN };
+      }
+      const state = this._objectsState;
+      // The same frame again: the step already ran; report what it found.
+      if (state.lastTime === frame.time) return state.published;
+
+      // Vote, reduce to a coarse grid, read back.
+      const voted = renderer.target('stage:track-voted', renderer.width, renderer.height);
+      maskDraw(renderer, decision.tex, voted.fb, { clean: true, output: 'data' });
+      const reduced = reduceField(renderer, 'stage:track-grid', { tex: voted.tex, width: renderer.width, height: renderer.height }, 160);
+      state.buffers = readField(renderer, reduced, state.buffers);
+      const { width: cols, height: rows } = reduced;
+      const cell = renderer.width / cols;
+      const grid = new Uint8Array(cols * rows);
+      // A block counts as moving when a quarter of its pixels did.
+      for (let i = 0; i < cols * rows; i++) grid[i] = state.buffers.values[i * 4] >= 0.25 ? 1 : 0;
+
+      const detections = labelComponents(grid, cols, rows, 10).map((part) => ({
+        cx: (part.cx + 0.5) * cell,
+        cy: (part.cy + 0.5) * cell,
+        w: (part.x1 - part.x0 + 1) * cell,
+        h: (part.y1 - part.y0 + 1) * cell,
+      }));
+      const step = stepTracks(state.tracks, detections, { dt: frame.stepMs / 1000, nextId: state.nextId });
+      state.tracks = step.tracks;
+      state.nextId = step.nextId;
+      state.lastTime = frame.time;
+
+      const shown = bornTracks(state.tracks).map((t) => ({
+        id: t.id,
+        x: t.cx - t.w / 2,
+        y: t.cy - t.h / 2,
+        w: t.w,
+        h: t.h,
+        cx: t.cx,
+        cy: t.cy,
+        vx: t.vx,
+        vy: t.vy,
+        speed: Math.hypot(t.vx, t.vy),
+        age: t.age,
+        coasting: t.miss > 0,
+      }));
+      state.published = shown;
+      frame.readings = {
+        ...(frame.readings || { mode: frame.params.algorithm }),
+        objects: shown,
+        width: renderer.width,
+        height: renderer.height,
+      };
+      return shown;
+    });
   }
 }

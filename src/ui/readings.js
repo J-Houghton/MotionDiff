@@ -99,6 +99,7 @@ export function initReadings({ root, plate, session }) {
       if (!s) return null;
       return s.problem ? s.problem : `ok · ${fmt.pct(s.usable)} usable · floor ${s.floor?.toFixed?.(2) ?? '—'} px`;
     }],
+    ['tracked movers', 'boxes with IDs now', (ctx) => (ctx.r?.objects ? String(ctx.r.objects.length) : null)],
     ['overall motion', 'pooled grid, 0..1 of mode scale', (ctx) => (ctx.gridMean === null ? null : fmt.two(ctx.gridMean))],
     ['centre of motion', 'share of frame, from pooled grid', (ctx) => (ctx.centre ? `${fmt.pct(ctx.centre.x)}, ${fmt.pct(ctx.centre.y)}` : null)],
     ['quiet for', 's since motion in the grid', (ctx) => (ctx.quiet === null ? null : `${ctx.quiet.toFixed(1)} s`)],
