@@ -1399,3 +1399,14 @@ Tooling note, found on the way: a synthetic scene rendered after a real-clip
 scene in the same filmstrip run can differ slightly from the same scene
 rendered alone (reproduced on master, before any of this session's
 branches): compare strips rendered by runs with the same scene order.
+
+### V-6M. Motion-guided magnification (`magMode: 'motion'`, docs/motion-magnify.md)
+**Expected, written before building.**
+1. `kitten`: the breathing flank's edge visibly travels further than in the
+   unamplified clip; a blind judge tells the strips apart and names the
+   flank/chest as what moves.
+2. `pulse`: the motion mode shows little or nothing where the brightness
+   mode plainly shows the swinging patch — proof that measured motion, not
+   brightness change, is being amplified.
+3. Parity probe within the flow probes' tolerances; unit tests hold the
+   integrator's band.
