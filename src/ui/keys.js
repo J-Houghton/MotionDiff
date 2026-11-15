@@ -8,7 +8,7 @@ export const SHORTCUTS = [
   ['Space', 'Play / pause', 'toggle'],
   ['← →', 'Step one frame', null],
   ['J  L', 'Slower / faster', null],
-  ['1 – 9', 'Mode', null],
+  ['1 – 6', 'Effect', null],
   ['[  ]', 'Gap shorter / longer', null],
   ['-  =', 'Threshold lower / higher', null],
   [',  .', 'Trail shorter / longer', null],
