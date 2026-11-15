@@ -110,15 +110,19 @@ of calling helpers (or other modes' helpers) directly.
 - Preset meaning: no param keys change.
 - Frame times, within noise.
 
-## Proof plan
+## Proof plan, and what was measured
 
-1. `npm test` and `npm run typecheck` unchanged and green.
+1. `npm test` (308) and `npm run typecheck`: green. ✓
 2. All nine parity probes green, run headlessly (`npm run filmstrip eval`
-   with a script that calls each `__motionDiff*Parity()` on the dev page).
-3. Filmstrips before (master) and after (branch), same scenes file covering
-   every mode and every combined option, compared with the numeric guard —
-   expected **identical** (0% of pixels over 4/255, flicker unchanged), a
-   stricter bar than the guard's "invisible".
-4. Frame times: the same clip stepped through each mode on both builds,
-   interleaved runs on this machine, reported as indicative (software GL here;
-   the real check is "within noise", and any regression over ~10% blocks).
+   with a script that calls each `__motionDiff*Parity()` on the dev page). ✓
+3. Filmstrips before (master `22766e9`) and after (branch), all twelve
+   acceptance scene files — every mode and every combined option, 122
+   scenes: **byte-identical PNGs, 122 of 122**, a stricter bar than the
+   numeric guard's "invisible". The first run caught a real difference
+   (2 scenes): the foreground gate's model advanced on frames whose flow
+   solve never runs. Fixed by measuring the gate decision lazily; the
+   re-render is identical.
+4. Frame times: `traffic` stepped through 14 mode/option combinations on
+   both builds, two interleaved rounds each, 40 timed frames per run
+   (median of process + a 1-px readback). Every combination within ±2% —
+   noise. Indicative only: software GL on this machine.
