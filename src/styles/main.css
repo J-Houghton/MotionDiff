@@ -186,6 +186,9 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .empty h2 { margin: 0; font: 600 clamp(30px, 5vw, 56px)/0.95 var(--serif); letter-spacing: -0.03em; }
 .empty p { margin: 0; max-width: 46ch; font: italic 400 15px/1.35 var(--serif); color: var(--soft); }
 .empty-hint { font: 400 12px/1 var(--mono) !important; max-width: none !important; }
+/* the version footer: small, quiet, present on the landing and in the keys sheet */
+.version { margin: 0; font: 400 10px/1 var(--mono) !important; color: var(--soft); opacity: 0.75; letter-spacing: 0.04em; max-width: none !important; }
+.sheet .version { justify-self: start; }
 .empty-head { display: grid; justify-items: center; gap: 12px; padding-bottom: 10px; }
 .empty-head p { justify-self: center; }
 
