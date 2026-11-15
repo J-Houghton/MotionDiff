@@ -1298,3 +1298,21 @@ resizes. Audited clean (flow with the panel open: nothing clipped,
 overlapping or off screen; min contrast 5.97). A white picture in the
 owner's screenshot was schlieren settling its reference (2 s), reproduced
 on old master identically — not a panel effect.
+
+## Session 6 (measurement)
+
+### V-6C. Camera compensation (`cameraComp`, docs/camera-compensation.md)
+**Expected, written before the strips were rendered.**
+1. `handheld` + Raw diff: with compensation on, the wobbling scenery (building,
+   street) largely cancels — visibly darker static ground — while the marching
+   crowd remains. Off: the whole frame lights up with every wobble.
+2. `highway` + Motion mask: the road surface and verges stop speckling;
+   vehicles still cut out.
+3. `river` + Optical flow (colour): the camera drifts forward, which reads as
+   radial expansion; with the zoom term subtracted the banks and stones go
+   dark or near-dark while the water keeps its flow colours.
+4. `truth` (still camera) + mask: compensation on changes nothing a judge can
+   see (the fit reads ~zero); the numeric guard stays under its bar.
+
+Judged blind: unlabeled off/on strips in random order, a fresh agent names
+which shows less scenery response and whether real movers survive.
