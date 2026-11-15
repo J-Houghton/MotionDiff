@@ -1399,3 +1399,40 @@ Tooling note, found on the way: a synthetic scene rendered after a real-clip
 scene in the same filmstrip run can differ slightly from the same scene
 rendered alone (reproduced on master, before any of this session's
 branches): compare strips rendered by runs with the same scene order.
+
+### V-6T. Grouping and tracking (`maskTrack`, docs/tracking.md)
+**Expected, written before building.**
+1. `traffic`: each vehicle carries a box with an ID that stays the same
+   across a strip's frames; an arrow ahead of each box points along its
+   carriageway's travel.
+2. `truth`: one box on the moving square, reported speed within 20% of the
+   known 120 px/s while it moves; while it stands still (3.5–8.5 s) the box
+   dies (or survives only a short coast). Numbers read from
+   `readings.objects` against the scene's known truth.
+3. No phantom tracks on `truth`'s static noise background.
+Judged from page screenshots (the overlay is DOM) by a blind reviewer.
+
+**Result (2026-11-15).** Numbers first, on `truth` under normal playback:
+the moving square reads ~120 px/s (tail samples 101–137, within the
+registered 20%); nothing boxes it while it stands still beyond the
+half-second coast; the second disc enters at ~100 px/s heading left; the
+noise background births nothing. Items 2 and 3: **pass**. (A flat mover's
+unseen interior can briefly carry a box per edge — the mask's known trait,
+now said in the help.)
+
+Item 1, `traffic`, went through two blind rounds. Round one found real
+faults: a queue-sized box stealing a car's ID ("one box swallowing an
+entire queue of vehicles, then its ID jumping elsewhere"), heavy churn,
+213 px/s nonsense after an identity jump. Fixes: size-ratio and
+teleport gates on matching, a longer coast through merges, labels only on
+boxes large enough to read. Round two, blind again: "from t2 onward I saw
+no clearly empty boxes"; near-lane IDs persist and arrows read correctly
+both ways ("red car's arrow points down-right toward the camera —
+correct; far carriageway arrows point up/away — correct"); no more ID
+stealing. What remains, and stands as the recorded limit: **nose-to-tail
+vehicles merge into one connected shape in the mask itself, so congestion
+gets one box per clump, not per car**, and the far-field's flickering
+blobs still churn their numbers. Per-vehicle separation inside a merged
+clump needs a measurement the mask does not make (a flow-direction split);
+logged on the roadmap. Verdict: **pass on the registered truth criteria;
+partial on dense traffic, with the limit named.**
