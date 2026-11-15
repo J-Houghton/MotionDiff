@@ -61,6 +61,22 @@ decides how it is surfaced). All wiring lives in the stage layer:
 - **The stabiliser** (playback that holds still) is the roadmap's next item,
   not this one.
 
+## The guards the still-camera check forced
+
+The first build failed its own acceptance: on a still camera the fit
+random-walked on sensor noise and compensation *invented* motion. Three
+guards, all in `stages.camera()`:
+
+- the fit speaks only when at least a quarter of the field carries trusted
+  flow (share is pre-trim support);
+- below a stillness dead band (2 % of the width per second, counting the
+  zoom and rotation terms at the frame edge) the camera reads as zero —
+  the readings line holds the same rule;
+- a solve across more than half a second of thinned ring is refused.
+
+With them, `truth` renders byte-identically on and off, and `highway`'s
+near-still camera is read as still instead of being "compensated".
+
 ## Cost
 
 When `cameraComp` is on in a mode that did not solve flow, the solve now
