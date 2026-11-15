@@ -13,7 +13,7 @@
 /** [mode id, which of its params mean "coloured by heading"] */
 const USES_HEADING = {
   flow: (p) => p.flowShow === 'colour' || p.flowShow === 'arrows' || (p.flowShow === 'particles' && p.traceColour === 'heading'),
-  history: (p) => p.historyShow === 'direction',
+  history: (p) => p.historyShow === 'direction' || p.historyShow === 'measured',
   schlieren: (p) => p.schlierenShow === 'direction' || (p.schlierenShow === 'traces' && p.traceColour === 'heading'),
 };
 
