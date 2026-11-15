@@ -1090,6 +1090,7 @@ void main() { fragColor = vec4(uV, 1.0, 1.0); }`;
       ctx.uniform2f(u.uProc, width, height);
       ctx.uniform1f(u.uAmp, AMP);
       ctx.uniform1f(u.uCap, CAP);
+      ctx.uniform1f(u.uFloor, 0.0);
     });
   const ctx = gl.gl;
   const pixels = new Uint8Array(width * height * 4);

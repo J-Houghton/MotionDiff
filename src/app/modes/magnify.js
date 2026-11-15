@@ -31,6 +31,8 @@ void main() {
 
 /** The largest shift the warp will draw, picture pixels. */
 export const MOTION_CAP = 32;
+/** Unamplified displacement below which the warp treats motion as flow jitter. */
+export const MOTION_FLOOR = 0.12;
 
 // Fast and slow EMAs of the velocity, packed RG|BA. Mirrors velocityBandStep.
 const VBAND_FRAG = `${FLOW_PRELUDE}
@@ -63,6 +65,20 @@ void main() {
   fragColor = vec4(prev * (1.0 - uLeak) + band * uDt, 0.0, 1.0);
 }`;
 
+// One 3×3 mean over the displacement: a breath moves a region together;
+// per-cell churn is jitter and averages toward nothing.
+const DSMOOTH_FRAG = `${FLOW_PRELUDE}
+uniform sampler2D uDisp;
+
+void main() {
+  ivec2 p = here();
+  vec2 sum = vec2(0.0);
+  for (int dy = -1; dy <= 1; dy++) {
+    for (int dx = -1; dx <= 1; dx++) sum += px(uDisp, p + ivec2(dx, dy)).rg;
+  }
+  fragColor = vec4(sum / 9.0, 0.0, 1.0);
+}`;
+
 // The picture: the current frame sampled at x − amp·d(x), faded by flow's
 // presence and capped. Mirrors warpByField (which samples the nearest
 // field cell; a constant field makes the two exactly comparable).
@@ -73,12 +89,17 @@ uniform sampler2D uVel;    // the smoothed field: B = presence
 uniform vec2 uProc;        // processing size
 uniform float uAmp;
 uniform float uCap;
+uniform float uFloor;      // unamplified px below which a shift is noise
 
 void main() {
   vec2 at = (vec2(here()) + 0.5) * uProc / vec2(uSize) - 0.5;
   vec2 cell = (at + 0.5) * vec2(textureSize(uDisp, 0)) / uProc - 0.5;
   float presence = smoothstep(0.0, 0.25, between(uVel, cell).b);
-  vec2 d = clamp(between(uDisp, cell).rg * uAmp * presence, vec2(-uCap), vec2(uCap));
+  vec2 raw = between(uDisp, cell).rg;
+  // A soft knee under the flow's own jitter: sub-noise shifts stay put,
+  // a real small motion passes whole.
+  float knee = smoothstep(uFloor * 0.5, uFloor * 1.5, length(raw));
+  vec2 d = clamp(raw * uAmp * presence * knee, vec2(-uCap), vec2(uCap));
   fragColor = vec4(between(uFrame, at - d).rgb, 1.0);
 }`;
 
@@ -120,7 +141,10 @@ export function motionBandStep(renderer, velocity, opts) {
     gl.uniform1f(u.uLeak, opts.alphaSlow);
     gl.uniform1i(u.uEmpty, disp.empty ? 1 : 0);
   });
-  return { disp: disp.to, velocityTex: velocity.tex };
+  // A region breathes together: smooth the field once before anyone warps by it.
+  const smoothed = renderer.target('mag:dispsmooth', width, height, float);
+  flowPass(renderer, 'mag:dsmooth', DSMOOTH_FRAG, { uDisp: 0 }, smoothed, [disp.to.tex]);
+  return { disp: smoothed, velocityTex: velocity.tex };
 }
 
 /**
@@ -151,6 +175,7 @@ export function renderMotionMagnify(renderer, frame, velocity, opts) {
       gl.uniform2f(u.uProc, renderer.width, renderer.height);
       gl.uniform1f(u.uAmp, opts.amp);
       gl.uniform1f(u.uCap, MOTION_CAP);
+      gl.uniform1f(u.uFloor, MOTION_FLOOR);
     });
 }
 
