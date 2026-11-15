@@ -89,6 +89,10 @@ export function initPanel({ container, session }) {
     ui.display = session.display;
     ui.width = session.width;
     ui.fpsCap = session.params.fpsCap || 0;
+    // The Preset select shows the look last applied (a sample's, or a pick).
+    const active = session.activePreset;
+    ui.preset = active && PARAMETER_PRESETS.some((preset) => preset.name === active) ? `builtin:${active}`
+      : active && userPresets.some((preset) => preset.name === active) ? `user:${active}` : '';
   }
 
   function applyWhen() {
@@ -152,7 +156,6 @@ export function initPanel({ container, session }) {
       look.addBinding(ui, 'display', { label: 'Display', options: displays })
         .on('change', (event) => session.setDisplay(event.value));
     }
-    ui.preset = '';
     look.addBinding(ui, 'preset', { label: 'Preset', options: presetOptions() }).on('change', (event) => {
       const preset = event.value && findPreset(event.value);
       if (!preset) return;
