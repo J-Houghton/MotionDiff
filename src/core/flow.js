@@ -629,7 +629,9 @@ export function fitSimilarity(field, cols, rows, options) {
     .slice(0, Math.max(4, Math.ceil(cells.length * (1 - TRIM))))
     .map((p) => p.s);
   fit = solve(kept);
-  return { dx: fit.tx, dy: fit.ty, zoom: fit.a, rot: fit.b, share: kept.length / total };
+  // share is the pre-trim support: how much of the field backed a camera
+  // read at all. The trim is internal robustness, not lost support.
+  return { dx: fit.tx, dy: fit.ty, zoom: fit.a, rot: fit.b, share: cells.length / total };
 }
 
 /**

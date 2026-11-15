@@ -138,7 +138,9 @@ export class Stages {
       const age = ring.nearest(lookbackTime(time, params.flowGap, 0, 0), time);
       let velocity = { dx: 0, dy: 0, zoom: 0, rot: 0, share: 0 };
       const gapSeconds = age >= 0 ? time - ring.timeAt(age) : 0;
-      if (age >= 0 && gapSeconds > 1e-4) {
+      // A thinned ring can offer only a distant frame; a solve across it
+      // reads nothing the fit should trust.
+      if (age >= 0 && gapSeconds > 1e-4 && gapSeconds <= 0.5) {
         const factor = flowFactor(renderer.width);
         const current = flowLuma(renderer, 'camera:current', factor);
         const older = flowLuma(renderer, 'camera:older', factor, ring.slotAt(age));
@@ -159,6 +161,16 @@ export class Stages {
           rot: fit.rot / gapSeconds,
           share: fit.share,
         };
+        // The fit speaks for the camera only when enough of the frame
+        // backs it, and only above a stillness dead band — otherwise a
+        // still camera's noise fits would random-walk the trajectory and
+        // compensation would INVENT motion (the readings' camera line
+        // holds the same two rules).
+        const reach = Math.hypot(velocity.dx, velocity.dy)
+          + Math.hypot(velocity.zoom, velocity.rot) * (renderer.width / 2);
+        if (velocity.share < 0.25 || reach < renderer.width * 0.02) {
+          velocity = { dx: 0, dy: 0, zoom: 0, rot: 0, share: velocity.share };
+        }
       }
       const prev = last || { x: 0, y: 0, zoom: 0, rot: 0 };
       const dt = frame.stepMs / 1000;
