@@ -24,7 +24,7 @@ import {
   BG_K, BG_MIN_STEP, BG_VAR_INIT, BG_VAR_MAX, BG_VAR_MIN,
 } from '../../core/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH } from '../../core/trails.js';
-import { GAP, MASK_FILL, THRESHOLD, TRAIL } from './params.js';
+import { GAP, MASK_FILL, MASK_TRACK, THRESHOLD, TRAIL } from './params.js';
 import { closeMask, maskDifference, maskDraw } from './mask.js';
 import { lookbackTime } from '../../core/timebase.js';
 
@@ -271,6 +271,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     THRESHOLD,
     { key: 'maskShow', label: 'Show', type: 'select', default: 'cutout', options: { 'Cut-out': 'cutout', 'Solid mask': 'solid' } },
     MASK_FILL,
+    MASK_TRACK,
     GAP,
     TRAIL,
   ],
@@ -278,12 +279,16 @@ export default /** @type {import('./index.js').Mode} */ ({
     const { gl: renderer, params } = frame;
     // The model's update is a shared stage: advanced once this frame,
     // whoever else (a gate, auto threshold) also pulls it.
+    const model = frame.stages.background();
     renderBackground(renderer, {
-      decision: frame.stages.background(),
+      decision: model,
       clean: true,
       show: params.maskShow,
       fill: params.maskFill,
     });
+
+    // Grouping and tracking: foreground shapes become boxes with an ID.
+    if (params.maskTrack) frame.stages.objects(model);
 
     renderer.renderTrail({
       isPosy: false,

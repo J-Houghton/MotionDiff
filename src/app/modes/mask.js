@@ -17,7 +17,7 @@ import { lookbackTime } from '../../core/timebase.js';
 import { BG_K } from '../../core/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH } from '../../core/trails.js';
 import { MASK_VOTES } from '../../core/mask.js';
-import { GAP, MASK_FILL, THRESHOLD, TRAIL, asMs } from './params.js';
+import { GAP, MASK_FILL, MASK_TRACK, THRESHOLD, TRAIL, asMs } from './params.js';
 
 // Pass 1. Mirrors boxBlur (core/blur.js) on each frame, then
 // threeFrameDifference and thresholdMask (core/mask.js).
@@ -331,6 +331,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     'For the first moments after loading or seeking there is no second frame yet, and it behaves like Raw.',
     'Fill holes closes gaps in a cut-out up to twice its size across, after the clean-up vote, without growing the cut-out.',
     'Ignore lighting differences each frame\'s edges instead of its brightness, so a lighting or exposure change stops marking the whole frame; it replaces the blur. The mask is then sparse — thin lines where edges moved — and soft, diffuse fronts respond weakly: a remedy for lighting drift, not a better general mask.',
+    'Box the movers groups what the mask finds into shapes and follows each one: a box with a number that stays with it, its measured speed, and an arrow one second ahead. A mover must persist a few frames before it is boxed, and survives a brief loss; what the mask merges (two movers touching) is one box, and a flat-coloured mover whose interior the mask cannot see may briefly carry a box per edge.',
     'Auto threshold learns each pixel\'s own noise (the background model\'s variance) and asks a difference to clear it as well as the set threshold, which becomes a floor: grainy footage cleans up without raising the threshold for the whole picture. The noise takes a second or two to be learnt.',
   ],
   data: { kind: 'mask', what: '1 where the pixel is moving, 0 where it is still; G holds the strength of the difference' },
@@ -345,6 +346,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     MASK_FILL,
     MASK_AUTO,
     MASK_GRADIENT,
+    MASK_TRACK,
     { key: 'maskShow', label: 'Show', type: 'select', default: 'cutout', options: { 'Cut-out': 'cutout', 'Solid mask': 'solid' } },
     TRAIL,
   ],
@@ -366,6 +368,9 @@ export default /** @type {import('./index.js').Mode} */ ({
       show: params.maskShow,
       fill: params.maskFill,
     });
+
+    // Grouping and tracking: shapes become boxes with an ID (docs/tracking.md).
+    if (params.maskTrack) frame.stages.objects(raw);
 
     renderer.renderTrail({
       isPosy: false,

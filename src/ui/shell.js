@@ -18,6 +18,8 @@ import { initRuler } from './ruler.js';
 import { initLegend } from './legend.js';
 import { initGuide } from './guide.js';
 import { initReadings } from './readings.js';
+import { initBoxes } from './boxes.js';
+import { initCalibrate } from './calibrate.js';
 import { initKeys, SHORTCUTS } from './keys.js';
 
 const RATES = [0.25, 0.5, 1, 1.5, 2];
@@ -652,7 +654,9 @@ export function initShell({ root, session }) {
   const ruler = initRuler({ container: $('ruler'), session });
   const legend = initLegend({ stage, session });
   const guide = initGuide({ stage, session });
-  const readings = initReadings({ root, plate: root.querySelector('.plate'), session });
+  initBoxes({ root, stage, session });
+  const calibrate = initCalibrate({ root, stage, session });
+  const readings = initReadings({ root, plate: root.querySelector('.plate'), session, onCalibrate: () => calibrate.toggle() });
   // The instrument margin is the desktop default; the full controls wait
   // behind P. (On a window wide enough for both, both.)
   if (!phone.matches && window.innerWidth >= 1150) {
@@ -699,6 +703,7 @@ export function initShell({ root, session }) {
       if (readings.toggle() && view.panel && window.innerWidth < 1800) { view.panel = false; applyLayout(); }
     },
     keys: () => ($('keysSheet').hidden ? openSheet('keysSheet') : closeSheets()),
+    calibrate: () => calibrate.toggle(),
     auto: () => session.autoConfigure(),
     record: () => session.toggleRecord(),
     hide: () => { view.hidden = !view.hidden; applyLayout(); },
@@ -712,6 +717,7 @@ export function initShell({ root, session }) {
       } catch { /* the viewfinder layout works without true fullscreen */ }
     },
     escape: () => {
+      if (calibrate.isArming()) { calibrate.cancel(); return; }
       if (view.atlas) { view.atlas = false; applyLayout(); return; }
       if (closeSheets()) return;
       if (view.hidden) { view.hidden = false; applyLayout(); return; }

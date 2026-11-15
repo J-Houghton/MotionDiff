@@ -90,6 +90,8 @@ export class Session {
     this.busy = false;
     /** @type {{kind: string, label: string}|null} */
     this.source = null;
+    /** @type {{metresPerPixel: number}|null} Real-unit scale from the marking flow (ui/calibrate.js); belongs to one camera setup */
+    this.calibration = null;
     this.display = 'overlay';
     this.fps = DEFAULT_FPS;
     this.status = { message: '', type: 'idle' };
@@ -392,6 +394,7 @@ export class Session {
     if (this.recorder.isRecording()) void this.toggleRecord();
     this._stopLoop();
     this.loaded = false;
+    this.calibration = null; // a scale belongs to one camera setup
     this._setPlaying(false);
 
     this.pipeline.clearExternalResources();
