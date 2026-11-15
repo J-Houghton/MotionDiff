@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   FLOW_NOISE, flowLuma, reducedSize, halve, warp, upsampleFlow, flowProducts, boxMean,
   flowLevel, pyramidFlow, smoothFlow, smoothedVector, globalShift, flowReadings,
+  fitSimilarity, warpFrame,
 } from '../flow.js';
 
 function lcg(seed) {
@@ -365,5 +366,104 @@ describe('flowReadings', () => {
     const readings = flowReadings(field(100, () => [40, 0, 1], 4), 100, { ...options, stride: 4 });
     expect(readings.moving).toBeCloseTo(1, 6);
     expect(readings.peak).toBeCloseTo(40, 3);
+  });
+});
+
+describe('fitSimilarity', () => {
+  // A field drawn from a known similarity about the grid centre.
+  const synth = (cols, rows, { dx, dy, zoom, rot }, mangle = () => null) => {
+    const field = new Float32Array(cols * rows * 4);
+    const cx = (cols - 1) / 2;
+    const cy = (rows - 1) / 2;
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const at = (row * cols + col) * 4;
+        const forced = mangle(col, row);
+        const x = col - cx;
+        const y = row - cy;
+        field[at] = forced ? forced[0] : dx + zoom * x - rot * y;
+        field[at + 1] = forced ? forced[1] : dy + rot * x + zoom * y;
+        field[at + 2] = 1;
+      }
+    }
+    return field;
+  };
+  const options = { present: 0.25, stride: 4, pixelsPerCell: 1 };
+
+  it('recovers a pure translation', () => {
+    const fit = fitSimilarity(synth(16, 10, { dx: 5, dy: -2, zoom: 0, rot: 0 }), 16, 10, options);
+    expect(fit.dx).toBeCloseTo(5, 6);
+    expect(fit.dy).toBeCloseTo(-2, 6);
+    expect(fit.zoom).toBeCloseTo(0, 6);
+    expect(fit.rot).toBeCloseTo(0, 6);
+    expect(fit.share).toBeGreaterThan(0.6);
+  });
+
+  it('recovers zoom and rotation', () => {
+    const fit = fitSimilarity(synth(16, 10, { dx: 1, dy: 2, zoom: 0.03, rot: -0.01 }), 16, 10, options);
+    expect(fit.zoom).toBeCloseTo(0.03, 6);
+    expect(fit.rot).toBeCloseTo(-0.01, 6);
+    expect(fit.dx).toBeCloseTo(1, 6);
+    expect(fit.dy).toBeCloseTo(2, 6);
+  });
+
+  it('shrugs off a mover crossing the frame', () => {
+    // A fifth of the cells carry a fast mover instead of the camera.
+    const field = synth(20, 12, { dx: 3, dy: 0, zoom: 0.02, rot: 0 }, (col, row) => (row < 2 && col < 12 ? [60, 45] : null));
+    const fit = fitSimilarity(field, 20, 12, options);
+    expect(fit.dx).toBeCloseTo(3, 1);
+    expect(fit.zoom).toBeCloseTo(0.02, 2);
+    expect(Math.abs(fit.rot)).toBeLessThan(0.01);
+  });
+
+  it('scales positions by pixelsPerCell', () => {
+    // The same zoom expressed per picture pixel: cells 8 px apart.
+    const fit = fitSimilarity(synth(16, 10, { dx: 0, dy: 0, zoom: 0.4, rot: 0 }), 16, 10, { ...options, pixelsPerCell: 8 });
+    expect(fit.zoom).toBeCloseTo(0.05, 6);
+  });
+
+  it('reports nothing from an unmeasured field', () => {
+    const field = new Float32Array(16 * 10 * 4); // presence 0 everywhere
+    expect(fitSimilarity(field, 16, 10, options).share).toBe(0);
+  });
+});
+
+describe('warpFrame', () => {
+  const textured = (width, height) => {
+    const frame = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const at = (y * width + x) * 4;
+        frame[at] = (x * 7 + y * 13) % 256;
+        frame[at + 1] = (x * 3 + y * 5) % 256;
+        frame[at + 2] = (x + y) % 256;
+        frame[at + 3] = 255;
+      }
+    }
+    return frame;
+  };
+
+  it('is the identity for no shift', () => {
+    const src = textured(12, 9);
+    expect([...warpFrame(src, 12, 9, { dx: 0, dy: 0, zoom: 0, rot: 0 })]).toEqual([...src]);
+  });
+
+  it('shifts content by a whole translation', () => {
+    const src = textured(16, 12);
+    const out = warpFrame(src, 16, 12, { dx: 3, dy: -2, zoom: 0, rot: 0 });
+    // out(p) reads src at p − shift: interior pixels match exactly.
+    for (let y = 2; y < 10; y++) {
+      for (let x = 4; x < 14; x++) {
+        const to = (y * 16 + x) * 4;
+        const from = ((y + 2) * 16 + (x - 3)) * 4;
+        expect(out[to]).toBe(src[from]);
+      }
+    }
+  });
+
+  it('rounds bilinear samples to whole levels', () => {
+    const src = textured(12, 9);
+    const out = warpFrame(src, 12, 9, { dx: 0.5, dy: 0, zoom: 0, rot: 0 });
+    for (let i = 0; i < out.length; i++) expect(Number.isInteger(out[i])).toBe(true);
   });
 });

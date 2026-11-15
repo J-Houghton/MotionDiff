@@ -228,16 +228,18 @@ export function updateBackground(renderer, opts) {
  * voted clean. The model update and the flow gate both take it.
  *
  * @param {import('./index.js').ModeFrame} frame
+ * @param {*[]|null} [older] - The compared frame as a camera-stabilised
+ *   texture pair (stages.learnMask passes it while compensation is on)
  * @returns {{tex: *, fb: *, width: number, height: number}}
  */
-export function learnMask(frame) {
+export function learnMask(frame, older = null) {
   const { gl: renderer, params } = frame;
   const { width, height } = renderer;
   const mask = renderer.target('background:mask', width, height);
   const near = frame.ring.nearest(lookbackTime(frame.time, params.frameOffset, 0, 0), frame.time);
   if (near >= 0) {
     const layer = frame.ring.slotAt(near);
-    const raw = maskDifference(renderer, { key: 'learn:raw', layers: [layer, layer], threshold: params.threshold, blur: true });
+    const raw = maskDifference(renderer, { key: 'learn:raw', layers: [layer, layer], older, threshold: params.threshold, blur: true });
     maskDraw(renderer, raw.tex, mask.fb, { clean: true, output: 'data' });
   } else {
     // No history yet (the very first frame): nothing is known to be moving.

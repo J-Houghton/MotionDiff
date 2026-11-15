@@ -43,14 +43,25 @@ export const flowLevels = (workingWidth) => (workingWidth >= 240 ? 4 : 3);
 /** The largest shift (working pixels per gap) the pyramid finds reliably: about half its theoretical reach. */
 export const flowReach = (levels) => (FLOW_MAX_STEP * (2 ** levels - 1)) / 2;
 
-// Flow (working pixels per gap) → velocity (picture pixels per second).
+// Flow (working pixels per gap) → velocity (picture pixels per second),
+// less the camera's own motion while compensation is on: the fitted
+// similarity evaluated at each cell (docs/camera-compensation.md).
 const VELOCITY_FRAG = `${FLOW_PRELUDE}
 uniform sampler2D uFlow;
 uniform float uScale;
+uniform int uCamOn;
+uniform vec4 uCamera;   // dx, dy picture px/s; zoom 1/s; rotation rad/s
+uniform float uFactor;  // picture px per working px
 
 void main() {
   vec3 flow = px(uFlow, here()).rgb;
-  fragColor = vec4(flow.rg * uScale, flow.b, 1.0);
+  vec2 v = flow.rg * uScale;
+  if (uCamOn == 1) {
+    vec2 size = vec2(textureSize(uFlow, 0));
+    vec2 r = (vec2(here()) - (size - 1.0) / 2.0) * uFactor;
+    v -= uCamera.xy + vec2(uCamera.z * r.x - uCamera.w * r.y, uCamera.w * r.x + uCamera.z * r.y);
+  }
+  fragColor = vec4(v, flow.b, 1.0);
 }`;
 
 // The colour picture (Raw space: black = nothing) or the data field.
@@ -161,11 +172,14 @@ export function flowGate(renderer, width, height, decision) {
  *   measure everywhere. A function, not a texture: a stateful decision (the
  *   background model) must not advance on a frame whose solve never runs,
  *   so it is asked for only after the early-outs
+ * @param {{dx: number, dy: number, zoom: number, rot: number}|null} [camera] -
+ *   The camera's fitted motion (stages.camera), subtracted from the field
+ *   before smoothing; null leaves the field as measured
  * @returns {VelocityField|null} RG = picture pixels per second,
  *   averaged over time by confidence, zero where nothing is measured;
  *   B = how present a measurement is, 0..1
  */
-export function flowVelocity(frame, gateSource = null) {
+export function flowVelocity(frame, gateSource = null, camera = null) {
   const { gl: renderer, ring, time, params } = frame;
   const age = ring.nearest(lookbackTime(time, params.flowGap, 0, 0), time);
   if (age < 0) return null;
@@ -180,7 +194,14 @@ export function flowVelocity(frame, gateSource = null) {
   let flow = flowBetween(renderer, 'flow', older, current, { levels: flowLevels(current.width) });
   const gate = gateSource ? flowGate(renderer, current.width, current.height, gateSource()) : null;
   if (gate) flow = flowPass(renderer, 'flow:gate-apply', GATE_APPLY_FRAG, { uFlow: 0, uGate: 1 }, gated, [flow.tex, gate.tex]);
-  flowPass(renderer, 'flow:velocity', VELOCITY_FRAG, { uFlow: 0 }, velocity, [flow.tex], (gl, u) => gl.uniform1f(u.uScale, factor / gapSeconds));
+  flowPass(renderer, 'flow:velocity', VELOCITY_FRAG, { uFlow: 0 }, velocity, [flow.tex], (gl, u) => {
+    gl.uniform1f(u.uScale, factor / gapSeconds);
+    gl.uniform1i(u.uCamOn, camera ? 1 : 0);
+    if (camera) {
+      gl.uniform4f(u.uCamera, camera.dx, camera.dy, camera.zoom, camera.rot);
+      gl.uniform1f(u.uFactor, factor);
+    }
+  });
 
   const seconds = params.flowSmoothing / 30;
   const smoothed = /** @type {VelocityField} */ (flowSmooth(renderer, 'flow', velocity, {

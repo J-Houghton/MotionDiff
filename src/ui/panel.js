@@ -141,6 +141,12 @@ export function initPanel({ container, session }) {
     for (const param of mode.params) addParam(modeFolder, param);
 
     const look = pane.addFolder({ title: 'Look' });
+    // Camera compensation applies in every mode that differences or
+    // measures flow; magnify and schlieren have their own answers.
+    if (!['magnify', 'schlieren'].includes(mode.id) && session.webgl) {
+      look.addBinding(values, 'cameraComp', { label: 'Steady camera' })
+        .on('change', (event) => session.setParams({ cameraComp: event.value }));
+    }
     if (mode.composite) {
       const displays = session.webgl ? DISPLAYS : Object.fromEntries(Object.entries(DISPLAYS).filter(([, v]) => v !== 'data'));
       look.addBinding(ui, 'display', { label: 'Display', options: displays })

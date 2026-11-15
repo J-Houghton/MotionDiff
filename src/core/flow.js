@@ -558,3 +558,121 @@ export function globalShift(flow, count, trusted, stride = 3) {
   };
   return { dx: median(xs), dy: median(ys), share: xs.length / sampled };
 }
+
+/**
+ * Fit the camera's own motion to a velocity field: a 4-parameter similarity
+ * v(p) = t + A·(p − c), with A = [[a, −b], [b, a]] — translation t, zoom a
+ * (per second; positive = the scene expands, a camera moving forward) and
+ * rotation b (radians per second) about the centre c. Least squares over
+ * the cells trusted by `present`, then the worst `TRIM` share of residuals
+ * is dropped and the fit repeated once, so movers crossing the frame do not
+ * drag it (a median cannot fit the zoom term, which is why this exists
+ * beside globalShift).
+ *
+ * @param {Float32Array} field - `stride` values per cell: vx, vy, presence
+ *   (velocities in picture pixels per second)
+ * @param {number} cols
+ * @param {number} rows
+ * @param {object} options
+ * @param {number} options.present - A cell counts from this presence up
+ * @param {number} [options.stride] - Values per cell (default 4, a GPU readback)
+ * @param {number} [options.pixelsPerCell] - Picture pixels per field cell (1)
+ * @returns {{dx: number, dy: number, zoom: number, rot: number, share: number}}
+ *   dx, dy in picture px/s at the picture centre; share: cells the final fit used
+ */
+export function fitSimilarity(field, cols, rows, options) {
+  const stride = options.stride ?? 4;
+  const cell = options.pixelsPerCell ?? 1;
+  const cx = ((cols - 1) / 2) * cell;
+  const cy = ((rows - 1) / 2) * cell;
+  const TRIM = 0.3;
+
+  const cells = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const at = (row * cols + col) * stride;
+      if (field[at + 2] < options.present) continue;
+      cells.push({ x: col * cell - cx, y: row * cell - cy, vx: field[at], vy: field[at + 1] });
+    }
+  }
+  const total = cols * rows;
+  const empty = { dx: 0, dy: 0, zoom: 0, rot: 0, share: 0 };
+  if (cells.length < 4) return empty;
+
+  const solve = (set) => {
+    let mx = 0; let my = 0; let mvx = 0; let mvy = 0;
+    for (const s of set) { mx += s.x; my += s.y; mvx += s.vx; mvy += s.vy; }
+    mx /= set.length; my /= set.length; mvx /= set.length; mvy /= set.length;
+    let dot = 0; let cross = 0; let norm = 0;
+    for (const s of set) {
+      const x = s.x - mx; const y = s.y - my;
+      const vx = s.vx - mvx; const vy = s.vy - mvy;
+      dot += x * vx + y * vy;
+      cross += x * vy - y * vx;
+      norm += x * x + y * y;
+    }
+    const a = norm > 0 ? dot / norm : 0;
+    const b = norm > 0 ? cross / norm : 0;
+    // t at the centre c, not at the set's centroid.
+    return { a, b, tx: mvx - a * mx + b * my, ty: mvy - b * mx - a * my };
+  };
+
+  let fit = solve(cells);
+  const residual = (s) => {
+    const rx = s.vx - (fit.tx + fit.a * s.x - fit.b * s.y);
+    const ry = s.vy - (fit.ty + fit.b * s.x + fit.a * s.y);
+    return rx * rx + ry * ry;
+  };
+  const kept = cells
+    .map((s) => ({ s, r: residual(s) }))
+    .sort((p, q) => p.r - q.r)
+    .slice(0, Math.max(4, Math.ceil(cells.length * (1 - TRIM))))
+    .map((p) => p.s);
+  fit = solve(kept);
+  return { dx: fit.tx, dy: fit.ty, zoom: fit.a, rot: fit.b, share: kept.length / total };
+}
+
+/**
+ * Resample a frame as a still camera would have seen it: each output pixel
+ * reads the source at p − (t + A·(p − c)), the camera's shift over the
+ * interval (pixels; A packs zoom and rotation as in fitSimilarity), with
+ * bilinear filtering clamped at the edges and every sample rounded back to
+ * a whole 0..255 level, so differencing downstream keeps the integer
+ * discipline it shares with the shaders. The GLSL mirror is the stabilise
+ * pass in app/stages.js.
+ *
+ * @param {Uint8ClampedArray} src - RGBA
+ * @param {number} width
+ * @param {number} height
+ * @param {{dx: number, dy: number, zoom: number, rot: number}} shift - Pixels
+ *   (and radians) of camera motion between this frame and now
+ * @param {Uint8ClampedArray} [out]
+ * @returns {Uint8ClampedArray}
+ */
+export function warpFrame(src, width, height, shift, out = new Uint8ClampedArray(src.length)) {
+  const cx = (width - 1) / 2;
+  const cy = (height - 1) / 2;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const rx = x - cx;
+      const ry = y - cy;
+      const sx = Math.min(width - 1, Math.max(0, x - (shift.dx + shift.zoom * rx - shift.rot * ry)));
+      const sy = Math.min(height - 1, Math.max(0, y - (shift.dy + shift.rot * rx + shift.zoom * ry)));
+      const x0 = Math.floor(sx); const y0 = Math.floor(sy);
+      const x1 = Math.min(width - 1, x0 + 1); const y1 = Math.min(height - 1, y0 + 1);
+      const fx = sx - x0; const fy = sy - y0;
+      const at = (y * width + x) * 4;
+      for (let channel = 0; channel < 4; channel++) {
+        const a00 = src[(y0 * width + x0) * 4 + channel];
+        const a10 = src[(y0 * width + x1) * 4 + channel];
+        const a01 = src[(y1 * width + x0) * 4 + channel];
+        const a11 = src[(y1 * width + x1) * 4 + channel];
+        const top = a00 + (a10 - a00) * fx;
+        const bottom = a01 + (a11 - a01) * fx;
+        out[at + channel] = Math.round(top + (bottom - top) * fy);
+      }
+      out[at + 3] = 255;
+    }
+  }
+  return out;
+}

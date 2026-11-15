@@ -19,6 +19,8 @@ import { flowLuma as coreFlowLuma, pyramidFlow, reducedSize, smoothFlow, smoothe
 import { flowBetween, flowLuma, flowSmooth, readField } from './flow.js';
 import { averageStep, referenceAlpha, shiftStrength, shiftWeight } from '../core/schlieren.js';
 import schlieren, { SCHLIEREN_TRUSTED } from './modes/schlieren.js';
+import { warpFrame } from '../core/flow.js';
+import { WARP_FRAG } from './stages.js';
 
 /**
  * Dev-only parity probe for the diff and blur shaders against core/diff.js
@@ -950,4 +952,67 @@ export function debugSchlierenParity(pipeline) {
     strengthDiff: +strengthDiff.toFixed(4),
     pass: trusted > 3000 && peak > 0.2 && share < 0.001 && strengthDiff < 0.1,
   };
+}
+
+/**
+ * Dev-only parity probe for the camera warp: the same textured frame and the
+ * same similarity through core warpFrame and the stabilise shader
+ * (app/stages.js). Bilinear weights and the rounding boundary differ between
+ * GPU floats and JS doubles, so single levels may flip on a few pixels; the
+ * probe counts anything further apart than one level.
+ */
+export function debugWarpParity(pipeline) {
+  const gl = pipeline?._glRenderer;
+  if (!gl) return null;
+  const width = 64;
+  const height = 48;
+  const restoreWidth = gl.width;
+  const restoreHeight = gl.height;
+  const restoreFrames = gl.ringFrames;
+  gl.setSize(width, height, 2);
+
+  const frame = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const at = (y * width + x) * 4;
+      frame[at] = (x * 7 + y * 13) % 256;
+      frame[at + 1] = (x * 3 + y * 5) % 256;
+      frame[at + 2] = (x * 11 + y * 2) % 256;
+      frame[at + 3] = 255;
+    }
+  }
+  gl.uploadPixels(new ImageData(frame, width, height));
+  gl.storeCurrent(0);
+
+  const shift = { dx: 2.3, dy: -1.4, zoom: 0.012, rot: 0.006 };
+  const target = gl.target('probe:warp', width, height);
+  const program = gl.program('camera:warp', WARP_FRAG, { uRing: 0 });
+  const ctx = gl.gl;
+  ctx.useProgram(program.prog);
+  gl.bind(0, gl.ringTexture, true);
+  ctx.uniform1i(program.u.uLayer, 0);
+  ctx.uniform2f(program.u.uShift, shift.dx, shift.dy);
+  ctx.uniform2f(program.u.uAffine, shift.zoom, shift.rot);
+  gl.draw(target.fb, width, height);
+  const pixels = new Uint8Array(width * height * 4);
+  ctx.bindFramebuffer(ctx.FRAMEBUFFER, target.fb);
+  ctx.readPixels(0, 0, width, height, ctx.RGBA, ctx.UNSIGNED_BYTE, pixels);
+
+  const core = warpFrame(frame, width, height, shift);
+  let maxDiff = 0;
+  let offByMore = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      for (let channel = 0; channel < 3; channel++) {
+        const gpu = pixels[((height - 1 - y) * width + x) * 4 + channel];
+        const want = core[(y * width + x) * 4 + channel];
+        const diff = Math.abs(gpu - want);
+        if (diff > maxDiff) maxDiff = diff;
+        if (diff > 1) offByMore++;
+      }
+    }
+  }
+  if (restoreWidth > 0 && restoreHeight > 0) gl.setSize(restoreWidth, restoreHeight, restoreFrames);
+  const share = offByMore / (width * height * 3);
+  return { maxDiff, offByMore, share: +share.toFixed(5), pass: maxDiff <= 2 && share < 0.005 };
 }
