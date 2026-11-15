@@ -48,21 +48,25 @@ precision highp sampler2DArray;
 
 uniform sampler2D uCurrent;
 uniform sampler2DArray uRing;
+uniform sampler2D uOldR;    // camera-stabilised frames, when uStabilised == 1
+uniform sampler2D uOldG;
+uniform sampler2D uOldB;
 uniform vec3 uLayers;       // ring layers compared by the R, G and B channels
 uniform vec3 uTintR;
 uniform vec3 uTintG;
 uniform vec3 uTintB;
 uniform float uThreshold;   // mean channel difference, 0..255 (both modes)
 uniform int uAlgorithm;     // 0 = Posy, 1 = Raw Diff
+uniform int uStabilised;    // 1 = read the old frames from uOldR/G/B
 
 in vec2 vUV;
 out vec4 fragColor;
 
 void main() {
   vec3 cur = floor(texture(uCurrent, vUV).rgb * 255.0 + 0.5);
-  vec4 oldR = texture(uRing, vec3(vUV, uLayers.x));
-  vec4 oldG = texture(uRing, vec3(vUV, uLayers.y));
-  vec4 oldB = texture(uRing, vec3(vUV, uLayers.z));
+  vec4 oldR = uStabilised == 1 ? texture(uOldR, vUV) : texture(uRing, vec3(vUV, uLayers.x));
+  vec4 oldG = uStabilised == 1 ? texture(uOldG, vUV) : texture(uRing, vec3(vUV, uLayers.y));
+  vec4 oldB = uStabilised == 1 ? texture(uOldB, vUV) : texture(uRing, vec3(vUV, uLayers.z));
 
   float tintSumR = max(dot(uTintR, vec3(1.0)), 0.0001);
   float tintSumG = max(dot(uTintG, vec3(1.0)), 0.0001);
@@ -701,7 +705,7 @@ export class WebGLRenderer {
     // ── Compile shader programs ──
     const vs = compileShader(gl, gl.VERTEX_SHADER, VERT_SRC);
 
-    this._diffProg = createProgram(gl, vs, DIFF_FRAG, { uCurrent: 0, uRing: 1 });
+    this._diffProg = createProgram(gl, vs, DIFF_FRAG, { uCurrent: 0, uRing: 1, uOldR: 2, uOldG: 3, uOldB: 4 });
     this._blurProg = createProgram(gl, vs, BLUR_FRAG, { uInput: 0 });
     this._trailProg = createProgram(gl, vs, TRAIL_FRAG, { uPeaks: 0, uAges: 1, uDiff: 2 });
     this._compositeProg = createProgram(gl, vs, COMPOSITE_FRAG, { uDiff: 0, uOriginal: 1 });
@@ -1029,7 +1033,8 @@ export class WebGLRenderer {
    * Run the diff shader. Output goes to the diff framebuffer.
    * @param {object} params - { threshold, algorithm, rgbTintR, rgbTintG,
    *   rgbTintB, layers } where layers are the three ring layers the R, G and
-   *   B channels compare the current frame against
+   *   B channels compare the current frame against; `warped` (optional) gives
+   *   three camera-stabilised 2D textures to read instead of the ring
    */
   renderDiff(params) {
     const gl = this.gl;
@@ -1040,6 +1045,11 @@ export class WebGLRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this._curTex);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this._ringTex);
+    for (let i = 0; i < 3; i++) {
+      gl.activeTexture(gl.TEXTURE2 + i);
+      gl.bindTexture(gl.TEXTURE_2D, params.warped ? params.warped[i] : this._curTex);
+    }
+    gl.uniform1i(u.uStabilised, params.warped ? 1 : 0);
 
     gl.uniform3f(u.uLayers, params.layers[0], params.layers[1], params.layers[2]);
     // Mean channel difference in 0..255, the same unit in Posy and Raw

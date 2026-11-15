@@ -29,28 +29,38 @@ precision highp sampler2DArray;
 uniform sampler2D uCurrent;
 uniform sampler2DArray uRing;
 uniform sampler2D uVariance; // per-pixel noise (0..1 units), when uAuto == 1
+uniform sampler2D uOlderA;  // camera-stabilised older frames, when uStabilised == 1
+uniform sampler2D uOlderB;
 uniform ivec2 uLayers;      // ring layers of the two older frames
 uniform float uThreshold;   // mean channel difference, 0..255
 uniform float uK;           // standard deviations the difference must clear
 uniform int uAuto;          // 1 = per-pixel floor from uVariance (mirrors thresholdMaskAuto)
 uniform int uGradient;      // 1 = difference edge strength, not brightness (mirrors lumaSobel)
 uniform int uBlur;          // 1 = 3x3 box blur before differencing
+uniform int uStabilised;    // 1 = read the older frames from uOlderA/B (camera compensation)
 
 out vec4 fragColor;
 
 vec3 current(ivec2 q) { return floor(texelFetch(uCurrent, q, 0).rgb * 255.0 + 0.5); }
-vec3 older(ivec2 q, int layer) { return floor(texelFetch(uRing, ivec3(q, layer), 0).rgb * 255.0 + 0.5); }
+// 'which' picks the first or second older frame, from the warped copies or
+// straight from the ring (the warp already rounded to whole levels).
+vec3 older(ivec2 q, int which) {
+  vec4 texel = uStabilised == 1
+    ? (which == 0 ? texelFetch(uOlderA, q, 0) : texelFetch(uOlderB, q, 0))
+    : texelFetch(uRing, ivec3(q, which == 0 ? uLayers.x : uLayers.y), 0);
+  return floor(texel.rgb * 255.0 + 0.5);
+}
 
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
-// Mirrors lumaSobel at one pixel: layer -1 is the current frame.
-float edgeAt(ivec2 p, int layer, ivec2 size) {
+// Mirrors lumaSobel at one pixel: 'which' -1 is the current frame.
+float edgeAt(ivec2 p, int which, ivec2 size) {
   float l[9];
   int n = 0;
   for (int dy = -1; dy <= 1; dy++) {
     for (int dx = -1; dx <= 1; dx++) {
       ivec2 q = clamp(p + ivec2(dx, dy), ivec2(0), size - 1);
-      l[n++] = dot(layer < 0 ? current(q) : older(q, layer), LUMA);
+      l[n++] = dot(which < 0 ? current(q) : older(q, which), LUMA);
     }
   }
   float gx = (l[2] + 2.0 * l[5] + l[8]) - (l[0] + 2.0 * l[3] + l[6]);
@@ -67,8 +77,8 @@ void main() {
   if (uGradient == 1) {
     // Edge strength replaces brightness (and the blur: Sobel smooths).
     c = vec3(edgeAt(p, -1, size));
-    a = vec3(edgeAt(p, uLayers.x, size));
-    b = vec3(edgeAt(p, uLayers.y, size));
+    a = vec3(edgeAt(p, 0, size));
+    b = vec3(edgeAt(p, 1, size));
   } else if (uBlur == 1) {
     vec3 sumC = vec3(0.0);
     vec3 sumA = vec3(0.0);
@@ -79,8 +89,8 @@ void main() {
         ivec2 q = p + ivec2(dx, dy);
         if (q.x < 0 || q.y < 0 || q.x >= size.x || q.y >= size.y) continue;
         sumC += current(q);
-        sumA += older(q, uLayers.x);
-        sumB += older(q, uLayers.y);
+        sumA += older(q, 0);
+        sumB += older(q, 1);
         count += 1.0;
       }
     }
@@ -90,8 +100,8 @@ void main() {
     b = floor(sumB / count + 0.5);
   } else {
     c = current(p);
-    a = older(p, uLayers.x);
-    b = older(p, uLayers.y);
+    a = older(p, 0);
+    b = older(p, 1);
   }
   vec3 d1 = abs(c - a);
   vec3 d2 = abs(c - b);
@@ -211,6 +221,8 @@ export function closeMask(renderer, decision, opts, key = 'mask') {
  *   instead of brightness: a lighting change stops marking the frame
  * @param {string} [opts.key] - Names the target this variant draws into, so
  *   two variants computed in one frame do not overwrite each other
+ * @param {*[]} [opts.older] - The two older frames as camera-stabilised 2D
+ *   textures (stages.stabilised) in place of the ring layers
  * @returns {{tex: *, fb: *, width: number, height: number}} The target holding R = raw decision, G = strength
  */
 export function maskDifference(renderer, opts) {
@@ -219,17 +231,20 @@ export function maskDifference(renderer, opts) {
   // Targets before binds: creating one binds its texture, which would
   // disturb the units set up for a draw.
   const raw = renderer.target(opts.key || 'mask:raw', width, height);
-  const difference = renderer.program('mask:difference', DIFFERENCE_FRAG, { uCurrent: 0, uRing: 1, uVariance: 2 });
+  const difference = renderer.program('mask:difference', DIFFERENCE_FRAG, { uCurrent: 0, uRing: 1, uVariance: 2, uOlderA: 3, uOlderB: 4 });
   gl.useProgram(difference.prog);
   renderer.bind(0, renderer.currentTexture);
   renderer.bind(1, renderer.ringTexture, true);
   renderer.bind(2, opts.variance || renderer.currentTexture);
+  renderer.bind(3, opts.older ? opts.older[0] : renderer.currentTexture);
+  renderer.bind(4, opts.older ? opts.older[1] : renderer.currentTexture);
   gl.uniform2i(difference.u.uLayers, opts.layers[0], opts.layers[1]);
   gl.uniform1f(difference.u.uThreshold, opts.threshold);
   gl.uniform1f(difference.u.uK, BG_K);
   gl.uniform1i(difference.u.uAuto, opts.variance ? 1 : 0);
   gl.uniform1i(difference.u.uGradient, opts.gradient ? 1 : 0);
   gl.uniform1i(difference.u.uBlur, opts.blur ? 1 : 0);
+  gl.uniform1i(difference.u.uStabilised, opts.older ? 1 : 0);
   renderer.draw(raw.fb, width, height);
   return raw;
 }

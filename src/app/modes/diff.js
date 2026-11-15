@@ -35,7 +35,16 @@ export function renderDiff(frame, algorithm) {
   layers[1] = ring.slotAt(ageG);
   layers[2] = ring.slotAt(ageB);
 
-  gl.renderDiff({ threshold, algorithm, rgbTintR, rgbTintG, rgbTintB, layers });
+  // With camera compensation on, each channel compares against its frame as
+  // the still camera would have seen it.
+  let warped = null;
+  if (frame.stages?.camera()) {
+    const ages = [ageR, ageG, ageB];
+    const targets = ages.map((age, i) => frame.stages.stabilised(layers[i], ring.timeAt(age)));
+    if (targets.every(Boolean)) warped = targets.map((t) => t.tex);
+  }
+
+  gl.renderDiff({ threshold, algorithm, rgbTintR, rgbTintG, rgbTintB, layers, warped });
   if (blurEnabled) gl.renderBlur();
 
   // Advance the trail by this diff → trail image. The same frame rendered
