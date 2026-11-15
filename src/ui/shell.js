@@ -10,7 +10,8 @@
  * State lives in the Session; this module calls its methods and redraws when
  * it reports a change.
  */
-import { MODES, getMode } from '../app/modes/index.js';
+import { getMode } from '../app/modes/index.js';
+import { EFFECTS, activeOption, effectForMode, effectParams } from '../app/effects.js';
 import { TEST_CLIPS, getPreset } from '../app/clips.js';
 import { initPanel } from './panel.js';
 import { initRuler } from './ruler.js';
@@ -41,6 +42,8 @@ const TEMPLATE = `
   </nav>
 </header>
 
+<nav class="plates chrome" id="plates" aria-label="Effects"></nav>
+
 <main class="plate">
   <div class="frame" id="stage">
     <video id="videoEl" playsinline muted></video>
@@ -52,14 +55,14 @@ const TEMPLATE = `
     <i class="bracket tl chrome"></i><i class="bracket tr chrome"></i><i class="bracket bl chrome"></i><i class="bracket br chrome"></i>
     <div class="vf vf-mode chrome">
       <span class="vf-num" id="vfNum"></span>
-      <div class="vf-name">
-        <button type="button" class="vf-step" id="vfPrev" aria-label="Previous mode">‹</button>
-        <b id="vfName"></b>
-        <button type="button" class="vf-step" id="vfNext" aria-label="Next mode">›</button>
-      </div>
+      <div class="vf-name"><b id="vfName"></b></div>
     </div>
     <div class="vf vf-meta chrome" id="vfMeta"></div>
     <div class="vf vf-readout chrome" id="vfReadout" aria-hidden="true"></div>
+    <div class="vf vf-ask chrome" aria-label="What to show">
+      <div class="vf-fan" id="vfFan" hidden></div>
+      <div class="vf-strip" id="vfStrip" role="tablist"></div>
+    </div>
     <div class="vf vf-actions chrome">
       <button type="button" id="btnSource2">Source</button>
       <button type="button" id="btnParams">Params</button>
@@ -67,10 +70,13 @@ const TEMPLATE = `
     </div>
 
     <div class="empty" id="empty">
-      <h2>See what moves.</h2>
-      <p>MotionDiff compares each frame of a video with an earlier one and shows only the change.</p>
-      <div class="sources" id="emptySources"></div>
-      <p class="empty-hint">or drop a video file anywhere</p>
+      <div class="empty-head">
+        <h2>See what moves.</h2>
+        <p>Six ways to look at motion in any video. Pick one below — each opens playing, on footage that shows it off.</p>
+        <div class="sources" id="emptySources"></div>
+      </div>
+      <div class="atlas" id="atlas"></div>
+      <p class="empty-hint">or drop a video file anywhere · your video never leaves the browser</p>
     </div>
   </div>
   <aside class="panel chrome" id="panel" aria-label="Parameters">
@@ -86,6 +92,7 @@ const TEMPLATE = `
   <div class="cap-mode">
     <h1><span id="modeName"></span><small id="modeIndex"></small></h1>
     <p id="modeBlurb"></p>
+    <div class="choices" id="capChoices"></div>
   </div>
   <div class="ruler" id="ruler" aria-label="Where each channel looks back to, and how long trails last"></div>
   <div class="play" role="group" aria-label="Transport">
@@ -159,6 +166,7 @@ export function initShell({ root, session }) {
     mirror: false,      // front camera shown as a mirror
     panel: !phone.matches,
     scrubbing: false,
+    fan: false,         // viewfinder: the active effect's looks fanned out
   };
 
   // ── Layout, theme, idle ─────────────────────────────────────
@@ -197,8 +205,12 @@ export function initShell({ root, session }) {
   // The frame takes whatever height the mast and caption leave (see .frame
   // in main.css), so tell the stylesheet how tall they are.
   function measureChrome() {
-    const chrome = view.hidden ? 0 : root.querySelector('.mast').offsetHeight + root.querySelector('.cap').offsetHeight + 52;
+    const cap = root.querySelector('.cap').offsetHeight;
+    const chrome = view.hidden ? 0 : root.querySelector('.mast').offsetHeight
+      + root.querySelector('.plates').offsetHeight + cap + 52;
     root.style.setProperty('--chrome-h', `${chrome}px`);
+    // Where the caption plate ends, so the question strip can sit above it.
+    root.style.setProperty('--cap-h', `${cap}px`);
   }
   new ResizeObserver(measureChrome).observe(root.querySelector('.cap'));
   window.addEventListener('resize', () => {
@@ -305,15 +317,101 @@ export function initShell({ root, session }) {
   stage.addEventListener('pointerup', endPinch);
   stage.addEventListener('pointercancel', endPinch);
 
+  // ── Effects ─────────────────────────────────────────────────
+  function setEffect(effect) {
+    const next = effectParams(effect, session.params);
+    if (Object.keys(next).length) session.setParams(next);
+    view.fan = false;
+    applyMode();
+    // With nothing loaded yet, the pick leads to the effect's own page of
+    // the atlas, where its footage waits.
+    if (!session.loaded) {
+      const at = [...$('atlas').children][EFFECTS.indexOf(effect)];
+      at?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+  }
+
+  /** The variants of an effect as rows of pills; shared by caption and fan. */
+  function buildChoices(container, effect) {
+    container.replaceChildren(...effect.choices.map((choice) => {
+      const row = document.createElement('div');
+      row.className = 'choice';
+      row.append(Object.assign(document.createElement('span'), { textContent: choice.label }));
+      const active = activeOption(choice, session.params);
+      for (const option of choice.options) {
+        const pill = Object.assign(document.createElement('button'), { type: 'button', textContent: option.label });
+        pill.setAttribute('aria-pressed', String(option === active));
+        pill.addEventListener('click', () => session.setParams({ ...option.params }));
+        row.append(pill);
+      }
+      return row;
+    }));
+  }
+
+  function applyPlates(effect) {
+    const nav = $('plates');
+    if (!nav.childElementCount) {
+      for (const entry of EFFECTS) {
+        const tab = Object.assign(document.createElement('button'), { type: 'button' });
+        tab.dataset.effect = entry.id;
+        tab.append(Object.assign(document.createElement('b'), { textContent: entry.numeral }), entry.label);
+        tab.addEventListener('click', () => setEffect(entry));
+        nav.append(tab);
+      }
+    }
+    for (const tab of nav.children) {
+      tab.classList.toggle('active', tab.dataset.effect === effect.id);
+      tab.setAttribute('aria-current', tab.dataset.effect === effect.id ? 'true' : 'false');
+    }
+  }
+
+  function applyAsk(effect) {
+    const strip = $('vfStrip');
+    if (!strip.childElementCount) {
+      for (const entry of EFFECTS) {
+        const tab = Object.assign(document.createElement('button'), { type: 'button', textContent: entry.ask });
+        tab.dataset.effect = entry.id;
+        tab.setAttribute('role', 'tab');
+        tab.addEventListener('click', () => {
+          if (effectForMode(session.params.algorithm).id === entry.id) {
+            // Tapping the active effect again fans its looks out.
+            view.fan = !view.fan;
+            applyMode();
+          } else {
+            setEffect(entry);
+          }
+        });
+        strip.append(tab);
+      }
+    }
+    for (const tab of strip.children) {
+      const active = tab.dataset.effect === effect.id;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+    }
+    const fan = $('vfFan');
+    fan.hidden = !view.fan || !effect.choices.length;
+    if (!fan.hidden) buildChoices(fan, effect);
+  }
+
   // ── Mode caption ────────────────────────────────────────────
   function applyMode() {
     const { mode, params } = session;
-    const index = MODES.indexOf(mode);
-    $('modeName').textContent = mode.label;
-    $('modeIndex').textContent = `${index + 1} of ${MODES.length}`;
-    $('modeBlurb').textContent = session.modeProblem() || mode.blurb;
-    $('vfNum').textContent = `MODE ${index + 1} / ${MODES.length}`;
-    $('vfName').textContent = mode.label;
+    const effect = effectForMode(mode.id);
+    $('modeName').textContent = effect.label;
+    $('modeIndex').textContent = `Plate ${effect.numeral} · ${mode.label}`;
+    // The promise already carried the landing; the caption keeps its room
+    // for what needs saying now (a mode that cannot run here).
+    $('modeBlurb').textContent = session.modeProblem() || '';
+    buildChoices($('capChoices'), effect);
+    const all = Object.assign(document.createElement('button'), { type: 'button', className: 'choice-all', textContent: 'All controls' });
+    all.append(Object.assign(document.createElement('kbd'), { textContent: 'P' }));
+    all.addEventListener('click', () => { if (!view.panel) actions.panel(); });
+    $('capChoices').append(all);
+    applyPlates(effect);
+    applyAsk(effect);
+    $('vfNum').textContent = `PLATE ${effect.numeral}`;
+    $('vfName').textContent = effect.label;
     $('vfReadout').replaceChildren(...mode.params
       .filter((p) => p.type === 'range' && (!p.when || p.when(params)))
       .slice(0, 4)
@@ -401,7 +499,7 @@ export function initShell({ root, session }) {
     fileInput.value = '';
   });
 
-  function buildSources(container) {
+  function buildSources(container, withSamples = true) {
     const button = (label, onClick, className = '') => {
       const node = Object.assign(document.createElement('button'), { type: 'button', textContent: label, className });
       node.addEventListener('click', onClick);
@@ -436,6 +534,10 @@ export function initShell({ root, session }) {
       if (value) { closeSheets(); session.loadUrl(value); }
     });
 
+    if (!withSamples) {
+      container.replaceChildren(row, url);
+      return;
+    }
     const samples = document.createElement('div');
     samples.className = 'sources-row sources-samples';
     samples.append(Object.assign(document.createElement('span'), { textContent: 'Samples' }));
@@ -443,8 +545,8 @@ export function initShell({ root, session }) {
       const sample = button(clip.label, run(() => session.loadSample(clip)));
       const preset = clip.preset ? getPreset(clip.preset) : null;
       if (preset) {
-        // Says which mode the sample opens in.
-        sample.append(Object.assign(document.createElement('small'), { textContent: getMode(preset.params.algorithm).label }));
+        // Says which effect the sample opens in.
+        sample.append(Object.assign(document.createElement('small'), { textContent: effectForMode(getMode(preset.params.algorithm).id).label }));
         sample.title = clip.credit || '';
       }
       samples.append(sample);
@@ -452,8 +554,54 @@ export function initShell({ root, session }) {
 
     container.replaceChildren(row, url, samples);
   }
-  buildSources($('emptySources'));
+  buildSources($('emptySources'), false);
   buildSources($('sheetSources'));
+
+  // ── The atlas: the landing's contents page of effects ───────
+  const clipByLabel = (label) => TEST_CLIPS.find((clip) => clip.label === label) || null;
+  function buildAtlas() {
+    $('atlas').replaceChildren(...EFFECTS.map((effect) => {
+      const row = document.createElement('section');
+      row.className = 'atlas-row';
+      const aside = document.createElement('div');
+      aside.className = 'atlas-text';
+      aside.append(
+        Object.assign(document.createElement('span'), { className: 'atlas-numeral', textContent: `PLATE ${effect.numeral}` }),
+        Object.assign(document.createElement('h3'), { textContent: effect.label }),
+        Object.assign(document.createElement('p'), { textContent: effect.promise }),
+      );
+      const sampleClip = clipByLabel(effect.sample);
+      if (sampleClip) {
+        const go = Object.assign(document.createElement('button'), { type: 'button', className: 'atlas-go', textContent: `Watch it on ${effect.sample}` });
+        go.addEventListener('click', () => { setEffect(effect); session.loadSample(sampleClip); });
+        aside.append(go);
+      }
+      if (effect.also.length) {
+        const also = document.createElement('span');
+        also.className = 'atlas-also';
+        also.append('also good: ');
+        effect.also.forEach((label, at) => {
+          const clip = clipByLabel(label);
+          if (!clip) return;
+          if (at) also.append(' · ');
+          const link = Object.assign(document.createElement('button'), { type: 'button', textContent: label });
+          link.addEventListener('click', () => { setEffect(effect); session.loadSample(clip); });
+          also.append(link);
+        });
+        aside.append(also);
+      }
+      const specimen = document.createElement('div');
+      specimen.className = 'atlas-specimen';
+      specimen.append(Object.assign(document.createElement('img'), {
+        src: `${import.meta.env.BASE_URL}${effect.strip}`,
+        alt: `${effect.label} filmstrip`,
+        loading: 'lazy',
+      }));
+      row.append(aside, specimen);
+      return row;
+    }));
+  }
+  buildAtlas();
 
   window.addEventListener('dragover', (event) => { event.preventDefault(); });
   window.addEventListener('drop', (event) => {
@@ -487,7 +635,7 @@ export function initShell({ root, session }) {
   }
   const keysList = $('keysList');
   for (const [keys, what] of SHORTCUTS) {
-    const shown = what === 'Mode' ? `1 – ${MODES.length}` : keys;
+    const shown = what === 'Effect' ? `1 – ${EFFECTS.length}` : keys;
     keysList.append(Object.assign(document.createElement('dt'), { textContent: shown }), Object.assign(document.createElement('dd'), { textContent: what }));
   }
 
@@ -497,6 +645,12 @@ export function initShell({ root, session }) {
   const legend = initLegend({ stage, session });
   const guide = initGuide({ stage, session });
   const readings = initReadings({ root, plate: root.querySelector('.plate'), session });
+  // The instrument margin is the desktop default; the full controls wait
+  // behind P. (On a window wide enough for both, both.)
+  if (!phone.matches && window.innerWidth >= 1150) {
+    readings.toggle();
+    if (window.innerWidth < 1800) view.panel = false;
+  }
 
   const actions = {
     toggle: () => session.toggle(),
@@ -505,7 +659,7 @@ export function initShell({ root, session }) {
       const index = RATES.indexOf(session.rate);
       session.setRate(RATES[Math.min(RATES.length - 1, Math.max(0, (index < 0 ? 2 : index) + direction))]);
     },
-    mode: (index) => { if (MODES[index]) session.setParams({ algorithm: MODES[index].id }); },
+    mode: (index) => { if (EFFECTS[index]) setEffect(EFFECTS[index]); },
     nudge: (param, direction) => {
       const def = session.mode.params.find((p) => p.key === param);
       if (!def) return;
@@ -579,9 +733,6 @@ export function initShell({ root, session }) {
   click('btnSplit', actions.split);
   click('btnSplit2', actions.split);
   click('btnFlip', () => session.flipCamera());
-  const cycleMode = (direction) => actions.mode((MODES.indexOf(session.mode) + direction + MODES.length) % MODES.length);
-  click('vfPrev', () => cycleMode(-1));
-  click('vfNext', () => cycleMode(1));
   canvas.addEventListener('dblclick', () => {
     if (root.dataset.layout !== 'viewfinder') return;
     view.fill = root.dataset.fit !== 'fill';
@@ -606,7 +757,7 @@ export function initShell({ root, session }) {
 
   phone.addEventListener('change', () => {
     view.panel = !phone.matches;
-    buildSources($('emptySources'));
+    buildSources($('emptySources'), false);
     buildSources($('sheetSources'));
     applyLayout();
   });

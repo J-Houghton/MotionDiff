@@ -75,7 +75,7 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 /* Mast, plate and caption sit together in the middle of the window: when it
    is taller than the plate needs, the spare height is the page's margins. */
 /* One column no wider than the window: without the minmax, a long status line would stretch it. */
-#app { height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; align-content: center; gap: 10px; padding: 10px 28px 10px; }
+#app { height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto; align-content: center; gap: 10px; padding: 10px 28px 10px; }
 
 .mast { display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid var(--ink); padding-bottom: 7px; min-height: 30px; }
 .brand { font: italic 400 21px/1 var(--serif); letter-spacing: -0.01em; }
@@ -86,6 +86,26 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .mast-actions { display: flex; gap: 14px; flex: none; }
 .mast-actions button { background: none; border: 0; border-bottom: 1px solid var(--rule); padding: 3px 0; display: inline-flex; gap: 6px; align-items: baseline; }
 .mast-actions button:hover { border-bottom-color: var(--ink); }
+
+/* effect plates: the contents of the atlas, as tabs under the mast */
+.plates { display: flex; gap: 22px; overflow-x: auto; padding: 1px 0 0; }
+.plates button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 2px 0 5px; font: 400 15px/1 var(--serif); color: var(--soft); white-space: nowrap; }
+.plates button b { font: 500 10px/1 var(--mono); color: var(--soft); margin-right: 6px; font-weight: 500; }
+.plates button:hover { color: var(--ink); }
+.plates button.active { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+#app[data-layout='viewfinder'] .plates { display: none; }
+
+/* variants: an effect's looks as pills, one wrapping row (caption and fan) */
+.choices { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-top: 6px; }
+.choice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; font: 400 11px/1 var(--mono); }
+.choice > span { color: var(--soft); margin-right: 2px; }
+.choice button { background: none; border: 1px solid var(--rule); border-radius: 999px; padding: 4px 9px; font: 400 11px/1 var(--mono); color: var(--soft); }
+.choice button:hover { border-color: var(--ink); color: var(--ink); }
+.choice button[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
+.choice-all { justify-self: start; background: none; border: 0; padding: 2px 0; font: 400 11px/1 var(--mono); color: var(--soft); border-bottom: 1px solid var(--rule); display: inline-flex; gap: 6px; align-items: baseline; }
+.choice-all:hover { color: var(--ink); border-bottom-color: var(--ink); }
+.choice-all kbd { padding: 1px 3px; font-size: 9px; }
+#app[data-layout='viewfinder'] .choice-all { display: none; }
 
 .plate { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; }
 /* picture · readings · parameters when the readings column is open */
@@ -161,11 +181,32 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .legend-d { left: 50%; bottom: 15px; transform: translateX(-50%); }
 #app[data-immersive='true'] .immersive-only { display: inline-block; }
 
-.empty { position: absolute; inset: 0; z-index: 5; display: grid; align-content: center; justify-items: center; gap: 12px; padding: 24px; background: var(--card); color: var(--ink); text-align: center; }
+.empty { position: absolute; inset: 0; z-index: 5; display: grid; align-content: start; justify-items: stretch; gap: 12px; padding: 24px 28px; background: var(--card); color: var(--ink); text-align: center; overflow-y: auto; }
 #app[data-source='ready'] .empty { display: none; }
 .empty h2 { margin: 0; font: 600 clamp(30px, 5vw, 56px)/0.95 var(--serif); letter-spacing: -0.03em; }
 .empty p { margin: 0; max-width: 46ch; font: italic 400 15px/1.35 var(--serif); color: var(--soft); }
-.empty-hint { font: 400 12px/1 var(--mono) !important; }
+.empty-hint { font: 400 12px/1 var(--mono) !important; max-width: none !important; }
+.empty-head { display: grid; justify-items: center; gap: 12px; padding-bottom: 10px; }
+.empty-head p { justify-self: center; }
+
+/* the atlas: one specimen row per effect */
+.atlas { display: grid; text-align: left; }
+.atlas-row { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 20px; align-items: center; border-top: 1px solid var(--rule); padding: 14px 0; }
+.atlas-text { display: grid; justify-items: start; gap: 4px; }
+.atlas-numeral { font: 500 10px/1 var(--mono); letter-spacing: 0.08em; color: var(--soft); }
+.atlas-text h3 { margin: 0; font: 600 24px/1 var(--serif); letter-spacing: -0.02em; }
+.atlas-text p { margin: 0; font: italic 400 13px/1.3 var(--serif); color: var(--soft); max-width: 36ch; }
+.atlas-go { margin-top: 5px; background: var(--accent) !important; border: 0 !important; color: var(--on-accent) !important; font: 500 12px/1 var(--mono); padding: 9px 12px; min-height: 36px; }
+.atlas-go:hover { background: var(--ink) !important; color: var(--paper) !important; }
+.atlas-also { font: 400 11px/1.6 var(--mono); color: var(--soft); }
+.atlas-also button { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+.atlas-also button:hover { color: var(--ink); }
+.atlas-specimen { overflow: hidden; max-height: 150px; border-left: 1px solid var(--rule); align-self: stretch; display: flex; align-items: center; }
+.atlas-specimen img { width: 100%; height: auto; display: block; }
+@media (max-width: 860px) {
+  .atlas-row { grid-template-columns: 1fr; gap: 10px; }
+  .atlas-specimen { border-left: 0; max-height: 110px; }
+}
 
 .sources { display: grid; gap: 10px; justify-items: center; }
 .sources-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
@@ -182,10 +223,11 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .sources-samples button small { display: block; color: var(--soft); font-size: 10px; line-height: 1.3; letter-spacing: 0.04em; text-transform: uppercase; }
 
 /* caption strip */
-.cap { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(300px, 2.1fr) auto; column-gap: 28px; row-gap: 6px; align-items: end; border-top: 1px solid var(--ink); padding-top: 8px; }
-.cap-mode h1 { margin: 0; font: 600 38px/0.9 var(--serif); letter-spacing: -0.03em; white-space: nowrap; }
-.cap-mode h1 small { font: 400 11px/1 var(--mono); letter-spacing: 0; color: var(--soft); margin-left: 8px; vertical-align: 12px; }
-.cap-mode p { margin: 5px 0 0; font: italic 400 13px/1.25 var(--serif); color: var(--soft); max-width: 44ch; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cap { display: grid; grid-template-columns: minmax(280px, 1.25fr) minmax(280px, 2fr) auto; column-gap: 28px; row-gap: 6px; align-items: end; border-top: 1px solid var(--ink); padding-top: 8px; }
+.cap-mode h1 { margin: 0; font: 600 30px/0.95 var(--serif); letter-spacing: -0.03em; white-space: nowrap; }
+.cap-mode h1 small { font: 400 11px/1 var(--mono); letter-spacing: 0; color: var(--soft); margin-left: 8px; vertical-align: 8px; }
+.cap-mode p { margin: 4px 0 0; font: italic 400 13px/1.25 var(--serif); color: var(--soft); max-width: 44ch; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.cap-mode p:empty { display: none; }
 
 .ruler { position: relative; height: 82px; font: 400 11px/1 var(--mono); color: var(--soft); }
 .ruler-track { position: absolute; inset: 0; }
@@ -214,8 +256,10 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .ruler-mark-trail { --flag: 9px; --mark: var(--soft); }
 /* label below the axis, anchored to the marker's foot so a taller phone hit box cannot lift it */
 .ruler-mark-trail b { top: auto; bottom: -15px; background: var(--paper); color: var(--soft) !important; padding: 1px 4px; z-index: 1; }
-/* nothing to play yet: the transport would only be dead buttons */
+/* nothing to play yet: the atlas is the page, so the caption strip and the
+   instrument margin would only show a stale effect and an empty gauge */
 #app[data-source='empty'] .play, #app[data-source='empty'] .scrub { visibility: hidden; }
+#app[data-layout='plate'][data-source='empty'] .cap, #app[data-source='empty'] .readings { display: none; }
 .ruler-now { right: 0; width: 2px; height: 30px; background: var(--ink); transform: none; }
 .ruler-readout { margin: 0; position: absolute; left: 0; right: 0; bottom: 14px; font: italic 400 14px/1.35 var(--serif); color: var(--ink); max-width: 52ch; }
 
@@ -239,9 +283,23 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 
 /* readings: measured values as plate marginalia beside the picture
    (docs/readings-panel.md). Desktop Plate only. */
-.readings { width: 236px; align-self: start; max-height: calc(100dvh - var(--chrome-h, 196px) + 10px); overflow-y: auto; overflow-x: hidden; padding: 0 2px; }
+.readings { width: 252px; align-self: start; max-height: calc(100dvh - var(--chrome-h, 196px) + 10px); overflow-y: auto; overflow-x: hidden; padding: 0 10px 12px 16px;
+  /* an instrument margin on ruled chart paper, with its red margin line */
+  border-left: 1px solid var(--rule);
+  background:
+    linear-gradient(90deg, transparent 6px, color-mix(in srgb, var(--accent) 45%, transparent) 6px 7px, transparent 7px),
+    repeating-linear-gradient(to bottom, transparent 0 13px, var(--shade) 13px 14px);
+}
 .rd-head { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--ink); padding-bottom: 4px; }
 .rd-head b { font: italic 600 17px/1 var(--serif); letter-spacing: -0.01em; }
+.rd-camera { display: grid; }
+.rd-camera b { font: 500 16px/1.3 var(--mono); display: flex; align-items: center; gap: 7px; }
+.rd-lamp { width: 9px; height: 9px; border-radius: 50%; background: var(--rule); flex: none; }
+.rd-lamp[data-state='ok'] { background: var(--ch-g); }
+.rd-lamp[data-state='warn'] { background: var(--accent); }
+.rd-camera span, .rd-camera b { order: 0; }
+.rd-camera span { font: 400 10px/1.3 var(--mono); color: var(--soft); letter-spacing: 0.05em; text-transform: uppercase; }
+.rd-summary { margin: 2px 0 0; font: italic 400 12px/1.35 var(--serif); color: var(--soft); }
 .rd-close { background: none; border: 0; min-width: 32px; min-height: 32px; color: var(--soft); }
 .rd-instruments { display: grid; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--rule); }
 .rd-peak b { font: 600 34px/1 var(--serif); letter-spacing: -0.02em; display: block; font-variant-numeric: tabular-nums; }
@@ -352,6 +410,19 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .vf-meta div:last-child { color: var(--accent); }
 #app[data-layout='viewfinder'] .vf-readout { left: 44px; bottom: 146px; display: flex; gap: 24px; background: #000; padding: 11px 14px; font: 400 11px/1 var(--mono); color: var(--soft); }
 .vf-readout b { display: block; margin-top: 6px; font: 600 28px/1 var(--cond); color: var(--ink); }
+
+/* the question strip: what to show, in one row */
+#app[data-layout='viewfinder'] .vf-ask { left: 50%; transform: translateX(-50%); bottom: calc(56px + var(--cap-h, 110px)); max-width: calc(100% - 88px); display: grid; gap: 8px; justify-items: center; }
+.vf-strip { display: flex; background: #000; border: 1px solid var(--rule); overflow-x: auto; max-width: 100%; }
+.vf-strip button { background: none; border: 0; border-left: 1px solid var(--rule); color: var(--ink); font: 600 15px/1 var(--cond); letter-spacing: 0.06em; padding: 12px 14px; min-height: 44px; white-space: nowrap; }
+.vf-strip button:first-child { border-left: 0; }
+.vf-strip button.active { color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+.vf-fan { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.vf-fan .choice { background: #000; padding: 6px 8px; margin: 0; }
+.vf-fan .choice button { min-height: 36px; }
+#app[data-phone='true'] .vf-ask { left: 8px; right: 8px; transform: none; max-width: none; bottom: calc(18px + var(--cap-h, 120px) + env(safe-area-inset-bottom)); display: grid; }
+#app[data-phone='true'] .vf-strip { width: 100%; }
+#app[data-phone='true'] .vf-strip button { flex: 1; font-size: 13px; letter-spacing: 0.02em; padding: 10px 6px; }
 #app[data-layout='viewfinder'][data-immersive='true'] .cap { right: auto; min-width: 460px; }
 #app[data-immersive='true'] #btnExit { position: fixed; right: 44px; bottom: 44px; min-height: 44px; background: #000; }
 /* the open panel already shows these numbers */

@@ -29,3 +29,6 @@ docs/design/shots/
 # Reference clips and rendered filmstrips (see scripts/README.md)
 ref-clips/
 filmstrips/
+
+# Reference clips for the visual tooling: fetched, never committed
+ref-clips
