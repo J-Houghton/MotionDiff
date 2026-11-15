@@ -1410,3 +1410,22 @@ branches): compare strips rendered by runs with the same scene order.
    brightness change, is being amplified.
 3. Parity probe within the flow probes' tolerances; unit tests hold the
    integrator's band.
+
+**Result (blind judge, shuffled pairs, 2026-11-15).** All three registered
+criteria met.
+1. `kitten`: the judge told the strips apart at once and named the moving
+   part unprompted — "the region changing most frame-to-frame is the
+   kitten's chest/flank … the body outline swells and shifts between
+   frames like exaggerated breathing. Yes — that flank/body edge travels
+   visibly further." The named limit, recorded: a painterly swirl over
+   fine fur texture, "moderate-to-severe" to legibility — the field
+   measures the fur's real micro-shimmer too. A knee under the flow's
+   jitter and one spatial mean over the field (both in the design's
+   spirit) tamed the worst of three tuning rounds; footage with coherent
+   large-scale motion suffers least.
+2. `pulse`: the brightness mode shows the swinging patch "easily seen at a
+   glance"; the motion mode's frames "look essentially identical — the
+   pulse is faint to absent." Measured motion, not brightness change, is
+   what is amplified.
+3. Parity probe: band state within 0.002 px of the core, warp within the
+   visual guard; the integrator's unit tests hold the band.
