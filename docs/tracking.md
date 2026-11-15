@@ -61,3 +61,34 @@ tracked movers now.
 3. No boxes on `truth`'s static noise background (no phantom tracks).
 Judged from page screenshots (the overlay is DOM) by a blind reviewer;
 the numbers against truth come from `readings.objects` directly.
+
+## Calibration to real units (the follow-on this design carries)
+
+The boxes' numbers become real: the user marks a known length in the
+picture — two clicks and a distance in metres — and speeds read in m/s.
+
+- `Session.calibration = { metresPerPixel }`, set by the marking flow and
+  cleared with the source (a scale belongs to one camera setup). No core
+  maths beyond the one factor.
+- The marking flow (`ui/calibrate.js`, the C key and a link in the
+  instrument margin): first click anchors, a line follows the pointer,
+  the second click asks for the distance in metres (the same prompt the
+  preset save uses). Clicks are converted to picture pixels through the
+  same mapping the boxes overlay uses, so the Viewfinder's letterbox and
+  crop keep the line honest.
+- Shown wherever a speed already is: box plates switch from px/s to m/s,
+  the margin's peak counter follows, and a scale row appears in the
+  readings list. Flow's own controls stay in picture terms (the speed
+  range is a display choice, not a measurement).
+- The honest limit, said in the help: the scale is true at the depth of
+  the marked line. A camera looking along a road measures a nearer car
+  too fast and a farther one too slow; mark the length at the distance
+  that matters.
+
+### Acceptance (V-6K)
+1. Numeric, on `truth`: mark a known 100-px stretch as 10 m (the scale is
+   then 0.1 m/px); the square's box reads 12 ± 2.4 m/s (120 px/s scaled,
+   same 20% bar as V-6T).
+2. The interface audit stays clean with the marking overlay up.
+3. A fresh agent, plain words ("how fast is that car in real units?"),
+   finds the flow: calibrate, then read m/s off the box.

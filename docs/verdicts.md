@@ -1436,3 +1436,9 @@ blobs still churn their numbers. Per-vehicle separation inside a merged
 clump needs a measurement the mask does not make (a flow-direction split);
 logged on the roadmap. Verdict: **pass on the registered truth criteria;
 partial on dense traffic, with the limit named.**
+
+### V-6K. Calibration to real units (docs/tracking.md §Calibration)
+**Expected, written before building.** Marking a known 100-px stretch of
+`truth` as 10 m makes the square's box read 12 ± 2.4 m/s; the audit stays
+clean with the marking overlay up; a fresh agent asked "how fast is that
+in real units?" finds the flow unaided.
