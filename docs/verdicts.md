@@ -1399,3 +1399,15 @@ Tooling note, found on the way: a synthetic scene rendered after a real-clip
 scene in the same filmstrip run can differ slightly from the same scene
 rendered alone (reproduced on master, before any of this session's
 branches): compare strips rendered by runs with the same scene order.
+
+### V-6T. Grouping and tracking (`maskTrack`, docs/tracking.md)
+**Expected, written before building.**
+1. `traffic`: each vehicle carries a box with an ID that stays the same
+   across a strip's frames; an arrow ahead of each box points along its
+   carriageway's travel.
+2. `truth`: one box on the moving square, reported speed within 20% of the
+   known 120 px/s while it moves; while it stands still (3.5–8.5 s) the box
+   dies (or survives only a short coast). Numbers read from
+   `readings.objects` against the scene's known truth.
+3. No phantom tracks on `truth`'s static noise background.
+Judged from page screenshots (the overlay is DOM) by a blind reviewer.
