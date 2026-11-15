@@ -3,14 +3,12 @@
 Status of everything planned for MotionDiff. Updated at the end of every working
 session. Statuses: **done**, **in progress**, **planned**, **deferred**.
 
-Last updated: 2026-11-14 (session 5. Session A: display small and medium tiers
-(legend, ruler, paused traces, arrows, mirror, setup guide, readings panel,
-display-resolution layer). Session B: measurement small and medium tiers (flow
-readouts and warning, JSDoc type check, magnify sample; measured ribbon colours,
-hole filling, flow gates, per-pixel threshold, lighting normalisation, magnify
-quiet gate). Both sessions stopped before the large tier at the owner's
-instruction; camera compensation waits on the shared-stage pipeline design,
-docs/combined-modes.md §8).
+Last updated: 2026-11-15 (session 6, the large tier: the shared-stage pipeline
+restructure proven invisible; the app reorganised around six effects with the
+instrument margin and the question strip (owner's pick from three mockups);
+camera compensation; grouping and tracking; calibration to real units;
+motion-guided magnification; the owner's fixes batch and a version footer.
+Acceptance under "Session 6" in docs/verdicts.md, X-1 and V-6C/T/K/M.)
 
 The governing rule for every item: lightweight, and easy to maintain and debug by hand.
 Visual work is accepted under the rules in `docs/development.md`; results are logged in
@@ -33,7 +31,7 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 | Mirror: the front camera flipped like a mirror, fullscreen | **done**, session 5 (Session A) | An installation where viewers see their own motion | | Verdict IA4. Display-only flip; the legend flips with it. Needs the owner's phone |
 | Camera zoom by pinch (owner's request) | **done**, session 5 (Session A) | Two fingers zoom the camera where the driver allows it | | In IA4. iOS Safari exposes no zoom control; needs the owner's phone |
 | Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. Would replace the experimental traces view on real footage |
-| Camera compensation (global motion, then subtract it) | planned | On `handheld`, `highway` and `river` (whose camera moves forward, as flow revealed) the scenery goes dark and only real movers remain, in every mode | Medium | The flow and its median shift exist (`pipeline.readings.camera`); deliberately waits for the shared-stage pipeline restructure, docs/combined-modes.md §8 |
+| Camera compensation (global motion, then subtract it) | **done**, session 6 | On `handheld` the scenery cancels in Raw and in the mask with the crowd kept; `river`'s banks go dark under the zoom term; a still camera is byte-identical on and off | | `cameraComp` ("Steady camera"), docs/camera-compensation.md, V-6C. Three guards keep a still camera still |
 | Real-time stabiliser | planned, after compensation | `handheld` plays back steady | Medium | |
 | Sonification | done; **deferred** beyond keeping it working | | | Could be driven by flow speed and heading |
 
@@ -79,6 +77,18 @@ Ranked by visible effect for the effort.
 | Lighting normalisation (`maskGradient`: edge differencing on the mask mode) | with this update | V-B8 |
 | Magnify muted where nothing ever happens (`magQuiet`: the model's variance gates the band) | with this update | V-B9 |
 
+### Session 6
+| Item | Verdict | Notes |
+|---|---|---|
+| Shared measurement stages: every measurement once per frame, any view can use it | proof in PR #20 | docs/pipeline-stages.md; 122/122 strips byte-identical, 9/9 probes, frame times within noise |
+| The app around six effects; instrument margin; question strip | X-1 | Owner's pick from docs/design/effects/; all four fresh-agent goals reached, both built combinations found |
+| Camera compensation | V-6C | See Applications above |
+| Grouping and tracking: boxes, IDs, numbers, arrow ahead | V-6T | Truth numerics pass; traffic per-vehicle except merged clumps (limit named); `maskTrack` / the Movers pill |
+| Calibration to real units | V-6K | Exact scale, m/s everywhere speeds show; discoverability miss recorded; effort capped by the owner |
+| Motion-guided magnification | V-6M | The direction-proof on `pulse`; flank named blind on `kitten`; fur-churn limit named |
+| Fixes batch: magnify composite corner bug, the way back to the effects page, scrollable sheets, one preset per sample | — | PR #27; owner's reports |
+| Version footer (standing request) | — | PR #24; build stamp on the landing and under Keys |
+
 ## Deferred
 | Item | Why |
 |---|---|
@@ -92,7 +102,7 @@ Ranked by visible effect for the effort.
 | Plain traces that show which way they run in a still picture | Tried with a tinted tail; a blind judge could not tell (`docs/verdicts.md`, session 4). Heading colours do it |
 | Temperature or density values from schlieren | Needs calibration and tomography; the picture is the product |
 | Worker fallback for optical flow and schlieren | As for the other WebGL-only modes |
-| Blob extraction and tracking | |
+| Per-vehicle separation inside a merged mask clump | Needs a measurement the mask does not make (a flow-direction split); tracking boxes congestion per clump today (V-6T) |
 | Compression motion vectors | |
 | YOLO proof of concept | Run on the original frame, not on diff output; combine with motion in data |
 | Audio engine improvements | Keep it working, do not extend it |
@@ -152,6 +162,17 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
 | Research write-up, design mockups | `3922a07` |
 
 ## Known gaps
+- Motion magnification turns fine repeated texture (fur) painterly: the field
+  measures its real micro-shimmer; coherent large-scale motion suffers least
+  (V-6M). A coherence gate is the next idea if it matters in use.
+- Tracking IDs churn on the far field of a busy road; congestion is boxed per
+  merged clump (V-6T).
+- Calibration is true at the marked line's depth only, and its entry points
+  (C, the margin link) failed a first-time discoverability test before the
+  link existed; untested since (owner capped effort).
+- The filmstrip tool: a synthetic scene rendered after a real-clip scene in
+  one run can differ slightly from the same scene rendered alone (reproduced
+  on old master; compare strips from runs with the same scene order).
 - **Schlieren live on a phone does not work well yet** (owner's first try, session 4): the preset clips work there, the live camera gives a flat grey picture, which means nothing could be measured (a plain background or a moving phone are the likely causes; not diagnosed). The setup guide under Applications is the next step.
 - **Frame rates on a real phone have not been measured.** Frame-rate
   figures are from one desktop GPU. Schlieren has been checked on synthetic scenes and
