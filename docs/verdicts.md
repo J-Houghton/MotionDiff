@@ -1870,3 +1870,77 @@ should now read "running on the CPU … because the GPU backend can't run
 this model" (or "would not load it", if every GPU rung there fails
 before a look), with names appearing at the CPU's rate; and depth should
 read exactly as it did.
+
+### F-1, C-1 and M-1 again: naming made visibly better (docs/naming-poc.md)
+**Expected, written before building (2026-11-16).** Three steps, one
+commit each, registered together so the order is on record.
+
+What the owner sees (laptop, integrated GPU, naming on the CPU rung):
+dashed model boxes sitting in empty space, and names that do not follow
+the motion boxes, many of which stay unnamed. Measured here on the same
+rung (`traffic`, mask + boxes + names, `?modelfault=webgpu:load`, 30 s
+sampled five times a second; looks take about 1.9 s):
+- Every model-only find drawn was stale: 1021 of 1021 find-samples older
+  than 1.5 s (youngest 1.9 s, median 3.0 s, oldest 4.3 s). They are
+  stamped when the frame is sent, arrive one look later, never move, and
+  stay — at an opacity floored at 0.3 — until the next look replaces
+  them.
+- **2.2%** of drawn box-samples carried a name (1.9% of the boxes large
+  enough to show a plate); 12 of 64 tracks that lived two seconds ever
+  got one.
+- On 19 recorded looks of `traffic` (the tracker's boxes as sent, and
+  what the model returned, replayed through the matcher): 107 of 429
+  motion boxes found a partner (65 of 113 plate-sized ones); 138 of 245
+  detections were left as model-only finds, and **124 of those 138
+  overlap a motion box** — they are not the model seeing something
+  motion missed, they are the matcher failing to pair. 236 of the 429
+  motion boxes touch no detection at all (far field, clutter, coasting):
+  no matcher can name those. `highway`, 14 looks, held out: 39 of 521
+  paired.
+
+**F-1. Stale finds — robustness.**
+1. The rule is a pure function with tests: a find's age is measured in
+   media time from the frame the model looked at; it is drawn at full
+   strength while young, fades to **nothing**, and is dropped at a bound
+   of a few look periods, capped at an absolute age; a find that arrives
+   already past its prime is never drawn.
+2. On the CPU rung here (the run above repeated): no find-sample older
+   than the bound, against 1021; no opacity floor. With looks slower
+   than the cap this means **no model-only finds are drawn at all** on
+   that rung — that is the rule working, and is named as a limit.
+3. Paused, a find stays with the frozen picture it belongs to (its age
+   is media time); after a seek or a loop it is gone.
+4. Fresh finds still show where looks are fast — checked in M-1 again,
+   once the GPU rung exists.
+
+**C-1. Matching loose boxes — robustness.**
+1. In `core/boxmatch.js`, with tests: a motion box matches the detection
+   that holds most of it (containment) or overlaps it well (IoU);
+   several motion boxes may take one detection's name. Named tests: a
+   strip inside a car; two clumps on one car; two cars side by side that
+   must not swap.
+2. On the recorded `traffic` looks, same looks through both matchers:
+   paired motion boxes rise from 107 to **at least 130** of 429, and
+   plate-sized ones from 65 to **at least 80** of 113; model-only finds
+   that overlap a motion box fall from 124 by **at least a third**.
+3. Held out, `highway`: no fewer boxes paired than before (39).
+4. In the app on the CPU rung: the share of plate-sized box-samples
+   carrying a name rises from 1.9%. (How far depends on the look rate as
+   much as the matcher: a name arrives a look late and dies with its id.)
+5. The motion boxes themselves are untouched: `core/track.js` and the
+   stages are not in the diff.
+
+**M-1 again, on Transformers.js 4.3.2 (the detector worker only) —
+robustness.** The six M-1 checks as registered in Session 8, re-run on
+this machine's real WebGPU adapter, plus:
+7. The ladder lands on a GPU rung here (`Naming is on (webgpu/…)`), and
+   looks come at least twice a second, against 0.6.
+8. With the GPU rungs made to fail (`?modelfault=webgpu:load`), it still
+   lands on the CPU on the new runtime, says why, and names.
+9. Depth is untouched: `depth.worker.js` is byte-identical to the
+   branch's base, still on 3.8.1, and reads as in L-1.
+10. With fast looks the model-only finds drawn are fresh (none older
+    than F-1's bound) and fade out rather than sit.
+
+Not verifiable here: the owner's laptop GPU (whether the new runtime's
+GPU rungs load where the old one's would not), and its CPU look rate.
