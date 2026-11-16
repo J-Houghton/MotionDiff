@@ -46,7 +46,7 @@ const fmt = {
  * @param {() => void} [options.onCalibrate] - Starts the mark-a-known-length flow
  * @returns {{toggle: () => void, update: () => void}}
  */
-export function initReadings({ root, plate, session, onCalibrate }) {
+export function initReadings({ root, plate, session, onCalibrate, onCountLine }) {
   const aside = el('aside', 'readings chrome');
   aside.setAttribute('aria-label', 'Readings');
   const head = el('div', 'rd-head');
@@ -66,7 +66,11 @@ export function initReadings({ root, plate, session, onCalibrate }) {
   calibrateLink.type = 'button';
   calibrateLink.append(Object.assign(document.createElement('kbd'), { textContent: 'C' }));
   if (onCalibrate) calibrateLink.addEventListener('click', onCalibrate);
-  aside.append(head, instruments, all, calibrateLink, note);
+  const countLink = el('button', 'rd-calibrate', 'Count line: movers over a drawn line ');
+  countLink.type = 'button';
+  countLink.append(Object.assign(document.createElement('kbd'), { textContent: 'X' }));
+  if (onCountLine) countLink.addEventListener('click', onCountLine);
+  aside.append(head, instruments, all, calibrateLink, countLink, note);
   // Before the parameter panel: picture, readings, parameters.
   plate.insertBefore(aside, plate.querySelector('.panel'));
 
@@ -208,7 +212,12 @@ export function initReadings({ root, plate, session, onCalibrate }) {
   const cameraLamp = el('i', 'rd-lamp');
   const cameraText = el('b', '', '—');
   cameraBox.append(cameraLamp, cameraText, el('span', '', 'camera · median of measured'));
-  instruments.append(peak, lineBox, roseBox, cameraBox);
+  // Crossing counts over the drawn line (docs/data-out.md); the arrows are
+  // the line's own normal, so they point the ways movers actually crossed.
+  const countsBox = el('div', 'rd-camera');
+  const countsText = el('b', '', '—');
+  countsBox.append(countsText, el('span', '', 'movers over the count line'));
+  instruments.append(peak, lineBox, roseBox, cameraBox, countsBox);
 
   function drawInstruments(ctx) {
     const r = ctx.r?.mode === 'flow' ? ctx.r : null;
@@ -220,6 +229,17 @@ export function initReadings({ root, plate, session, onCalibrate }) {
     peak.hidden = !r;
     roseBox.hidden = !r;
     cameraBox.hidden = !r || r.camera.share < 0.5;
+    // Only where boxes are being tracked: a line with no tracker is idle.
+    const counts = ctx.r?.objects ? session.counts : null;
+    countsBox.hidden = !counts;
+    if (counts) {
+      const set = session.countLine;
+      const nx = -(set.y2 - set.y1);
+      const ny = set.x2 - set.x1;
+      const positive = SECTOR_ARROWS[Math.round(((Math.atan2(ny, nx) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) % 8];
+      const negative = SECTOR_ARROWS[Math.round(((Math.atan2(-ny, -nx) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) % 8];
+      countsText.textContent = `${positive} ${counts.pos} · ${negative} ${counts.neg}`;
+    }
     if (!cameraBox.hidden) {
       const speed = Math.hypot(r.camera.dx, r.camera.dy);
       const still = speed < (r.width || 640) * 0.025;

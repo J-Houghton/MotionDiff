@@ -7,6 +7,7 @@
  * the state it reads back; nothing in this file touches a control.
  */
 import { Pipeline } from './pipeline.js';
+import { createCounter, readingsJson, stepCounter, tracksCsv } from '../core/dataout.js';
 import { isDashUrl, isHlsUrl, isYouTubeUrl } from './loader.js';
 import { CanvasRecorder } from './exporter.js';
 import { render, renderBlank, renderMagnify } from './renderer.js';
@@ -93,6 +94,13 @@ export class Session {
     /** @type {Awaited<ReturnType<import('./naming.js').createNamer>>|null} Loaded only when "Name the movers" is first asked for */
     this._naming = null;
     this._namingLoading = false;
+    /** @type {import('../core/dataout.js').CountLine|null} Count line in picture px (ui/countline.js); belongs to one camera setup */
+    this.countLine = null;
+    /** @type {ReturnType<typeof createCounter>|null} */
+    this._counter = null;
+    /** Data collection (docs/data-out.md): rows appended per processed frame while on. */
+    this.collecting = false;
+    this._dataLog = { frames: [], tracks: [], lastT: -1, full: false };
     this.display = 'overlay';
     this.fps = DEFAULT_FPS;
     this.status = { message: '', type: 'idle' };
@@ -404,6 +412,9 @@ export class Session {
     this._stopLoop();
     this.loaded = false;
     this.calibration = null; // a scale belongs to one camera setup
+    this.setCountLine(null); // the line and its counts too
+    this.clearDataLog();
+    if (this.collecting) { this.collecting = false; this._emit('collect'); }
     this._setPlaying(false);
 
     const attached = this.video.srcObject instanceof MediaStream ? this.video.srcObject : null;
@@ -662,12 +673,96 @@ export class Session {
     // the last stamp; a tool feeding frames by hand brings its own.)
     if (this._stream && !this.manual && !this.video.paused) frameMeta = { mediaTime: performance.now() / 1000 };
     this.pipeline.process(this.video, frameMeta);
-    // Naming rides beside the pipeline: a round of crops a few times a
+    this._dataStep();
+    // Naming rides beside the pipeline too: a round of crops a few times a
     // second, fire-and-forget; the picture never waits for it.
-    const readings = this.pipeline.readings;
-    if (this._naming && this.params.maskNames && readings?.objects?.length) {
-      this._naming.tick(this.video, readings.objects, readings.width, readings.height);
+    const named = this.pipeline.readings;
+    if (this._naming && this.params.maskNames && named?.objects?.length) {
+      this._naming.tick(this.video, named.objects, named.width, named.height);
     }
+  }
+
+  // ── Data out (docs/data-out.md): the counter and the collected log ──
+
+  /** @param {import('../core/dataout.js').CountLine|null} line */
+  setCountLine(line) {
+    this.countLine = line;
+    this._counter = line ? createCounter(line) : null;
+    this._emit('countline');
+  }
+
+  /** The cumulative crossing counts, or null without a line. */
+  get counts() { return this._counter ? this._counter.counts : null; }
+
+  toggleCollect() {
+    this.collecting = !this.collecting;
+    this._emit('collect');
+    return this.collecting;
+  }
+
+  clearDataLog() {
+    this._dataLog = { frames: [], tracks: [], lastT: -1, full: false };
+    this._emit('collect');
+  }
+
+  get dataRowCount() { return this._dataLog.frames.length; }
+
+  /** One step per processed frame: count crossings, append rows while collecting. */
+  _dataStep() {
+    const readings = this.pipeline.readings;
+    const t = this.video.currentTime;
+    const events = this._counter && readings?.objects
+      ? stepCounter(this._counter, readings.objects, t)
+      : null;
+    if (events && events.length) this._emit('counts');
+
+    if (!this.collecting || this._dataLog.full || t === this._dataLog.lastT) return;
+    const log = this._dataLog;
+    log.lastT = t;
+    /** @type {Record<string, *>} */
+    const row = { t: Math.round(t * 1000) / 1000, mode: this.params.algorithm };
+    if (readings) {
+      for (const key of Object.keys(readings)) {
+        if (key !== 'objects' && key !== 'mode') row[key] = readings[key];
+      }
+    }
+    if (this._counter) row.counts = { ...this._counter.counts };
+    log.frames.push(row);
+    if (readings?.objects) {
+      for (const o of readings.objects) log.tracks.push([t, o.id, o.cx, o.cy, o.w, o.h, o.vx, o.vy, o.speed]);
+    }
+    if (log.frames.length >= 100000 || log.tracks.length >= 100000) {
+      log.full = true;
+      this.setStatus('Data collection is full: export it, or clear and collect again', 'info');
+      this._emit('collect');
+    }
+  }
+
+  _downloadData(text, type, extension) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const url = URL.createObjectURL(new Blob([text], { type }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `motiondiff-${extension === 'csv' ? 'tracks' : 'readings'}-${stamp}.${extension}`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  exportTracksCsv() {
+    this._downloadData(tracksCsv(this._dataLog.tracks, this.calibration?.metresPerPixel ?? null), 'text/csv', 'csv');
+  }
+
+  exportReadingsJson() {
+    const meta = {
+      clip: this.source?.label ?? null,
+      width: this.pipeline.width,
+      height: this.pipeline.height,
+      params: { ...this.params },
+      calibration: this.calibration?.metresPerPixel ?? null,
+      countLine: this.countLine,
+      version: typeof __BUILD_STAMP__ === 'string' ? __BUILD_STAMP__ : 'dev',
+    };
+    this._downloadData(readingsJson(meta, this._dataLog.frames, this._counter?.events ?? []), 'application/json', 'json');
   }
 
   _drawWorkerResult(result) {
