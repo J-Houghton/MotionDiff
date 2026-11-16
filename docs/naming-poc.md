@@ -34,8 +34,10 @@ back off.
    Transformers.js from the CDN and the model from Hugging Face, and
    works down a ladder — **WebGPU fp16, WebGPU fp32, wasm q8** — until
    one loads, saying which it landed on (the status line) and why it
-   stepped down (the console). fp16 crashed the runtime outright on a
-   real GPU the first time out, which is why the ladder exists.
+   stepped down (the console). **Each rung gets a fresh worker**: a crash
+   out of the runtime (fp16 crashed outright on a real GPU the first time
+   out) leaves that worker's wasm instance poisoned, and a retry inside
+   it fails at the same spot whatever the backend.
    (`?detdtype=fp32` pins the WebGPU rung for triage.)
 2. **Look**: a few times a second — self-throttled, **one request in
    flight at a time**, never faster than the model answers — the current

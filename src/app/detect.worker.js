@@ -6,9 +6,9 @@
  * thread never waits on it; a result carries the stamp of the frame it
  * looked at, because it arrives late by one inference.
  *
- * Messages in:  {type: 'load', dtype?: string}
+ * Messages in:  {type: 'load', device: string, dtype: string}
  *               {type: 'frame', bitmap: ImageBitmap, time: number}
- * Messages out: {type: 'ready', backend: string, dtype: string, loadMs: number}
+ * Messages out: {type: 'ready', loadMs: number}
  *               {type: 'result', time: number, inferMs: number, width: number,
  *                height: number, detections: {label, score, x, y, w, h}[]}
  *               {type: 'error', message: string}
@@ -29,31 +29,19 @@ function describe(error) {
   return String(error?.message || error);
 }
 
-async function load(dtypeOverride) {
+/**
+ * One attempt on one backend. The ladder lives on the main thread
+ * (app/detect.js) and gives EVERY rung a fresh worker: a crash out of the
+ * runtime leaves this wasm instance poisoned, so retrying in the same
+ * worker fails at the same spot whatever the backend — seen in the wild
+ * as three rungs dying with one identical number.
+ */
+async function load(device, dtype) {
   const t0 = performance.now();
   const T = await import(/* @vite-ignore */ TRANSFORMERS_URL);
   T.env.allowLocalModels = false;
-  // WebGPU where the browser has it; wasm everywhere else (phones, this
-  // project's software-GL sandbox). The fast path is tried first and the
-  // worker steps down when it fails — fall back or say so plainly:
-  // fp16 is the usual WebGPU choice but this model's fp16 build has
-  // crashed the runtime on a real GPU, fp32 is the sturdier build, and
-  // wasm/q8 (21 MB) runs anywhere. `?detdtype=` pins the WebGPU dtype.
-  const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
-  const ladder = adapter
-    ? [...(dtypeOverride ? [['webgpu', dtypeOverride]] : [['webgpu', 'fp16'], ['webgpu', 'fp32']]), ['wasm', 'q8']]
-    : [['wasm', dtypeOverride || 'q8']];
-  const failures = [];
-  for (const [device, dtype] of ladder) {
-    try {
-      detector = await T.pipeline('object-detection', MODEL_ID, { device, dtype });
-      postMessage({ type: 'ready', backend: device, dtype, loadMs: Math.round(performance.now() - t0), failures });
-      return;
-    } catch (error) {
-      failures.push(`${device}/${dtype}: ${describe(error)}`);
-    }
-  }
-  throw new Error(`no backend would load the model — ${failures.join('; ')}`);
+  detector = await T.pipeline('object-detection', MODEL_ID, { device, dtype });
+  postMessage({ type: 'ready', loadMs: Math.round(performance.now() - t0) });
 }
 
 async function look(bitmap, time) {
@@ -85,7 +73,7 @@ onmessage = (event) => {
   const message = event.data;
   if (busy) return; // One request at a time is enforced by the sender; this is the backstop.
   busy = true;
-  const work = message.type === 'load' ? load(message.dtype) : look(message.bitmap, message.time);
+  const work = message.type === 'load' ? load(message.device, message.dtype) : look(message.bitmap, message.time);
   work
     .catch((error) => postMessage({ type: 'error', message: describe(error) }))
     .finally(() => { busy = false; });
