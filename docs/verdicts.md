@@ -1653,3 +1653,36 @@ Licences checked and recorded in the design note before building:
 Transformers.js Apache-2.0; Depth Anything V2 Small Apache-2.0 (Base and
 Large are CC-BY-NC and are never fetched). WebGPU is absent in this
 sandbox: backend choice and GPU speed are owner-desktop checks.
+
+**Result (2026-11-15): all six registered checks hold in the sandbox, the
+fourth after a diagnosed correction; the WebGPU backend is an
+owner-desktop check.** Numbers (wasm/q8, SwiftShader-era CPU, indicative):
+1. Light without it: a 5 s run with boxes on and depth never asked for
+   makes zero requests to jsDelivr or Hugging Face; the worker, runtime
+   and model are in lazy chunks loaded only when asked (about 3 kB of
+   glue — the overlay drawer and the pure helpers — rides the startup
+   chunk, recorded as the honest reading, as with N-1's toggle);
+   truth-mask filmstrip **byte-identical** to master's.
+2. The stage knows its age: maps arrive stamped; reported age 0–2.5 s
+   across a 12 s run at ~1.2 s per look (one in flight), and the readings
+   margin shows backend, look time and the map's age, with the copy
+   button.
+3. It sees depth: lower-third mean inverse depth 4.76 against the upper
+   third's 0.84, on a 0–6.2 map — far past the registered 20% of range.
+4. The one use: **first round failed the registered bar (1 of 3)**. The
+   traces diagnosed two causes, both fixed, neither a tuning pass: a
+   coasted box sampled depth under a predicted position (now: coasting
+   boxes sample nothing and keep their last factor, as they keep their
+   speed), and the factor jumped when a fresh map renormalised against a
+   stale one (now: smoothed per id). Second round: **2 of 3** approaching
+   ≥ 3 s tracks show smaller corrected spread (7.27→7.01, 14.12→6.41;
+   the third 12.64→13.63 worse), factors never left the clamp
+   (0.35–3.05). The margin is thin at this backend's ~1 look/s — a map
+   two seconds stale against a fast mover is the diagnosed residual —
+   and should widen where looks are fast; named for the desktop check.
+5. Beside the pipeline: fps 15 with depth on and off alike; media time
+   advanced undisturbed (3.4 → 5.1 s) while the model loaded in 2.1 s
+   mid-playback.
+6. Audit at 1440×900 with the overlay (near warm, far cool, pixelated),
+   its age chip, ≈ speeds on the plates and the margin up: nothing
+   clipped, overlapping or off screen; min contrast 4.65.

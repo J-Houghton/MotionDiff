@@ -490,14 +490,31 @@ export class Stages {
       // Depth, where the stage has it (docs/depth-stage.md): each box
       // samples its median inverse depth and carries the factor that makes
       // its speed comparable at the scene's median depth — or no factor
-      // where the map declines, and the raw speed stands unmarked.
+      // where the map declines, and the raw speed stands unmarked. The
+      // factor is smoothed per id (successive maps renormalise, and a map
+      // is a look or two old against a mover's current box), and a coasted
+      // box samples nothing — its position is a prediction, not a find —
+      // but keeps the factor it had, as it keeps its speed.
       const depth = this.depth();
       if (depth) {
+        const factors = (state.factors ||= new Map());
         for (const o of shown) {
-          const at = boxDepth(depth.grid, depth.cols, depth.rows, o, renderer.width, renderer.height);
-          const factor = depthSpeedFactor(depth.median, at, depth.min, depth.max);
-          if (factor !== null) o.depthFactor = factor;
+          let factor = null;
+          if (!o.coasting) {
+            const at = boxDepth(depth.grid, depth.cols, depth.rows, o, renderer.width, renderer.height);
+            factor = depthSpeedFactor(depth.median, at, depth.min, depth.max);
+          }
+          if (factor !== null) {
+            const prev = factors.get(o.id);
+            const smoothed = prev === undefined ? factor : prev + (factor - prev) * 0.25;
+            factors.set(o.id, smoothed);
+            o.depthFactor = smoothed;
+          } else if (o.coasting && factors.has(o.id)) {
+            o.depthFactor = factors.get(o.id);
+          }
         }
+        const alive = new Set(shown.map((o) => o.id));
+        for (const id of factors.keys()) if (!alive.has(id)) factors.delete(id);
       }
       state.published = shown;
       frame.readings = {

@@ -49,7 +49,10 @@ one. With a depth estimate the tracker's speeds can be made comparable:
 each box samples its median inverse depth from the stage, and its shown
 speed is scaled by `median(scene) / depth(box)`, clamped to ×/÷4 and
 declined entirely (raw speed, no ≈) where the map is too flat or the box
-too near the far tail to trust. The plate then reads `7 · ≈112 px/s`: an
+too near the far tail to trust. The factor is smoothed per id (successive
+maps renormalise themselves, and a map is a look or two old against a
+mover's current box), and a coasted box samples nothing — its position is
+a prediction — but keeps the factor it had, as it keeps its speed. The plate then reads `7 · ≈112 px/s`: an
 estimate of what the mover's speed would read at the scene's median
 depth. The absolute scale stays anchored where you calibrated; what the
 correction buys is comparability between near and far.
