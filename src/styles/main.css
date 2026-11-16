@@ -532,6 +532,12 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .boxes marker path { fill: var(--accent); }
 .boxes .boxes-plate { fill: var(--card); stroke: var(--ink); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .boxes text { fill: var(--ink); font-family: var(--mono); }
+/* Naming by a detector (docs/naming-poc.md): found by motion only = dashed
+   accent; the model's own finds = dashed blue estimates with their label. */
+.boxes g[data-agree='motion'] rect { stroke-dasharray: 7 5; }
+.boxes .boxes-model rect { stroke: var(--ch-b); stroke-dasharray: 4 4; }
+.boxes .boxes-model .boxes-plate { stroke-dasharray: none; }
+.boxes .boxes-model text { fill: var(--ch-b); }
 /* The depth estimate over the picture (ui/depthview.js): the stage's
    coarse grid, deliberately pixelated, under the boxes overlay. */
 .depthview { position: absolute; z-index: 2; pointer-events: none; width: auto; height: auto; image-rendering: pixelated; }

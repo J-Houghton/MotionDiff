@@ -91,7 +91,7 @@ export class Session {
     this.source = null;
     /** @type {{metresPerPixel: number}|null} Real-unit scale from the marking flow (ui/calibrate.js); belongs to one camera setup */
     this.calibration = null;
-    /** @type {Awaited<ReturnType<import('./naming.js').createNamer>>|null} Loaded only when "Name the movers" is first asked for */
+    /** @type {ReturnType<import('./detect.js').createDetector>|null} Loaded only when "Name the movers" is first asked for */
     this._naming = null;
     this._namingLoading = false;
     /** @type {ReturnType<import('./depthstage.js').createDepthStage>|null} Loaded only when "Depth the scene" is first asked for (docs/depth-stage.md) */
@@ -228,14 +228,34 @@ export class Session {
     return this.params.maskNames && this._naming ? this._naming.labelFor(id) : null;
   }
 
+  /** 'both' | 'motion' for a tracked box from the model's last look, or null. */
+  agreeFor(id) {
+    return this.params.maskNames && this._naming ? this._naming.agreeFor(id) : null;
+  }
+
+  /** The model-only finds (dashed estimate boxes), or null while naming is off. */
+  modelFinds() {
+    return this.params.maskNames && this._naming ? this._naming.finds() : null;
+  }
+
+  /** Backend and timing facts for the readings margin, or null while naming is off. */
+  modelStatus() {
+    return this.params.maskNames && this._naming ? this._naming.status() : null;
+  }
+
   async _loadNaming() {
     this._namingLoading = true;
-    this.setStatus('Loading the naming model (about 4 MB, once)…', 'info');
+    this.setStatus('Loading the naming model (21–41 MB, once; the browser caches it)…', 'info');
+    const detector = (await import('./detect.js')).createDetector({
+      onStatus: (message, type) => this.setStatus(message, type),
+    });
     try {
-      const { createNamer } = await import('./naming.js');
-      this._naming = await createNamer();
-      this.setStatus('Naming is on: boxes carry their best guess', 'success');
+      await detector.ready;
+      this._naming = detector;
+      const s = detector.status();
+      this.setStatus(`Naming is on (${s.backend}/${s.dtype}): boxes carry the model's best guess`, 'success');
     } catch (error) {
+      detector.dispose();
       this.setParams({ maskNames: false });
       this.setStatus(`Naming could not load (offline?): ${error.message}`, 'error');
     } finally {
@@ -709,10 +729,12 @@ export class Session {
     if (this._stream && !this.manual && !this.video.paused) frameMeta = { mediaTime: performance.now() / 1000 };
     this.pipeline.process(this.video, frameMeta);
     this._dataStep();
-    // Naming rides beside the pipeline too: a round of crops a few times a
-    // second, fire-and-forget; the picture never waits for it.
+    // Naming rides beside the pipeline too: a look at the whole frame a few
+    // times a second, fire-and-forget; the picture never waits for it. An
+    // empty track list still gets looks — what the model alone finds is
+    // half the point (docs/naming-poc.md).
     const named = this.pipeline.readings;
-    if (this._naming && this.params.maskNames && named?.objects?.length) {
+    if (this._naming && this.params.maskNames && named?.objects) {
       this._naming.tick(this.video, named.objects, named.width, named.height);
     }
     // Depth rides beside the pipeline the same way (docs/depth-stage.md):

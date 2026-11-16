@@ -51,7 +51,7 @@ export const BLUR = { key: 'blurEnabled', label: 'Blur', type: 'toggle', default
  */
 export const MASK_FILL = { key: 'maskFill', label: 'Fill holes', type: 'select', default: 0, options: { 'Off': 0, '1 px': 1, '2 px': 2 } };
 export const MASK_TRACK = { key: 'maskTrack', label: 'Box the movers', type: 'toggle', default: false };
-export const MASK_NAMES = { key: 'maskNames', label: 'Name the movers (loads a small model)', type: 'toggle', default: false, when: (p) => p.maskTrack };
+export const MASK_NAMES = { key: 'maskNames', label: 'Name the movers (loads a detector model)', type: 'toggle', default: false, when: (p) => p.maskTrack };
 export const MASK_DEPTH = { key: 'maskDepth', label: 'Depth the scene (loads a depth model)', type: 'toggle', default: false, when: (p) => p.maskTrack };
 export const DEPTH_SHOW = { key: 'depthShow', label: 'Show the depth estimate', type: 'toggle', default: true, when: (p) => p.maskTrack && p.maskDepth };
 

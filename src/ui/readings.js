@@ -70,8 +70,27 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
   countLink.type = 'button';
   countLink.append(Object.assign(document.createElement('kbd'), { textContent: 'X' }));
   if (onCountLine) countLink.addEventListener('click', onCountLine);
-  // The depth model's numbers as pasteable text (docs/depth-stage.md): the
+  // The naming model's numbers as pasteable text (docs/naming-poc.md): the
   // owner tests on another machine and reports what it read.
+  const copyModel = el('button', 'rd-calibrate', 'Copy model readings');
+  copyModel.type = 'button';
+  copyModel.hidden = true;
+  copyModel.addEventListener('click', async () => {
+    const s = session.modelStatus?.();
+    if (!s) return;
+    const text = [
+      `model rtdetr_v2_r18vd · backend ${s.backend}/${s.dtype}`,
+      `load ${s.loadMs} ms · infer last ${s.lastInferMs} ms, median ${s.medianInferMs} ms · ${s.looksPerSecond} looks/s`,
+      `frame rate ${session.fps.toFixed(1)} fps · processing ${session.pipeline.width}×${session.pipeline.height} · names on`,
+    ].join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      session.setStatus('Model readings copied — paste them into your report', 'success');
+    } catch {
+      session.setStatus(text, 'info');
+    }
+  });
+  // And the depth model's (docs/depth-stage.md), the same way.
   const copyDepth = el('button', 'rd-calibrate', 'Copy depth readings');
   copyDepth.type = 'button';
   copyDepth.hidden = true;
@@ -91,7 +110,7 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
       session.setStatus(text, 'info');
     }
   });
-  aside.append(head, instruments, all, calibrateLink, countLink, copyDepth, note);
+  aside.append(head, instruments, all, calibrateLink, countLink, copyModel, copyDepth, note);
   // Before the parameter panel: picture, readings, parameters.
   plate.insertBefore(aside, plate.querySelector('.panel'));
 
@@ -130,6 +149,10 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
       return s.problem ? s.problem : `ok · ${fmt.pct(s.usable)} usable · floor ${s.floor?.toFixed?.(2) ?? '—'} px`;
     }],
     ['tracked movers', 'boxes with IDs now', (ctx) => (ctx.r?.objects ? String(ctx.r.objects.length) : null)],
+    ['naming model', 'backend · ms per look · looks/s — estimates', () => {
+      const s = session.modelStatus?.();
+      return s ? `${s.backend}/${s.dtype} · ${s.lastInferMs} ms · ${s.looksPerSecond}/s` : null;
+    }],
     ['depth model', 'backend · ms per look · looks/s — estimates', () => {
       const s = session.depthStatus?.();
       return s ? `${s.backend}/${s.dtype} · ${s.lastInferMs} ms · ${s.looksPerSecond}/s` : null;
@@ -213,6 +236,7 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
       rowNodes[i].dt.hidden = value === null;
       if (value !== null) rowNodes[i].dd.textContent = value;
     }
+    copyModel.hidden = !session.modelStatus?.();
     copyDepth.hidden = !session.depthStatus?.();
     const mode = session.mode;
     note.textContent = !session.loaded ? 'No source.'

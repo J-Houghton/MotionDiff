@@ -92,3 +92,7 @@ onmessage = (event) => {
     .catch((error) => postMessage({ type: 'error', message: String(error?.message || error) }))
     .finally(() => { busy = false; });
 };
+
+// Only dynamic imports above, so this marks the worker a module for the
+// checker: without it, the two worker files share one global scope there.
+export {};
