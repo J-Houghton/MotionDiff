@@ -28,6 +28,12 @@ export function initBoxes({ root, stage, session }) {
 
   /** @type {Map<number, {g: SVGGElement, rect: SVGRectElement, label: SVGTextElement, arrow: SVGLineElement}>} */
   const nodes = new Map();
+  // The model's own finds (docs/naming-poc.md): what the detector saw that
+  // no track covers, drawn as dashed estimates. Rebuilt each draw — a look
+  // returns a handful at most.
+  const finds = document.createElementNS(SVG, 'g');
+  finds.setAttribute('class', 'boxes-model');
+  svg.append(finds);
 
   function place() {
     // Where the picture's pixels actually are inside the stage element.
@@ -82,6 +88,11 @@ export function initBoxes({ root, stage, session }) {
         nodes.set(o.id, n);
       }
       n.g.setAttribute('opacity', o.coasting ? '0.45' : '1');
+      // How the model's last look saw this track: 'both' keeps the accent,
+      // 'motion' goes dashed — found by motion only. Unset before a look.
+      const agree = session.agreeFor(o.id);
+      if (agree) n.g.dataset.agree = agree;
+      else delete n.g.dataset.agree;
       n.rect.setAttribute('x', o.x.toFixed(1));
       n.rect.setAttribute('y', o.y.toFixed(1));
       n.rect.setAttribute('width', o.w.toFixed(1));
@@ -110,7 +121,7 @@ export function initBoxes({ root, stage, session }) {
       n.label.style.display = labelled ? '' : 'none';
       n.plate.style.display = labelled ? '' : 'none';
       const name = session.nameFor(o.id);
-      const text = `${o.id} · ${formatSpeed(speed, session.calibration)}${name ? ` · ${name.label}` : ''}`;
+      const text = `${o.id} · ${formatSpeed(speed, session.calibration)}${name ? ` · ≈${name.label}` : ''}`;
       n.label.textContent = text;
       n.label.setAttribute('font-size', String(fontSize));
       const lx = Math.max(2, o.x);
@@ -124,6 +135,38 @@ export function initBoxes({ root, stage, session }) {
     }
     for (const [id, n] of nodes) {
       if (!alive.has(id)) { n.g.remove(); nodes.delete(id); }
+    }
+
+    // Model-only finds: where the model saw something at its last look —
+    // an ageing estimate, not a track, and drawn to say so.
+    finds.textContent = '';
+    for (const f of session.modelFinds() || []) {
+      const g = document.createElementNS(SVG, 'g');
+      g.setAttribute('opacity', String(Math.max(0.3, 1 - f.ageMs / 4000).toFixed(2)));
+      const rect = document.createElementNS(SVG, 'rect');
+      rect.setAttribute('x', f.x.toFixed(1));
+      rect.setAttribute('y', f.y.toFixed(1));
+      rect.setAttribute('width', f.w.toFixed(1));
+      rect.setAttribute('height', f.h.toFixed(1));
+      g.append(rect);
+      if (f.w * f.h >= 1800) {
+        const text = `≈${f.label}`;
+        const plate = document.createElementNS(SVG, 'rect');
+        plate.setAttribute('class', 'boxes-plate');
+        const label = document.createElementNS(SVG, 'text');
+        label.textContent = text;
+        label.setAttribute('font-size', String(fontSize));
+        const lx = Math.max(2, f.x);
+        const ly = Math.min(ph - 4, f.y + f.h + fontSize + 2);
+        label.setAttribute('x', (lx + 3).toFixed(1));
+        label.setAttribute('y', (ly - 2).toFixed(1));
+        plate.setAttribute('x', lx.toFixed(1));
+        plate.setAttribute('y', (ly - fontSize - 3).toFixed(1));
+        plate.setAttribute('width', String(Math.round(text.length * fontSize * 0.62) + 6));
+        plate.setAttribute('height', String(fontSize + 5));
+        g.append(plate, label);
+      }
+      finds.append(g);
     }
   }
 
