@@ -1519,3 +1519,23 @@ against after, same machine, same scene order:
 - Frame time (SwiftShader, indicative): interleaved renders of the six
   proof scenes, two rounds each — before 53.3/53.1 s, after 52.0/53.0 s;
   within noise.
+
+## Session 7 (additions)
+
+### N-1. Naming what is tracked — proof of concept (docs/naming-poc.md)
+**Expected, written before building.**
+1. Light without it: startup chunks unchanged from master; a headless run
+   that never switches naming on makes no request to the CDN or Hugging
+   Face (page resource timing).
+2. On `traffic` (mask + boxes + names, ~12 s): at least half of the boxes
+   that lived ≥ 2 s and settled a label carry a vehicle-family ImageNet
+   label (list in the design note); the wrong names on the rest are
+   recorded, not hidden.
+3. Tracking carries the label: classification ticks at ≤ 3 Hz, and a
+   sampled id shows its label on every frame while it lives.
+4. Beside the pipeline: median frame time on `traffic` within 25% of
+   names-off (SwiftShader, indicative); the picture keeps playing while
+   the model loads.
+5. Audit clean with named boxes up.
+Licences checked and recorded in the design note before building:
+runtime MIT, model Apache-2.0, YOLO rejected (AGPL-3.0).
