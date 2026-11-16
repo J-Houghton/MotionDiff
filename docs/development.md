@@ -142,7 +142,8 @@ __motionDiffDiffParity()        __motionDiffMaskParity()
 __motionDiffTrailParity()       __motionDiffHistoryParity()
 __motionDiffEnergyParity()      __motionDiffBackgroundParity()
 __magnifyParityHarness()        __motionDiffFlowParity()
-__motionDiffSchlierenParity()
+__motionDiffSchlierenParity()   __motionDiffWarpParity()
+__motionDiffMotionMagnifyParity()
 ```
 
 Each runs the same synthetic frames through core and GPU and reports the difference. 8-bit and Float32 results are expected to agree within about 2/255. State kept in half floats cannot match a Float32 core bit for bit, so the background probe counts mismatched decisions (under 0.1%) instead of demanding none; the flow and schlieren probes likewise report the largest difference between vectors (0.03 and 0.02 px) and count trusted vectors that are further apart than a set distance. Run the probes after touching a shader or its core function.

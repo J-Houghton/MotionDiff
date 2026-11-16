@@ -153,7 +153,7 @@ Makes hot air and gas visible by measuring how much they shift the background be
 
 The shift is measured against a reference picture of the scene. The picture shows where the air is unevenly hot. It is not a speed.
 
-- **Show**: *Knife edge* (light where the background is pushed one way, dark the other: the classic schlieren look), *Strength*, *Direction*, *Traces* (experimental: follows the travel of the eddies), *Setup check* (hatches in red whatever cannot be measured).
+- **Show**: *Knife edge* (light where the background is pushed one way, dark the other: the classic schlieren look), *Strength*, *Direction*, *Setup check* (hatches in red whatever cannot be measured).
 - **Hold reference**: off, the reference follows the scene and only changing hot air shows; on, it is frozen and everything since shows, including a steady column.
 - **Sensitivity**: the shift drawn at full strength, in pixels.
 - **Window**: the patch each shift is measured over. Larger sees weaker plumes, more coarsely.
