@@ -1621,3 +1621,35 @@ diagnosed correction.** Numbers:
    on 5.5 s undisturbed.
 5. Audit at 1440×900 with named boxes and the margin up: nothing
    clipped, overlapping or off screen; min contrast 4.65.
+
+## Session 8
+
+### E-1. Depth as a stage, and speeds comparable across depth (docs/depth-stage.md)
+**Expected, written before building (2026-11-15).** (Registered on this
+branch; the session's other experiment, M-1, registers on its own.)
+1. **Light without it**: with depth never switched on, no request leaves
+   for the CDN or Hugging Face, the depth code stays in its own lazy
+   chunks, and the truth-mask filmstrip is byte-identical to master's.
+2. **A stage that knows its age**: on `traffic` with depth on, the stage
+   publishes a map stamped with the frame it saw; its reported age stays
+   bounded (under 4 s on this machine's wasm) across a 12 s run, and the
+   readings margin shows backend, time per look and the map's age.
+3. **It sees depth**: on `traffic`, the map reads the near road nearer
+   than the far road: mean inverse depth over the picture's lower third
+   exceeds the upper third by at least 20% of the map's range.
+4. **The one use holds on the clip**: for the three longest tracks that
+   approach the camera on `traffic` (≥ 3 s), the spread of depth-corrected
+   speed along the track (95th over 5th percentile) is smaller than the
+   spread of raw px/s on at least two; corrected speeds never leave the
+   registered ×/÷4 clamp, and where the map declines (flat range, far
+   tail) the plain speed shows unmarked.
+5. **Beside the pipeline**: one look in flight at a time; median frame
+   rate on `traffic` with depth on within 25% of off (SwiftShader,
+   indicative); the picture keeps playing while the model loads.
+6. **Interface**: audit clean with the depth overlay, its age chip and
+   the readings margin up.
+
+Licences checked and recorded in the design note before building:
+Transformers.js Apache-2.0; Depth Anything V2 Small Apache-2.0 (Base and
+Large are CC-BY-NC and are never fetched). WebGPU is absent in this
+sandbox: backend choice and GPU speed are owner-desktop checks.
