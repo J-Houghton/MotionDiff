@@ -1686,3 +1686,15 @@ owner-desktop check.** Numbers (wasm/q8, SwiftShader-era CPU, indicative):
 6. Audit at 1440×900 with the overlay (near warm, far cool, pixelated),
    its age chip, ≈ speeds on the plates and the margin up: nothing
    clipped, overlapping or off screen; min contrast 4.65.
+
+**Blind judge (fresh agent, the overlay frame, eyes only), E-1 addendum:**
+unprompted, it read the wash as "near = warm, far = cool, a vertical
+near-to-far gradient", read the chip as "an approximate depth estimate,
+just updated", and read the ≈ speeds as estimates — the display
+communicates without the help sheet. The limit it found, recorded: a
+dark car at mid-distance renders cooler than its pale neighbours at the
+same depth — the model's estimate leans on the object's own brightness,
+so albedo can masquerade as distance. That is the estimate's nature, not
+a rendering fault; the help's "an estimate, not a measurement" covers
+it, and the factor's per-id smoothing and clamp bound what it can do to
+a speed.
