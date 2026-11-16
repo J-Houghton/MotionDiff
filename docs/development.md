@@ -2,7 +2,7 @@
 
 How the project is laid out, the conventions that keep it maintainable, and how a change is checked before it is accepted.
 
-The rule behind every choice: **lightweight, and easy to maintain and debug by hand.** Few dependencies, plain modules, no clever abstractions.
+The rule behind every choice: **lightweight, and easy for a fresh agent to pick up** — accurate docs, tests that explain intent, and nothing in the repo that isn't known to work. Few dependencies, plain modules, no clever abstractions.
 
 - [Commands](#commands) · [Layout](#layout) · [Layer rules](#layer-rules)
 - [Conventions](#conventions) · [Adding a mode](#adding-a-mode)

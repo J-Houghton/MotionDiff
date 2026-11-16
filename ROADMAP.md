@@ -10,7 +10,9 @@ camera compensation; grouping and tracking; calibration to real units;
 motion-guided magnification; the owner's fixes batch and a version footer.
 Acceptance under "Session 6" in docs/verdicts.md, X-1 and V-6C/T/K/M.)
 
-The governing rule for every item: lightweight, and easy to maintain and debug by hand.
+The governing rule for every item: lightweight, and easy for a fresh agent to pick
+up — accurate docs, tests that explain intent, and nothing in the repo that isn't
+known to work.
 Visual work is accepted under the rules in `docs/development.md`; results are logged in
 `docs/verdicts.md`.
 
@@ -81,7 +83,7 @@ Ranked by visible effect for the effort.
 | Item | Verdict | Notes |
 |---|---|---|
 | Shared measurement stages: every measurement once per frame, any view can use it | proof in PR #20 | docs/pipeline-stages.md; 122/122 strips byte-identical, 9/9 probes, frame times within noise |
-| The app around six effects; instrument margin; question strip | X-1 | Owner's pick from docs/design/effects/; all four fresh-agent goals reached, both built combinations found |
+| The app around six effects; instrument margin; question strip | X-1 | Owner's pick from three session-6 mockups (the `experience-mockups` branch); all four fresh-agent goals reached, both built combinations found |
 | Camera compensation | V-6C | See Applications above |
 | Grouping and tracking: boxes, IDs, numbers, arrow ahead | V-6T | Truth numerics pass; traffic per-vehicle except merged clumps (limit named); `maskTrack` / the Movers pill |
 | Calibration to real units | V-6K | Exact scale, m/s everywhere speeds show; discoverability miss recorded; effort capped by the owner |
@@ -174,8 +176,9 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
   one run can differ slightly from the same scene rendered alone (reproduced
   on old master; compare strips from runs with the same scene order).
 - **Schlieren live on a phone does not work well yet** (owner's first try, session 4): the preset clips work there, the live camera gives a flat grey picture, which means nothing could be measured (a plain background or a moving phone are the likely causes; not diagnosed). The setup guide under Applications is the next step.
-- **Frame rates on a real phone have not been measured.** Frame-rate
-  figures are from one desktop GPU. Schlieren has been checked on synthetic scenes and
+- **Frame rates on a real phone have not been measured.** The app runs on the
+  owner's phones (deployed site), but frame-rate figures are from one desktop
+  GPU. Schlieren has been checked on synthetic scenes and
   two recordings from the web, not on phone footage, weak sources or natural backgrounds.
 - Schlieren traces show nothing on the real candle recording (too fast between frames
   at 30 fps); the view is labelled experimental.
@@ -184,9 +187,10 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
 - Plain (uncoloured) traces do not show which way they run in a still picture.
 - Optical flow: ragged outlines on movers; nothing measured along the middle of a
   straight edge or on flat surfaces; a moving camera makes everything flow.
-- Verified in headless Chrome on one Windows machine with an Intel GPU only, with
-  phone and tablet layouts under device emulation and Chrome's fake camera. Not
-  tested: a real phone, a real camera, Firefox, Safari, screen capture, HLS.
+- Blind-judged in headless Chrome, with phone and tablet layouts under device
+  emulation and Chrome's fake camera. Real phones and a real camera work (the
+  owner's testing; the deployed site). Not tested: Firefox, Safari, screen
+  capture, HLS.
 - Motion history: a hatched patch at the tail of a flat, round object's trail, and
   hue that drifts across a trail wider than 56 px.
 - Background model: ragged edges while something is being absorbed; soft, blobby

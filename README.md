@@ -52,7 +52,7 @@ npm run dev     # http://localhost:5173/MotionDiff/
 
 MotionDiff uses WebGL2 where it is available and falls back to a Canvas 2D worker where it is not. Posy, Raw diff and Magnify run on both; the motion mask needs WebGL2, and motion history and the background model also need float render targets. A mode that cannot run on your device says so instead of showing a blank picture.
 
-It has been developed and tested in Chrome on desktop. Other browsers and real phones are not yet tested.
+It has been developed in Chrome on desktop, and the deployed site runs on real phones (the owner's testing). Firefox and Safari are not yet tested.
 
 ## Documentation
 
