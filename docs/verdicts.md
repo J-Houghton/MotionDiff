@@ -2027,7 +2027,7 @@ load includes the downloads).
    not, 8 of 21 read "both" and 13 motion-only — the far field the
    model does not see. `truth`: 6 of 7 settled tracks motion-only, **but
    two were named "toilet"** (the white disc again, as in Session 8),
-   and a stray model-only find was drawn in 41 of 240 samples. Looks
+   and a stray model-only find was drawn in 41 of 187 samples. Looks
    four times as fast show the model's misreads of synthetic shapes
    four times as often; the help text's "synthetic shapes get no name or
    a wrong one" stands. Recorded as the exception it is.
@@ -2084,3 +2084,16 @@ Not verified here: any GPU but this one; the owner's laptop, where the
 old runtime's GPU rungs "would not load" — whether the new runtime's do
 is the first thing to read off its status line; Firefox and Safari; and
 a phone.
+
+### Parked: both model options marked experimental — interface
+Registered with the step (2026-11-16): the two toggles say "experimental"
+in their labels without clipping or overlapping anything in the panel, at
+desktop and phone sizes. **Result:** `Name the movers — experimental
+(loads a model)` and `Depth the scene — experimental (loads a model)`,
+five lines each in the panel's label column (the old labels took five).
+A first wording, "(experimental; loads a detector model)", ran its
+longest word into the checkbox and was dropped. At 1440×900 the word
+"experimental" is 5 px wider than the 94 px label column and stays clear
+of the checkbox; at 390×844 it fits. Audit with the panel open, light
+theme: nothing clipped, overlapping or off screen, min contrast 4.65.
+Where the options stand is docs/ml-status.md.

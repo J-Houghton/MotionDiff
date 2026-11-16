@@ -118,3 +118,19 @@ npm run filmstrip eval -- --run check.js
 Note for timing measurements: give playback two or three seconds to warm up before
 counting frames. Decoders start slowly, and a short window right after load looks
 like a stall.
+
+## The model options (naming, depth)
+```bash
+node scripts/filmstrip.mjs eval --run scripts/page/naming-check.js --args '{"clip":"traffic.mp4","seconds":12}'
+node scripts/filmstrip.mjs eval --run scripts/page/naming-looks.js --args '{"clip":"traffic.mp4"}' > looks.json
+node scripts/naming-replay.mjs looks.json [--matcher old-boxmatch.mjs]
+```
+`naming-check.js` plays a clip with boxes and names on and reports where the
+backend ladder landed, the share of boxes named, what settled tracks are called,
+the model-only finds and their ages, and the frame rate with names off and on.
+`naming-looks.js` records real looks (the tracker's boxes as sent, what the
+detector returned) and `naming-replay.mjs` runs them through `core/boxmatch.js`,
+so a change to the matcher is judged on the same looks before and after. Call
+`filmstrip.mjs` with `node` here, not through `npm run`, so the output is only the
+JSON. `--url "…/?modelfault=webgpu:load"` puts naming on the CPU rung. What these
+were used for, and what is still open, is in `docs/ml-status.md`.
