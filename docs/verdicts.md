@@ -2006,3 +2006,81 @@ and the reason is not the matcher.**
 
 Also recorded: one `traffic` track was named "train" in each run (a bus
 or lorry the model misread at the 0.45 score floor).
+
+**M-1 again, result (2026-11-16): the detector's worker on Transformers.js
+4.3.2 — nine of the ten checks hold on this machine's real WebGPU adapter;
+the fourth holds only just, and the third has a recorded exception.**
+Headless Chrome, Intel Xe-LPG, fresh browser profile each run (so every
+load includes the downloads).
+1. Light without it: 6 s with boxes on and naming never asked for makes
+   0 requests to jsDelivr or Hugging Face and loads none of the model
+   modules; the build keeps them in lazy chunks (detector 3.7 kB, its
+   worker 1.6 kB, the ladder 3.9 kB; main bundle 379.3 kB); `truth-mask`
+   and `truth-raw` filmstrips and the mask's data output are
+   **byte-identical** to master's (74f2d08), same machine, same order.
+2. `traffic`, 12 s: **13 of 13** settled labels on ≥ 2 s tracks are
+   vehicle-family (12 car, 1 truck); a second, 20 s run: 24 of 24 (20
+   car, 2 train, 1 truck, 1 bus — "train" is a lorry or bus misread).
+3. Disagreement. `traffic`: model-only finds drawn in 74 of 84 samples;
+   of the settled labelled tracks **8 of 13** read "both" (13 of 24 in
+   the second run). Of all tracks that lived two seconds, labelled or
+   not, 8 of 21 read "both" and 13 motion-only — the far field the
+   model does not see. `truth`: 6 of 7 settled tracks motion-only, **but
+   two were named "toilet"** (the white disc again, as in Session 8),
+   and a stray model-only find was drawn in 41 of 240 samples. Looks
+   four times as fast show the model's misreads of synthetic shapes
+   four times as often; the help text's "synthetic shapes get no name or
+   a wrong one" stands. Recorded as the exception it is.
+4. Beside the pipeline: one look in flight; the picture kept playing
+   while the model loaded (media time 2.2 → 14.1 s over an 11.9 s
+   load). **Frame rate with names on is 24 fps against 30 off**
+   (interleaved 8 s windows: off 30.0, 29.7, 30.0; on 24.2, 21.6, 24.1).
+   Median frame time 41.5 ms against 33.3: +24.5%, inside the registered
+   25% by half a point, and the worst window is outside it. On an
+   integrated GPU the detector now shares the GPU with the picture; on
+   the CPU rung it cost nothing (29.9 on and off). Named as a limit.
+5. Readings: the "naming model" row reads `webgpu/fp16 · 418 ms ·
+   2.2/s`, and *Copy model readings* is shown.
+6. Audit at 1440×900 with named boxes, dashed model-only finds and the
+   margin up, light theme: nothing clipped, overlapping or off screen;
+   min contrast 4.65, as in Session 8. In the dark theme the audit
+   reports 3.38:1 for every box plate, named or not: it reads the SVG
+   text's CSS `color` where the overlay paints with `fill`. The styles
+   are not in this branch's diff; recorded as a fault of the measuring
+   tool to fix, not passed over.
+7. The ladder lands on the first rung: `Naming is on (webgpu/fp16):
+   boxes carry the model's best guess`, median look **0.42–0.44 s, 2.2
+   looks/s** against 0.6. (On 3.8.1 this GPU's fp16 rung crashed at load
+   and fp32 could not run the model.)
+8. GPU rungs made to fail (`?modelfault=webgpu:load`): `Naming is
+   running on the CPU (wasm/q8) because the GPU backend would not load
+   it`, looks 1.5–1.8 s on the new runtime's CPU backend (1.9–2.6 s on
+   3.8.1), names appear (5 settled labels in 20 s, all vehicle-family
+   or person), no model-only finds drawn, 29.9 fps.
+9. Depth untouched: `depth.worker.js` and `depthstage.js` have no diff
+   since L-1, the built depth worker chunk has the same content hash,
+   and it still pins 3.8.1. Alone it reads `Depth is on (webgpu/fp16)…`
+   at 371–406 ms, 2.2–2.4 looks/s. With naming on as well, both run on
+   webgpu/fp16 from their two runtimes at about 1.8–2 looks/s each.
+10. Fresh finds at fast looks: 327 find-samples aged 0.41–1.11 s, none
+    past the 1.5 s cap (0.38–1.43 s over all runs); lowest strength
+    seen while one was being replaced 0.55, and 0.04 on the way out.
+
+**What the three steps did to the picture together** (`traffic`, share of
+drawn box-samples carrying a name; plate-sized boxes in brackets):
+- 3.8.1, CPU rung, old matcher (what the owner saw): 2.2% (1.9%).
+- 4.3.2 on the GPU, old matcher: 20.1%, 20.0% (31.6%, 34.4%).
+- 4.3.2 on the GPU, new matcher: 22.7%, 25.2%, 26.6% (35.5%, 35.9%,
+  37.0%); settled two-second tracks named 49 of 70.
+- Model-only find-samples in 20 s at GPU rate: 1160 and 1177 with the
+  old matcher, **502** with the new.
+So the look rate is most of the gain in names, the matcher adds about
+five points and more than halves the model-only boxes, and on a slow
+rung the stale-finds rule removes them altogether. About three quarters
+of drawn boxes still carry no name: more than half of all motion boxes
+touch nothing the model detected (236 of 429 on the recorded looks).
+
+Not verified here: any GPU but this one; the owner's laptop, where the
+old runtime's GPU rungs "would not load" — whether the new runtime's do
+is the first thing to read off its status line; Firefox and Safari; and
+a phone.

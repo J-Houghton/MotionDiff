@@ -79,9 +79,11 @@ without the parameter. `?detdtype=` still pins the detector's GPU rung.
   shaders the first real look would have compiled.
 - A look that **hangs** after `ready` (no answer, no error) is not
   detected; only the load-and-prove phase has a timeout.
-- This does not give naming its GPU back: it makes the failure honest
-  and lands on the CPU. Getting WebGPU back for the detector is a
-  separate decision (ROADMAP).
+- This did not give naming its GPU back: it made the failure honest and
+  landed on the CPU. The GPU came back afterwards by moving the
+  detector's worker alone to Transformers.js 4.3.2 (docs/naming-poc.md,
+  "M-1 again" in the verdicts); the ladder is unchanged by that and
+  still lands on the CPU where the GPU rungs fail.
 
 ## Acceptance (L-1, registered before building)
 

@@ -12,11 +12,12 @@ This supersedes the session-7 take (MobileNetV2 over box crops, verdict
 N-1): a crop classifier could only name what motion had already found. The
 first take is in git history under this same file name.
 
-## Licences, checked against this repo's MIT (2026-11-15)
+## Licences, checked against this repo's MIT (2026-11-15; runtime row 2026-11-16)
 
 | Piece | Licence | Compatible |
 |---|---|---|
-| Transformers.js (`@huggingface/transformers`, jsDelivr CDN, version pinned) | Apache-2.0 | yes |
+| Transformers.js (`@huggingface/transformers`, jsDelivr CDN, pinned at **4.3.2** for this worker; depth stays on 3.8.1) | Apache-2.0 | yes |
+| onnxruntime-web (1.31.0-dev build, fetched from jsDelivr by Transformers.js 4 itself) | MIT | yes |
 | RT-DETR v2 r18vd (`onnx-community/rtdetr_v2_r18vd-ONNX` on Hugging Face; upstream weights PekingU/rtdetr_v2_r18vd, both Apache-2.0; 21 MB quantised, 41 MB fp16) | Apache-2.0 | yes — fetched at runtime, never redistributed with this repo |
 | COCO class names | carried inside the model's own config, nothing in this repo | yes |
 | Ultralytics YOLO (the obvious alternative) | AGPL-3.0 | **no — rejected**, as before |
@@ -40,10 +41,11 @@ back off.
    leaves that worker's wasm instance poisoned, and a retry inside it
    fails at the same spot whatever the backend.
    (`?detdtype=fp32` pins the WebGPU rung for triage.)
-   **On the pinned runtime this model lands on the CPU even where there
-   is a GPU**: its backbone's ceil-mode AveragePool is something that
-   runtime's WebGPU backend cannot run (verdict L-1). Getting the GPU
-   back is an open decision (ROADMAP).
+   **The detector's worker runs Transformers.js 4.3.2**, the depth
+   worker 3.8.1: the 3.x WebGPU backend cannot run this model's
+   ceil-mode AveragePool (verdict L-1) and the 4.x one, rewritten, can
+   (route (a), "M-1 again" in the verdicts). Where the GPU rungs still
+   fail, the ladder lands on the CPU on the new runtime the same way.
 2. **Look**: a few times a second — self-throttled, **one request in
    flight at a time**, never faster than the model answers — the current
    frame is snapshotted (scaled to ≤ 960 px wide) and sent to the worker

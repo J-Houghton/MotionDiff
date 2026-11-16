@@ -5,11 +5,13 @@ session. Statuses: **done**, **in progress**, **planned**, **deferred**.
 
 Last updated: 2026-11-16 (session 9: the model workers' backend ladder now
 proves a look before it says ready, after naming failed every look on the
-owner's desktop GPU. Naming lands on the CPU there until the WebGPU decision
-below is made; depth, verified on the owner's desktop, is unchanged. Proof
-under "Session 9" in docs/verdicts.md. Stale rows corrected in the same
-pass: the schlieren guide's live wiring, two item numbers that pointed at
-the wrong rows, and the depth row's status.)
+owner's desktop GPU; then naming made visibly better — stale model-only
+finds are no longer drawn, motion boxes take names by containment, and the
+detector's worker alone moved to Transformers.js 4.3.2, which gives it its
+GPU back here. Depth, verified on the owner's desktop, is unchanged and
+stays on 3.8.1. Proof under "Session 9" in docs/verdicts.md. Stale rows
+corrected in the same pass: the schlieren guide's live wiring, two item
+numbers that pointed at the wrong rows, and the depth row's status.)
 
 The governing rule for every item: lightweight, and easy for a fresh agent to pick
 up — accurate docs, tests that explain intent, and nothing in the repo that isn't
@@ -35,9 +37,9 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 | Camera zoom by pinch (owner's request) | **done**, session 5 (Session A) | Two fingers zoom the camera where the driver allows it | | In IA4. iOS Safari exposes no zoom control; still unconfirmed on a real phone |
 | Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. The experimental traces view this would have replaced was removed in the session-7 clean-up (archived) |
 | Data out: export tracks and readings; count movers over a drawn line | **done**, session 7 | On `truth`, counts equal the scene's known crossings (2 one way, 1 the other, each within 0.4 s); the exported CSV reads the square's known speed | | docs/data-out.md, verdict D-1. Collect/export in the panel's Export folder; the count line behind X and the margin link |
-| Naming what is tracked (proof of concept) | **rebuilt, session 8** (#36 merged); **on the CPU only** since the owner's desktop check | On `traffic`, settled labels vehicle-family and the motion/model disagreement drawn: solid found-by-both, dashed motion-only, dashed blue model-only | | docs/naming-poc.md, verdict M-1 (take 1: MobileNetV2 crops, N-1, archived). RT-DETR v2 whole-frame in a worker, matched to tracks; YOLO stays rejected (AGPL-3.0). The pinned runtime's WebGPU backend cannot run this model (L-1): it names at the CPU's rate, about a look every one to two seconds |
-| The model workers' backend ladder proves a look | **done**, session 9 — awaits the owner's desktop | On a GPU machine, *Name the movers* says it is running on the CPU and why, and names boxes, where it used to fail every look; depth reads as before | | docs/model-ladder.md, verdict L-1. A rung is ready only after one throwaway inference; a look that fails later steps down once; `core/ladder.js` holds the order and the decision; `?modelfault=` shows each branch on a healthy machine |
-| WebGPU back for naming | **planned** — the owner's decision between three routes | On a GPU machine the status line reads `Naming is on (webgpu/fp16)` and looks come several times a second instead of one every second or two | Small for the first route | Researched session 9, not built: (a) Transformers.js 4.x for the detector worker only — measured here at 0.4 s a look against 1.6 s on the CPU, same detections; (b) patched weights, which need hosting; (c) another detector — none runs on the pinned runtime's WebGPU either. Depth stays on 3.8.1 whichever is chosen |
+| Naming what is tracked (proof of concept) | **rebuilt, session 8** (#36 merged); matching and model-only finds reworked, session 9 — awaits the owner's machines | On `traffic`, settled labels vehicle-family and the motion/model disagreement drawn: solid found-by-both, dashed motion-only, dashed blue model-only — the last only while fresh | | docs/naming-poc.md, verdicts M-1, F-1, C-1 and "M-1 again" (take 1: MobileNetV2 crops, N-1, archived). RT-DETR v2 whole-frame in a worker, matched to tracks by containment; YOLO stays rejected (AGPL-3.0). About a quarter of drawn boxes carry a name at GPU look rates, about 2% on a CPU rung |
+| The model workers' backend ladder proves a look | **done**, session 9 — awaits the owner's desktop | On a GPU machine a backend that cannot run the model is stepped past and the status line says where naming landed and why; depth reads as before | | docs/model-ladder.md, verdict L-1. A rung is ready only after one throwaway inference; a look that fails later steps down once; `core/ladder.js` holds the order and the decision; `?modelfault=` shows each branch on a healthy machine |
+| WebGPU back for naming | **done**, session 9 (route a) — awaits the owner's machines | On a GPU machine the status line reads `Naming is on (webgpu/fp16)` and looks come twice a second or more instead of one every two seconds | | "M-1 again" in the verdicts. The detector's worker alone runs Transformers.js 4.3.2 (0.43 s a look here against 1.9 s on the CPU, same detections); depth stays on 3.8.1. Routes (b) patched weights and (c) another detector were researched and not taken. Costs 6 of 30 fps on an integrated GPU |
 | Depth as a stage; speeds comparable across depth (proof of concept) | **done**, session 8 (#37 merged); loads and works on the owner's desktop (2026-11-16) | On `traffic`, the far carriageway's ≈ speeds stop reading slower than the near lane; with the switch off, byte-identical to master | | docs/depth-stage.md, verdict E-1. Depth Anything V2 Small (Apache-2.0; Base/Large are CC-BY-NC, never fetched) in a worker; `stages.depth()` reports the map's age. E-1's fourth check (the speed correction's margin widening where looks are fast) has not been re-measured on a GPU |
 | Camera compensation (global motion, then subtract it) | **done**, session 6 | On `handheld` the scenery cancels in Raw and in the mask with the crowd kept; `river`'s banks go dark under the zoom term; a still camera is byte-identical on and off | | `cameraComp` ("Steady camera"), docs/camera-compensation.md, V-6C. Three guards keep a still camera still |
 | Real-time stabiliser | planned, after compensation | `handheld` plays back steady | Medium | |
@@ -168,11 +170,15 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
 | Research write-up, design mockups | `3922a07` |
 
 ## Known gaps
-- **Naming runs on the CPU even where there is a GPU** (session 9): the
-  pinned runtime's WebGPU backend rejects RT-DETR's ceil-mode AveragePool
-  at run time. The ladder now lands on wasm and says so; the routes back to
-  the GPU are under Applications. A look that hangs after the model is
-  ready (no answer, no error) is still not detected for either model.
+- **Naming on a CPU rung is thin**: at a look every second or two, names
+  arrive for track ids the tracker has already dropped (about 2% of drawn
+  boxes named) and model-only finds are not drawn at all. On a GPU rung
+  about a quarter of boxes are named; more than half of all motion boxes
+  touch nothing the model detects.
+- Naming on an integrated GPU costs frame rate: 24 fps against 30 here.
+- A look that hangs after a model is ready (no answer, no error) is not
+  detected for either model; with naming and depth both on, two versions
+  of the runtime are downloaded and run.
 - Mirror mode and pinch zoom are still unconfirmed on a real phone (the app
   itself runs there; these two controls specifically have not been tried).
 - Motion magnification turns fine repeated texture (fur) painterly: the field

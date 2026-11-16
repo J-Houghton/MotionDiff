@@ -14,7 +14,10 @@
  *               {type: 'error', stage: 'load'|'prove'|'look', message: string}
  */
 
-const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
+// 4.x, where the depth worker stays on 3.8.1: the 3.x WebGPU backend cannot
+// run this model's ceil-mode AveragePool, the 4.x one can (verdicts L-1,
+// M-1 again). 4.x fetches its onnxruntime-web build from jsDelivr itself.
+const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2';
 const MODEL_ID = 'onnx-community/rtdetr_v2_r18vd-ONNX';
 /** Detections under this score are not worth a disagreement. */
 const SCORE_FLOOR = 0.45;
