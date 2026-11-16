@@ -23,7 +23,8 @@ const TIMES = 9;
  * @param {{onStatus?: (message: string, type: string) => void}} [options]
  */
 export function createDepthStage(options = {}) {
-  const worker = new Worker(new URL('./depth.worker.js', import.meta.url), { type: 'module' });
+  /** @type {Worker|null} Set once a ladder rung loads the model. */
+  let worker = null;
 
   /** @type {{grid: Float32Array, cols: number, rows: number, min: number, max: number, median: number, time: number}|null} */
   let latest = null;
@@ -31,15 +32,32 @@ export function createDepthStage(options = {}) {
   let lastSendMs = 0;
   const status = { backend: '…', dtype: '', loadMs: 0, lastInferMs: 0, inferTimes: /** @type {number[]} */ ([]), looks: /** @type {number[]} */ ([]) };
 
-  const ready = new Promise((resolve, reject) => {
-    worker.onmessage = (event) => {
+  /** How long one rung may spend downloading and compiling before it is
+   * written off as hung (a wedged driver throws nothing at all). */
+  const RUNG_MS = 180000;
+
+  /** One rung: a fresh worker, so a crashed runtime cannot poison the next
+   * try — a wasm abort leaves its instance failing everywhere after. */
+  function attempt(device, dtype) {
+    return new Promise((resolve, reject) => {
+      const w = new Worker(new URL('./depth.worker.js', import.meta.url), { type: 'module' });
+      const timer = setTimeout(() => { w.terminate(); reject(new Error('took too long (hung?)')); }, RUNG_MS);
+      w.onmessage = (event) => {
+        const message = event.data;
+        clearTimeout(timer);
+        if (message.type === 'ready') resolve(w);
+        else { w.terminate(); reject(new Error(message.message || 'failed')); }
+      };
+      w.onerror = (event) => { clearTimeout(timer); w.terminate(); reject(new Error(event.message || 'worker failed')); };
+      w.postMessage({ type: 'load', device, dtype });
+    });
+  }
+
+  /** The loaded worker's steady-state messages: looks and their failures. */
+  function wire(w) {
+    w.onmessage = (event) => {
       const message = event.data;
-      if (message.type === 'ready') {
-        status.backend = message.backend;
-        status.dtype = message.dtype;
-        status.loadMs = message.loadMs;
-        resolve(undefined);
-      } else if (message.type === 'result') {
+      if (message.type === 'result') {
         inFlight = false;
         status.lastInferMs = message.inferMs;
         status.inferTimes.push(message.inferMs);
@@ -52,14 +70,37 @@ export function createDepthStage(options = {}) {
           min: message.min, max: message.max, median: message.median,
           time: message.time,
         };
-      } else if (message.type === 'error') {
-        if (inFlight) { inFlight = false; options.onStatus?.(`The depth model failed a look: ${message.message}`, 'error'); }
-        else reject(new Error(message.message));
+      } else if (message.type === 'error' && inFlight) {
+        inFlight = false;
+        options.onStatus?.(`The depth model failed a look: ${message.message}`, 'error');
       }
     };
-    worker.onerror = (event) => reject(new Error(event.message || 'worker failed'));
-  });
-  worker.postMessage({ type: 'load' });
+  }
+
+  const ready = (async () => {
+    const t0 = performance.now();
+    const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
+    const ladder = adapter
+      ? [['webgpu', 'fp16'], ['webgpu', 'fp32'], ['wasm', 'q8']]
+      : [['wasm', 'q8']];
+    const failures = [];
+    for (const [device, dtype] of ladder) {
+      try {
+        worker = await attempt(device, dtype);
+        wire(worker);
+        status.backend = device;
+        status.dtype = dtype;
+        status.loadMs = Math.round(performance.now() - t0);
+        // The status line shows where the ladder landed; this says why it
+        // stepped down, for whoever is triaging.
+        if (failures.length) console.warn('depth model stepped down:', failures.join(' | '));
+        return;
+      } catch (error) {
+        failures.push(`${device}/${dtype}: ${String(error?.message || error)}`);
+      }
+    }
+    throw new Error(`no backend would load the model — ${failures.join('; ')}`);
+  })();
 
   return {
     /** Resolves when the model answered ready; rejects when it cannot load. */
@@ -73,7 +114,7 @@ export function createDepthStage(options = {}) {
      */
     tick(video, time) {
       const now = performance.now();
-      if (inFlight || now - lastSendMs < EVERY_MS) return;
+      if (!worker || inFlight || now - lastSendMs < EVERY_MS) return;
       const vw = video.videoWidth;
       const vh = video.videoHeight;
       if (!vw || !vh) return;
@@ -103,6 +144,6 @@ export function createDepthStage(options = {}) {
 
     clear() { latest = null; },
 
-    dispose() { worker.terminate(); },
+    dispose() { worker?.terminate(); },
   };
 }

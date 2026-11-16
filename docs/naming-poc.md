@@ -31,10 +31,14 @@ back off.
 1. **Switch on**: *Name the movers* (`maskNames`), the same toggle as
    before, shown only while boxes are on. The first enable dynamically
    imports `app/detect.js`, which starts a worker; the worker loads
-   Transformers.js from the CDN and the model from Hugging Face, picks
-   **WebGPU** where the browser has it and **wasm** otherwise, and says
-   which it picked. (`?detdtype=fp32` forces full precision for triage if
-   fp16 ever draws nonsense on some GPU.)
+   Transformers.js from the CDN and the model from Hugging Face, and
+   works down a ladder — **WebGPU fp16, WebGPU fp32, wasm q8** — until
+   one loads, saying which it landed on (the status line) and why it
+   stepped down (the console). **Each rung gets a fresh worker**: a crash
+   out of the runtime (fp16 crashed outright on a real GPU the first time
+   out) leaves that worker's wasm instance poisoned, and a retry inside
+   it fails at the same spot whatever the backend.
+   (`?detdtype=fp32` pins the WebGPU rung for triage.)
 2. **Look**: a few times a second — self-throttled, **one request in
    flight at a time**, never faster than the model answers — the current
    frame is snapshotted (scaled to ≤ 960 px wide) and sent to the worker

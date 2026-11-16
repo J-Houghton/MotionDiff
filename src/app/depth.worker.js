@@ -6,9 +6,9 @@
  * at a time with a coarse inverse-depth grid. The main thread never waits
  * on it; a result carries the stamp of the frame it looked at.
  *
- * Messages in:  {type: 'load'}
+ * Messages in:  {type: 'load', device: string, dtype: string}
  *               {type: 'frame', bitmap: ImageBitmap, time: number}
- * Messages out: {type: 'ready', backend: string, dtype: string, loadMs: number}
+ * Messages out: {type: 'ready', loadMs: number}
  *               {type: 'result', time: number, inferMs: number, cols, rows,
  *                grid: Float32Array (transferred), min, max, median}
  *               {type: 'error', message: string}
@@ -25,15 +25,23 @@ let depth = null;
 let canvas = null;
 let busy = false;
 
-async function load() {
+/** A failure out of the runtime can be a bare number (a wasm pointer),
+ * not an Error; turn whatever was thrown into words. */
+function describe(error) {
+  return String(error?.message || error);
+}
+
+/**
+ * One attempt on one backend. The ladder lives on the main thread
+ * (app/depthstage.js) and gives every rung a fresh worker: a crash out of
+ * the runtime leaves this wasm instance poisoned (see detect.worker.js).
+ */
+async function load(device, dtype) {
   const t0 = performance.now();
   const T = await import(/* @vite-ignore */ TRANSFORMERS_URL);
   T.env.allowLocalModels = false;
-  const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
-  const backend = adapter ? 'webgpu' : 'wasm';
-  const dtype = backend === 'webgpu' ? 'fp16' : 'q8';
-  depth = await T.pipeline('depth-estimation', MODEL_ID, { device: backend, dtype });
-  postMessage({ type: 'ready', backend, dtype, loadMs: Math.round(performance.now() - t0) });
+  depth = await T.pipeline('depth-estimation', MODEL_ID, { device, dtype });
+  postMessage({ type: 'ready', loadMs: Math.round(performance.now() - t0) });
 }
 
 async function look(bitmap, time) {
@@ -87,9 +95,9 @@ onmessage = (event) => {
   const message = event.data;
   if (busy) return; // One request at a time is enforced by the sender; this is the backstop.
   busy = true;
-  const work = message.type === 'load' ? load() : look(message.bitmap, message.time);
+  const work = message.type === 'load' ? load(message.device, message.dtype) : look(message.bitmap, message.time);
   work
-    .catch((error) => postMessage({ type: 'error', message: String(error?.message || error) }))
+    .catch((error) => postMessage({ type: 'error', message: describe(error) }))
     .finally(() => { busy = false; });
 };
 

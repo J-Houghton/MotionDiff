@@ -32,7 +32,8 @@ const TIMES = 9;
  * @param {{onStatus?: (message: string, type: string) => void}} [options]
  */
 export function createDetector(options = {}) {
-  const worker = new Worker(new URL('./detect.worker.js', import.meta.url), { type: 'module' });
+  /** @type {Worker|null} Set once a ladder rung loads the model. */
+  let worker = null;
 
   /** @type {Map<number, {votes: string[], label: string|null, share: number, outcome: 'both'|'motion'}>} */
   const names = new Map();
@@ -88,25 +89,66 @@ export function createDetector(options = {}) {
     }));
   }
 
-  const ready = new Promise((resolve, reject) => {
-    worker.onmessage = (event) => {
+  /** How long one rung may spend downloading and compiling before it is
+   * written off as hung (a wedged driver throws nothing at all). */
+  const RUNG_MS = 180000;
+
+  /** One rung: a fresh worker, so a crashed runtime cannot poison the next
+   * try — a wasm abort leaves its instance failing everywhere after. */
+  function attempt(device, dtype) {
+    return new Promise((resolve, reject) => {
+      const w = new Worker(new URL('./detect.worker.js', import.meta.url), { type: 'module' });
+      const timer = setTimeout(() => { w.terminate(); reject(new Error('took too long (hung?)')); }, RUNG_MS);
+      w.onmessage = (event) => {
+        const message = event.data;
+        clearTimeout(timer);
+        if (message.type === 'ready') resolve(w);
+        else { w.terminate(); reject(new Error(message.message || 'failed')); }
+      };
+      w.onerror = (event) => { clearTimeout(timer); w.terminate(); reject(new Error(event.message || 'worker failed')); };
+      w.postMessage({ type: 'load', device, dtype });
+    });
+  }
+
+  /** The loaded worker's steady-state messages: looks and their failures. */
+  function wire(w) {
+    w.onmessage = (event) => {
       const message = event.data;
-      if (message.type === 'ready') {
-        status.backend = message.backend;
-        status.dtype = message.dtype;
-        status.loadMs = message.loadMs;
-        resolve(undefined);
-      } else if (message.type === 'result') {
-        onResult(message);
-      } else if (message.type === 'error') {
-        if (pending) { pending = null; options.onStatus?.(`The detector failed a look: ${message.message}`, 'error'); }
-        else reject(new Error(message.message));
+      if (message.type === 'result') onResult(message);
+      else if (message.type === 'error' && pending) {
+        pending = null;
+        options.onStatus?.(`The detector failed a look: ${message.message}`, 'error');
       }
     };
-    worker.onerror = (event) => reject(new Error(event.message || 'worker failed'));
-  });
-  const dtype = new URLSearchParams(location.search).get('detdtype') || undefined;
-  worker.postMessage({ type: 'load', dtype });
+  }
+
+  const override = new URLSearchParams(location.search).get('detdtype') || undefined;
+  const ready = (async () => {
+    const t0 = performance.now();
+    // WebGPU rungs first where the browser has an adapter; wasm/q8 (21 MB)
+    // is the rung that runs anywhere. `?detdtype=` pins the WebGPU rung.
+    const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
+    const ladder = adapter
+      ? [...(override ? [['webgpu', override]] : [['webgpu', 'fp16'], ['webgpu', 'fp32']]), ['wasm', 'q8']]
+      : [['wasm', override || 'q8']];
+    const failures = [];
+    for (const [device, dtype] of ladder) {
+      try {
+        worker = await attempt(device, dtype);
+        wire(worker);
+        status.backend = device;
+        status.dtype = dtype;
+        status.loadMs = Math.round(performance.now() - t0);
+        // The status line shows where the ladder landed; this says why it
+        // stepped down, for whoever is triaging.
+        if (failures.length) console.warn('naming model stepped down:', failures.join(' | '));
+        return;
+      } catch (error) {
+        failures.push(`${device}/${dtype}: ${String(error?.message || error)}`);
+      }
+    }
+    throw new Error(`no backend would load the model — ${failures.join('; ')}`);
+  })();
 
   return {
     /** Resolves when the model answered ready; rejects when it cannot load. */
@@ -124,7 +166,7 @@ export function createDetector(options = {}) {
       const alive = new Set(objects.map((o) => o.id));
       for (const id of names.keys()) if (!alive.has(id)) names.delete(id);
       const now = performance.now();
-      if (pending || now - lastSendMs < EVERY_MS) return;
+      if (!worker || pending || now - lastSendMs < EVERY_MS) return;
       const vw = video.videoWidth;
       const vh = video.videoHeight;
       if (!vw || !vh || !pictureWidth || !pictureHeight) return;
@@ -182,7 +224,7 @@ export function createDetector(options = {}) {
     },
 
     dispose() {
-      worker.terminate();
+      worker?.terminate();
     },
   };
 }
