@@ -19,6 +19,7 @@ import { initLegend } from './legend.js';
 import { initGuide } from './guide.js';
 import { initReadings } from './readings.js';
 import { initBoxes } from './boxes.js';
+import { initDepthView } from './depthview.js';
 import { initCalibrate } from './calibrate.js';
 import { initCountLine } from './countline.js';
 import { initKeys, SHORTCUTS } from './keys.js';
@@ -654,6 +655,7 @@ export function initShell({ root, session }) {
   const ruler = initRuler({ container: $('ruler'), session });
   const legend = initLegend({ stage, session });
   const guide = initGuide({ stage, session });
+  initDepthView({ root, stage, session });
   initBoxes({ root, stage, session });
   const calibrate = initCalibrate({ root, stage, session });
   const countline = initCountLine({ root, stage, session });

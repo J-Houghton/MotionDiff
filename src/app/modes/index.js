@@ -40,6 +40,8 @@
  * @property {import('../stages.js').Stages} stages - The shared measurement
  *   stages for this frame (docs/pipeline-stages.md): each computed once per
  *   frame on first request, however many views pull it. WebGL path only
+ * @property {*} [depth] - The depth model's latest answer, or null
+ *   (docs/depth-stage.md); read it through frame.stages.depth()
  * @property {object|null} [readings] - A mode may set this: a small object of
  *   live measurements for this frame; the pipeline exposes the latest one as
  *   pipeline.readings for the interface and tools

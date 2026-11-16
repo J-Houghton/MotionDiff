@@ -110,7 +110,11 @@ export function initBoxes({ root, stage, session }) {
       n.label.style.display = labelled ? '' : 'none';
       n.plate.style.display = labelled ? '' : 'none';
       const name = session.nameFor(o.id);
-      const text = `${o.id} · ${formatSpeed(speed, session.calibration)}${name ? ` · ${name.label}` : ''}`;
+      // With depth on, the shown speed is scaled to the scene's median
+      // depth and marked as the estimate it is (docs/depth-stage.md);
+      // where the map declined, the plain measured speed stands.
+      const shownSpeed = o.depthFactor ? `≈${formatSpeed(speed * o.depthFactor, session.calibration)}` : formatSpeed(speed, session.calibration);
+      const text = `${o.id} · ${shownSpeed}${name ? ` · ${name.label}` : ''}`;
       n.label.textContent = text;
       n.label.setAttribute('font-size', String(fontSize));
       const lx = Math.max(2, o.x);

@@ -94,6 +94,9 @@ export class Session {
     /** @type {Awaited<ReturnType<import('./naming.js').createNamer>>|null} Loaded only when "Name the movers" is first asked for */
     this._naming = null;
     this._namingLoading = false;
+    /** @type {ReturnType<import('./depthstage.js').createDepthStage>|null} Loaded only when "Depth the scene" is first asked for (docs/depth-stage.md) */
+    this._depth = null;
+    this._depthLoading = false;
     /** @type {import('../core/dataout.js').CountLine|null} Count line in picture px (ui/countline.js); belongs to one camera setup */
     this.countLine = null;
     /** @type {ReturnType<typeof createCounter>|null} */
@@ -213,6 +216,9 @@ export class Session {
     // Naming (docs/naming-poc.md) loads only when first asked for.
     if (params.maskNames === true && !this._naming && !this._namingLoading) void this._loadNaming();
     if (params.maskNames === false) this._naming?.clear();
+    // Depth (docs/depth-stage.md) likewise.
+    if (params.maskDepth === true && !this._depth && !this._depthLoading) void this._loadDepth();
+    if (params.maskDepth === false) { this._depth?.clear(); this.pipeline.depth = null; }
     this._emit('params');
     this._redrawIfPaused();
   }
@@ -234,6 +240,35 @@ export class Session {
       this.setStatus(`Naming could not load (offline?): ${error.message}`, 'error');
     } finally {
       this._namingLoading = false;
+    }
+  }
+
+  /** Backend and timing facts for the readings margin, or null while depth is off. */
+  depthStatus() {
+    return this.params.maskDepth && this._depth ? this._depth.status() : null;
+  }
+
+  /** The latest depth map for the overlay, or null (docs/depth-stage.md). */
+  depthLatest() {
+    return this.params.maskDepth && this._depth ? this._depth.latest() : null;
+  }
+
+  async _loadDepth() {
+    this._depthLoading = true;
+    this.setStatus('Loading the depth model (about 25 MB, once; the browser caches it)…', 'info');
+    const { createDepthStage } = await import('./depthstage.js');
+    const stage = createDepthStage({ onStatus: (message, type) => this.setStatus(message, type) });
+    try {
+      await stage.ready;
+      this._depth = stage;
+      const s = stage.status();
+      this.setStatus(`Depth is on (${s.backend}/${s.dtype}): an estimate beside the pipeline, a look or two behind`, 'success');
+    } catch (error) {
+      stage.dispose();
+      this.setParams({ maskDepth: false });
+      this.setStatus(`Depth could not load (offline?): ${error.message}`, 'error');
+    } finally {
+      this._depthLoading = false;
     }
   }
 
@@ -679,6 +714,14 @@ export class Session {
     const named = this.pipeline.readings;
     if (this._naming && this.params.maskNames && named?.objects?.length) {
       this._naming.tick(this.video, named.objects, named.width, named.height);
+    }
+    // Depth rides beside the pipeline the same way (docs/depth-stage.md):
+    // the stamp mirrors the pipeline's own rule — media time for a file,
+    // this session's clock for a live source.
+    if (this._depth && this.params.maskDepth) {
+      const stamp = this._stream && !this.manual ? performance.now() / 1000 : this.video.currentTime;
+      this._depth.tick(this.video, stamp);
+      this.pipeline.depth = this._depth.latest();
     }
   }
 

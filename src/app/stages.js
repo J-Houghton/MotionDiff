@@ -18,6 +18,7 @@
  * directly, without a Stages object.
  */
 import { BG_HOLD_SECONDS, backgroundAlpha } from '../core/background.js';
+import { boxDepth, depthSpeedFactor } from '../core/depth.js';
 import { MASK_VOTES_STRICT } from '../core/mask.js';
 import { bornTracks, labelComponents, stepTracks } from '../core/track.js';
 import { fitSimilarity } from '../core/flow.js';
@@ -414,6 +415,21 @@ export class Stages {
   }
 
   /**
+   * The depth model's latest answer as a stage (docs/depth-stage.md): the
+   * coarse inverse-depth grid with min/max/median, the stamp of the frame
+   * it saw, and `age` — media seconds this frame is ahead of it. Null
+   * while depth is off or before the first answer. The model runs beside
+   * the pipeline; this never waits for it.
+   */
+  depth() {
+    return this._get('depth', () => {
+      const latest = this._frame.depth;
+      if (!latest || !this._frame.params.maskDepth) return null;
+      return { ...latest, age: Math.max(0, this._frame.time - latest.time) };
+    });
+  }
+
+  /**
    * Grouping and tracking (docs/tracking.md): the voted decision read back
    * on a coarse grid, shapes labelled, and the track step run once per
    * frame. Publishes onto frame.readings and returns the born tracks in
@@ -471,12 +487,25 @@ export class Stages {
         age: t.age,
         coasting: t.miss > 0,
       }));
+      // Depth, where the stage has it (docs/depth-stage.md): each box
+      // samples its median inverse depth and carries the factor that makes
+      // its speed comparable at the scene's median depth — or no factor
+      // where the map declines, and the raw speed stands unmarked.
+      const depth = this.depth();
+      if (depth) {
+        for (const o of shown) {
+          const at = boxDepth(depth.grid, depth.cols, depth.rows, o, renderer.width, renderer.height);
+          const factor = depthSpeedFactor(depth.median, at, depth.min, depth.max);
+          if (factor !== null) o.depthFactor = factor;
+        }
+      }
       state.published = shown;
       frame.readings = {
         ...(frame.readings || { mode: frame.params.algorithm }),
         objects: shown,
         width: renderer.width,
         height: renderer.height,
+        ...(depth ? { depthAge: depth.age } : {}),
       };
       return shown;
     });
