@@ -1539,3 +1539,33 @@ against after, same machine, same scene order:
 5. Audit clean with named boxes up.
 Licences checked and recorded in the design note before building:
 runtime MIT, model Apache-2.0, YOLO rejected (AGPL-3.0).
+
+**Result (2026-11-16): all five registered checks hold, one after a
+diagnosed correction.** Numbers:
+1. Light without it: a 5 s headless run with boxes on and naming never
+   asked for makes zero requests to the CDN or Hugging Face and loads no
+   naming module. The build puts naming in its own lazy chunk (12.6 kB
+   with the label list); the startup chunk grew 2.6 kB of glue (the
+   toggle and wiring) against the registration's "unchanged" — recorded
+   as the honest reading, since the runtime, model and labels are what
+   the registration meant and none of them load before asked.
+2. `traffic`, first round: only 1 of 7 settled labels was a vehicle —
+   the wrong names (television, microwave, cassette, Polaroid camera)
+   were all box-with-bezel classes, and the cause was found in the
+   harness of the crop, not tuned around: grey letterbox borders read as
+   a bezel. Cropping a square of real frame context instead (1.2× the
+   box, clamped to the frame), the second round settled 7 labels on
+   ≥ 2 s tracks: **4 of 7 vehicle-family** (cab, racer, passenger car,
+   car mirror) — the registered "at least half" — with the wrong names
+   recorded, not hidden: tape player, window screen, and bannister on a
+   clump that included the roadside barrier. A far merged clump in the
+   screenshot reads "cassette": the help's "a merged clump is named as
+   one thing" in the flesh.
+3. Tracking carries the label: classification at 400 ms rounds; every
+   settled id's label present on 100% of sampled frames after settling.
+4. Beside the pipeline: 51 frames processed in 4 s with names on against
+   59 off (86%, inside the registered 25%; SwiftShader shares one CPU
+   with the wasm here). The model loaded in 1.4 s while the clip played
+   on 5.5 s undisturbed.
+5. Audit at 1440×900 with named boxes and the margin up: nothing
+   clipped, overlapping or off screen; min contrast 4.65.

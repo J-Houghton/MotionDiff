@@ -24,7 +24,7 @@ import {
   BG_K, BG_MIN_STEP, BG_VAR_INIT, BG_VAR_MAX, BG_VAR_MIN,
 } from '../../core/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH } from '../../core/trails.js';
-import { GAP, MASK_FILL, MASK_TRACK, THRESHOLD, TRAIL } from './params.js';
+import { GAP, MASK_FILL, MASK_NAMES, MASK_TRACK, THRESHOLD, TRAIL } from './params.js';
 import { closeMask, maskDifference, maskDraw } from './mask.js';
 import { lookbackTime } from '../../core/timebase.js';
 
@@ -272,6 +272,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     { key: 'maskShow', label: 'Show', type: 'select', default: 'cutout', options: { 'Cut-out': 'cutout', 'Solid mask': 'solid' } },
     MASK_FILL,
     MASK_TRACK,
+    MASK_NAMES,
     GAP,
     TRAIL,
   ],

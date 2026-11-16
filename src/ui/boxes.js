@@ -109,7 +109,8 @@ export function initBoxes({ root, stage, session }) {
       const labelled = o.w * o.h >= 1800;
       n.label.style.display = labelled ? '' : 'none';
       n.plate.style.display = labelled ? '' : 'none';
-      const text = `${o.id} · ${formatSpeed(speed, session.calibration)}`;
+      const name = session.nameFor(o.id);
+      const text = `${o.id} · ${formatSpeed(speed, session.calibration)}${name ? ` · ${name.label}` : ''}`;
       n.label.textContent = text;
       n.label.setAttribute('font-size', String(fontSize));
       const lx = Math.max(2, o.x);

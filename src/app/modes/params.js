@@ -51,6 +51,7 @@ export const BLUR = { key: 'blurEnabled', label: 'Blur', type: 'toggle', default
  */
 export const MASK_FILL = { key: 'maskFill', label: 'Fill holes', type: 'select', default: 0, options: { 'Off': 0, '1 px': 1, '2 px': 2 } };
 export const MASK_TRACK = { key: 'maskTrack', label: 'Box the movers', type: 'toggle', default: false };
+export const MASK_NAMES = { key: 'maskNames', label: 'Name the movers (loads a small model)', type: 'toggle', default: false, when: (p) => p.maskTrack };
 
 export const TINTS = [
   { key: 'rgbTintR', label: 'Tint R', type: 'color', default: '#ff0000', when: (p) => p.channelSpread > 0 },
