@@ -22,7 +22,7 @@ version — and the per-frame rows). Collection is capped at 100,000 track
 rows (about 10 minutes of a busy scene); the status line says when it is
 full. A new source clears the log.
 
-**The count line.** Press **L** (or the margin link beside the counts) and
+**The count line.** Press **X** (or the margin link beside the counts) and
 click twice to draw a line across the picture, the same two-click
 interaction and SVG picture-space overlay as calibration. From then on,
 every born track whose centre steps across the segment is counted, by
@@ -32,7 +32,7 @@ movers passing beyond the line's ends do not count). Each track id counts
 once per actual crossing; crossing back counts the other way. The two
 cumulative counts live in the readings margin as an instrument row
 (⟶ and ⟵ along the line's own normal), reset when the line is redrawn or
-cleared (L, then Escape), and ride along in both exports; the JSON also
+cleared (X, then Escape), and ride along in both exports; the JSON also
 carries the event list (`t, id, dir`).
 
 ## Where it lives
@@ -42,7 +42,7 @@ carries the event list (`t, id, dir`).
 - `app/session.js` — owns the log and the counter (interface state lives in
   the session); steps them per processed frame from `pipeline.readings`.
 - `ui/countline.js` — draws and edits the line (calibrate.js's pattern);
-  `ui/readings.js` gains the counts row with the "Count line (L)" link
+  `ui/readings.js` gains the counts row with the "Count line (X)" link
   (the calibration discoverability lesson: the key alone is not an entry);
   `ui/panel.js` gains the three Export-folder controls.
 

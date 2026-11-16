@@ -20,6 +20,7 @@ import { initGuide } from './guide.js';
 import { initReadings } from './readings.js';
 import { initBoxes } from './boxes.js';
 import { initCalibrate } from './calibrate.js';
+import { initCountLine } from './countline.js';
 import { initKeys, SHORTCUTS } from './keys.js';
 
 const RATES = [0.25, 0.5, 1, 1.5, 2];
@@ -655,7 +656,8 @@ export function initShell({ root, session }) {
   const guide = initGuide({ stage, session });
   initBoxes({ root, stage, session });
   const calibrate = initCalibrate({ root, stage, session });
-  const readings = initReadings({ root, plate: root.querySelector('.plate'), session, onCalibrate: () => calibrate.toggle() });
+  const countline = initCountLine({ root, stage, session });
+  const readings = initReadings({ root, plate: root.querySelector('.plate'), session, onCalibrate: () => calibrate.toggle(), onCountLine: () => countline.toggle() });
   // The instrument margin is the desktop default; the full controls wait
   // behind P. (On a window wide enough for both, both.)
   if (!phone.matches && window.innerWidth >= 1150) {
@@ -703,6 +705,7 @@ export function initShell({ root, session }) {
     },
     keys: () => ($('keysSheet').hidden ? openSheet('keysSheet') : closeSheets()),
     calibrate: () => calibrate.toggle(),
+    countline: () => countline.toggle(),
     auto: () => session.autoConfigure(),
     record: () => session.toggleRecord(),
     hide: () => { view.hidden = !view.hidden; applyLayout(); },
@@ -717,6 +720,7 @@ export function initShell({ root, session }) {
     },
     escape: () => {
       if (calibrate.isArming()) { calibrate.cancel(); return; }
+      if (countline.isArming()) { countline.cancel(); return; }
       if (view.atlas) { view.atlas = false; applyLayout(); return; }
       if (closeSheets()) return;
       if (view.hidden) { view.hidden = false; applyLayout(); return; }
