@@ -1,7 +1,8 @@
 // @ts-check
 /**
  * The effects: the app organised around what a newcomer wants to see, not
- * around how it is measured (session 6; mockups in docs/design/effects/).
+ * around how it is measured (session 6; the owner's pick from three mockups,
+ * recorded as X-1 in docs/verdicts.md).
  *
  * Eight modes fold into six effects. Each carries a verb title, a one-line
  * promise, the sample that shows it off, and its variants as visible

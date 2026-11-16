@@ -1,8 +1,9 @@
 # Crisp drawing layer at display resolution: design note
 
-Status: **designed** (session 5, Session A); not yet built. Roadmap: "Traces drawn at
-display resolution — crisp hair-lines on a large screen instead of soft ones", and the
-owner's instruction to move the arrows onto the same layer.
+Status: **built** (session 5, Session A; verdict VA3 in docs/verdicts.md).
+Roadmap: "Traces drawn at display resolution — crisp hair-lines on a large
+screen instead of soft ones", and the owner's instruction to move the arrows
+onto the same layer. This note is the design it was built from.
 
 ## The problem
 The canvas backing store is the processing size (`setSize` makes canvas.width the

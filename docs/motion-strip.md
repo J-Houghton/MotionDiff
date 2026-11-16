@@ -1,7 +1,9 @@
 # Motion-over-time strip: design note
 
-Status: **designed** (session 5, Session A); not yet built. Roadmap: "A
-motion-over-time strip from the pooled grid."
+Status: **absorbed** into the readings panel (session 5, IA8): the moving-share
+pen line is this strip's measurement, drawn in the instrument margin; the strip
+under the scrub bar itself was not built. This note survives as the pen line's
+definition (docs/readings-panel.md refers here).
 
 ## What it is
 A narrow strip along the time axis, under the scrub bar, showing how much motion
