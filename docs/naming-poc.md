@@ -62,9 +62,16 @@ back off.
 4. **Show**: the id plate carries the settled name, marked as an estimate
    (`7 · 93 px/s · ≈car`). Track boxes keep the accent colour when the
    model agrees and turn dashed-amber when motion alone found them; the
-   model-only finds are drawn as grey dashed boxes with `≈label` and fade
-   as they age (they are where the model last looked, not where the thing
-   is now). The readings margin names the backend, the model's load and
+   model-only finds are drawn as dashed blue boxes with `≈label`, **only
+   while they are fresh** (`core/finds.js`). A find is where the model
+   saw something in one frame: it does not move, and the answer arrives
+   a look late. So it is drawn at full strength while young, fades to
+   nothing, and is dropped at three look periods or 1.5 s of media time,
+   whichever is less; one that arrives already in its fade is never
+   drawn. Where a look takes longer than about a second — the CPU rung —
+   that means **no model-only finds are drawn at all**: they would be
+   boxes in empty space. Age is media time, so a paused picture keeps
+   the finds that belong to it and a seek drops them. The readings margin names the backend, the model's load and
    inference times and its cadence, with a **Copy model readings** button
    so the numbers can be pasted back into a report.
 
@@ -74,8 +81,9 @@ back off.
   people, animals, street furniture). A synthetic square or rain gets no
   name; the score says how sure it was.
 - Everything from the model is an estimate and marked `≈`. Model-only boxes
-  are where the model saw something at its last look — up to a second or
-  two old — not a track.
+  are where the model saw something at its last look — at most a second
+  and a half old, then gone — not a track. On a slow backend they do not
+  appear.
 - A model-only find is not automatically a missed mover: it sees parked
   cars motion rightly ignores. A motion-only box is not automatically a
   model miss: the mask boxes clumps and part-boxes the model does not

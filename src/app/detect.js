@@ -13,6 +13,7 @@
  * the worker fetches runtime and model from their homes only then.
  */
 import { matchBoxes } from '../core/boxmatch.js';
+import { findBound, findOpacity, lookPeriod } from '../core/finds.js';
 import { createModelLadder } from './modelladder.js';
 
 /** Longest frame side sent to the model (the capture is scaled down). */
@@ -25,6 +26,8 @@ const EVERY_MS = 250;
 const VOTES = 5;
 /** Inference times kept for the readings' median. */
 const TIMES = 9;
+/** Looks whose media times are kept to know the look rate (core/finds.js). */
+const PERIOD_LOOKS = 6;
 
 /**
  * Start the worker and load the model. `ready` resolves when a backend
@@ -36,11 +39,18 @@ const TIMES = 9;
 export function createDetector(options = {}) {
   /** @type {Map<number, {votes: string[], label: string|null, share: number, outcome: 'both'|'motion'}>} */
   const names = new Map();
-  /** @type {{x: number, y: number, w: number, h: number, label: string, score: number, atMs: number}[]} */
+  /** @type {{x: number, y: number, w: number, h: number, label: string, score: number, time: number, arrivalAge: number}[]} */
   let modelOnly = [];
-  /** @type {{tracks: {id: number, x: number, y: number, w: number, h: number}[], toPicture: number, sentMs: number}|null} */
+  /** @type {{tracks: {id: number, x: number, y: number, w: number, h: number}[], toPicture: number, time: number}|null} */
   let pending = null;
   let lastSendMs = 0;
+  /** @type {HTMLVideoElement|null} The picture, kept from the first tick:
+   * its media time is the clock finds age by, read live so a seek or a
+   * step while paused counts at once. */
+  let picture = null;
+  const mediaNow = () => (picture ? picture.currentTime : NaN);
+  /** @type {number[]} Media times of the recent looks, for the look rate. */
+  const lookTimes = [];
   const status = { lastInferMs: 0, inferTimes: /** @type {number[]} */ ([]), looks: /** @type {number[]} */ ([]) };
 
   /** @param {number} id @param {string} label */
@@ -80,11 +90,16 @@ export function createDetector(options = {}) {
       if (entry) entry.outcome = 'motion';
       else names.set(track.id, { votes: [], label: null, share: 0, outcome: 'motion' });
     }
-    // The model's own finds, back in picture pixels, stamped with the look.
+    // The model's own finds, back in picture pixels, stamped with the
+    // frame they were seen in and how far the picture had already moved on
+    // when the answer came back (core/finds.js decides what is still shown).
+    lookTimes.push(snapshot.time);
+    if (lookTimes.length > PERIOD_LOOKS) lookTimes.shift();
     const k = snapshot.toPicture;
+    const arrivalAge = Math.abs(mediaNow() - snapshot.time);
     modelOnly = detectionOnly.map((d) => ({
       x: d.x * k, y: d.y * k, w: d.w * k, h: d.h * k,
-      label: d.label, score: d.score, atMs: snapshot.sentMs,
+      label: d.label, score: d.score, time: snapshot.time, arrivalAge,
     }));
   }
 
@@ -117,6 +132,7 @@ export function createDetector(options = {}) {
       // A label lives as long as its id: forget what the tracker dropped.
       const alive = new Set(objects.map((o) => o.id));
       for (const id of names.keys()) if (!alive.has(id)) names.delete(id);
+      picture = video;
       const now = performance.now();
       if (!ladder.live() || pending || now - lastSendMs < EVERY_MS) return;
       const vw = video.videoWidth;
@@ -132,12 +148,12 @@ export function createDetector(options = {}) {
       pending = {
         tracks: objects.map((o) => ({ id: o.id, x: o.x * toSent, y: o.y * toSent, w: o.w * toSent, h: o.h * toSent })),
         toPicture: pictureWidth / sendW,
-        sentMs: now,
+        time: video.currentTime,
       };
       createImageBitmap(video, { resizeWidth: sendW, resizeHeight: sendH, resizeQuality: 'low' })
         .then((bitmap) => {
           // The rung may have been retired while the picture was scaled.
-          if (!ladder.post({ type: 'frame', bitmap, time: video.currentTime }, [bitmap])) {
+          if (!ladder.post({ type: 'frame', bitmap, time: pending ? pending.time : video.currentTime }, [bitmap])) {
             bitmap.close();
             pending = null;
           }
@@ -156,10 +172,24 @@ export function createDetector(options = {}) {
       return names.get(id)?.outcome ?? null;
     },
 
-    /** The model-only finds of the last look, picture px, with their age. */
+    /**
+     * The model-only finds still worth drawing, picture px, each with its
+     * age and how strongly to draw it. A find does not outlive its
+     * usefulness: it fades to nothing and is dropped at a bound tied to
+     * the look rate, and one that arrived stale is never returned at all
+     * (core/finds.js). Ages are media time, so a paused picture keeps the
+     * finds that belong to it.
+     */
     finds() {
-      const now = performance.now();
-      return modelOnly.map((f) => ({ ...f, ageMs: now - f.atMs }));
+      const bound = findBound(lookPeriod(lookTimes));
+      const now = mediaNow();
+      const shown = [];
+      for (const f of modelOnly) {
+        const age = Math.abs(now - f.time);
+        const opacity = findOpacity(age, f.arrivalAge, bound);
+        if (opacity > 0) shown.push({ x: f.x, y: f.y, w: f.w, h: f.h, label: f.label, score: f.score, ageMs: age * 1000, opacity });
+      }
+      return shown;
     },
 
     /** For the readings margin and its copy button. */

@@ -49,6 +49,7 @@ Two switches for the model workers work in any build: `?detdtype=fp32` pins the 
 │   │   ├── track.js                Grouping the mask into boxes, tracking them, calibration
 │   │   ├── dataout.js              Exported rows and the count line
 │   │   ├── boxmatch.js             Matching a model's boxes to the tracker's
+│   │   ├── finds.js                How long a model-only find may be shown
 │   │   ├── depth.js                Sampling a depth map; speeds comparable across depth
 │   │   └── ladder.js               The model workers' backend ladder: order, step-down, words
 │   ├── app/

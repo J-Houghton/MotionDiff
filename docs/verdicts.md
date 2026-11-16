@@ -1944,3 +1944,30 @@ this machine's real WebGPU adapter, plus:
 
 Not verifiable here: the owner's laptop GPU (whether the new runtime's
 GPU rungs load where the old one's would not), and its CPU look rate.
+
+**F-1 result (2026-11-16): the four checks hold; one bug found by the
+third and fixed before this was written.**
+1. `core/finds.js` (`findBound`, `findOpacity`, `lookPeriod`), 13 tests:
+   three look periods capped at 1.5 s; full strength for the first two
+   thirds of that, a straight fade to nothing over the last; a find that
+   arrives already in its fade is never drawn (the registered "past its
+   prime", made exact: one arriving at 1.3 s against a 1.5 s bound would
+   only blink).
+2. CPU rung, the baseline run repeated (looks 2.6 s this time): **0**
+   find-samples in 30 s, against 1021 — nothing older than the bound
+   because nothing arrives inside it. Named as a limit in the design
+   note and the help text: on a slow backend the model-only finds do not
+   appear.
+3. Slow motion (0.25×) makes looks fast in media time on the same rung,
+   so the fresh case could be exercised before a GPU rung exists: finds
+   drawn in 100 of 117 samples, ages 0.46–1.04 s. Paused on a frame with
+   finds: still there four seconds later (the look in flight landed, its
+   finds 54 ms from the frozen frame). Seek six seconds on: gone within
+   100 ms. **The first run of this check failed**: the finds' clock was
+   read only when a look was scheduled, and nothing schedules one after
+   a seek while paused, so the old finds stayed. The detector now reads
+   the picture's own time whenever it is asked.
+4. Back to full speed from slow motion, sampled every 50 ms: 1, 0.9,
+   0.78 … 0.17, then the next look's finds 0.97 … 0.03, then nothing —
+   through the old 0.3 floor to zero, and gone. The GPU-rate check
+   proper waits for M-1 again.
