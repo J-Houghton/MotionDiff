@@ -95,6 +95,9 @@ export function createDetector(options = {}) {
         status.backend = message.backend;
         status.dtype = message.dtype;
         status.loadMs = message.loadMs;
+        // The worker stepped down a backend or two; the status line shows
+        // where it landed, this says why for whoever is triaging.
+        if (message.failures?.length) console.warn('naming model stepped down:', message.failures.join(' | '));
         resolve(undefined);
       } else if (message.type === 'result') {
         onResult(message);

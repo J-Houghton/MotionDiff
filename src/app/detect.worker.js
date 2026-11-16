@@ -23,18 +23,37 @@ let detector = null;
 let canvas = null;
 let busy = false;
 
+/** A failure out of the runtime can be a bare number (a wasm pointer),
+ * not an Error; turn whatever was thrown into words. */
+function describe(error) {
+  return String(error?.message || error);
+}
+
 async function load(dtypeOverride) {
   const t0 = performance.now();
   const T = await import(/* @vite-ignore */ TRANSFORMERS_URL);
   T.env.allowLocalModels = false;
   // WebGPU where the browser has it; wasm everywhere else (phones, this
-  // project's software-GL sandbox). fp16 is the usual WebGPU choice for
-  // this model; q8 keeps the wasm download at 21 MB.
+  // project's software-GL sandbox). The fast path is tried first and the
+  // worker steps down when it fails — fall back or say so plainly:
+  // fp16 is the usual WebGPU choice but this model's fp16 build has
+  // crashed the runtime on a real GPU, fp32 is the sturdier build, and
+  // wasm/q8 (21 MB) runs anywhere. `?detdtype=` pins the WebGPU dtype.
   const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
-  const backend = adapter ? 'webgpu' : 'wasm';
-  const dtype = dtypeOverride || (backend === 'webgpu' ? 'fp16' : 'q8');
-  detector = await T.pipeline('object-detection', MODEL_ID, { device: backend, dtype });
-  postMessage({ type: 'ready', backend, dtype, loadMs: Math.round(performance.now() - t0) });
+  const ladder = adapter
+    ? [...(dtypeOverride ? [['webgpu', dtypeOverride]] : [['webgpu', 'fp16'], ['webgpu', 'fp32']]), ['wasm', 'q8']]
+    : [['wasm', dtypeOverride || 'q8']];
+  const failures = [];
+  for (const [device, dtype] of ladder) {
+    try {
+      detector = await T.pipeline('object-detection', MODEL_ID, { device, dtype });
+      postMessage({ type: 'ready', backend: device, dtype, loadMs: Math.round(performance.now() - t0), failures });
+      return;
+    } catch (error) {
+      failures.push(`${device}/${dtype}: ${describe(error)}`);
+    }
+  }
+  throw new Error(`no backend would load the model — ${failures.join('; ')}`);
 }
 
 async function look(bitmap, time) {
@@ -68,7 +87,7 @@ onmessage = (event) => {
   busy = true;
   const work = message.type === 'load' ? load(message.dtype) : look(message.bitmap, message.time);
   work
-    .catch((error) => postMessage({ type: 'error', message: String(error?.message || error) }))
+    .catch((error) => postMessage({ type: 'error', message: describe(error) }))
     .finally(() => { busy = false; });
 };
 

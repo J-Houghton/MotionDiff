@@ -25,15 +25,33 @@ let depth = null;
 let canvas = null;
 let busy = false;
 
+/** A failure out of the runtime can be a bare number (a wasm pointer),
+ * not an Error; turn whatever was thrown into words. */
+function describe(error) {
+  return String(error?.message || error);
+}
+
 async function load() {
   const t0 = performance.now();
   const T = await import(/* @vite-ignore */ TRANSFORMERS_URL);
   T.env.allowLocalModels = false;
+  // The fast path first, stepping down when it fails, as the detector's
+  // worker does: fall back or say so plainly.
   const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
-  const backend = adapter ? 'webgpu' : 'wasm';
-  const dtype = backend === 'webgpu' ? 'fp16' : 'q8';
-  depth = await T.pipeline('depth-estimation', MODEL_ID, { device: backend, dtype });
-  postMessage({ type: 'ready', backend, dtype, loadMs: Math.round(performance.now() - t0) });
+  const ladder = adapter
+    ? [['webgpu', 'fp16'], ['webgpu', 'fp32'], ['wasm', 'q8']]
+    : [['wasm', 'q8']];
+  const failures = [];
+  for (const [device, dtype] of ladder) {
+    try {
+      depth = await T.pipeline('depth-estimation', MODEL_ID, { device, dtype });
+      postMessage({ type: 'ready', backend: device, dtype, loadMs: Math.round(performance.now() - t0), failures });
+      return;
+    } catch (error) {
+      failures.push(`${device}/${dtype}: ${describe(error)}`);
+    }
+  }
+  throw new Error(`no backend would load the model — ${failures.join('; ')}`);
 }
 
 async function look(bitmap, time) {
@@ -89,7 +107,7 @@ onmessage = (event) => {
   busy = true;
   const work = message.type === 'load' ? load() : look(message.bitmap, message.time);
   work
-    .catch((error) => postMessage({ type: 'error', message: String(error?.message || error) }))
+    .catch((error) => postMessage({ type: 'error', message: describe(error) }))
     .finally(() => { busy = false; });
 };
 
