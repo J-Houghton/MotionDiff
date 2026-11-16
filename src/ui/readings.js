@@ -90,7 +90,27 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
       session.setStatus(text, 'info');
     }
   });
-  aside.append(head, instruments, all, calibrateLink, countLink, copyModel, note);
+  // And the depth model's (docs/depth-stage.md), the same way.
+  const copyDepth = el('button', 'rd-calibrate', 'Copy depth readings');
+  copyDepth.type = 'button';
+  copyDepth.hidden = true;
+  copyDepth.addEventListener('click', async () => {
+    const s = session.depthStatus?.();
+    if (!s) return;
+    const age = session.pipeline.readings?.depthAge;
+    const text = [
+      `model depth-anything-v2-small · backend ${s.backend}/${s.dtype}`,
+      `load ${s.loadMs} ms · look last ${s.lastInferMs} ms, median ${s.medianInferMs} ms · ${s.looksPerSecond} looks/s · map ${age === undefined ? '—' : age.toFixed(1) + ' s'} behind`,
+      `frame rate ${session.fps.toFixed(1)} fps · processing ${session.pipeline.width}×${session.pipeline.height} · depth on`,
+    ].join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      session.setStatus('Depth readings copied — paste them into your report', 'success');
+    } catch {
+      session.setStatus(text, 'info');
+    }
+  });
+  aside.append(head, instruments, all, calibrateLink, countLink, copyModel, copyDepth, note);
   // Before the parameter panel: picture, readings, parameters.
   plate.insertBefore(aside, plate.querySelector('.panel'));
 
@@ -133,6 +153,13 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
       const s = session.modelStatus?.();
       return s ? `${s.backend}/${s.dtype} · ${s.lastInferMs} ms · ${s.looksPerSecond}/s` : null;
     }],
+    ['depth model', 'backend · ms per look · looks/s — estimates', () => {
+      const s = session.depthStatus?.();
+      return s ? `${s.backend}/${s.dtype} · ${s.lastInferMs} ms · ${s.looksPerSecond}/s` : null;
+    }],
+    ['depth map age', 's behind the picture', (ctx) => (
+      ctx.r?.depthAge === undefined ? null : `${ctx.r.depthAge.toFixed(1)}`
+    )],
     ['scale', 'cm per pixel · true at the marked depth (C resets)', () => {
       const m = session.calibration?.metresPerPixel;
       return m ? (m * 100).toFixed(1) : null;
@@ -210,6 +237,7 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
       if (value !== null) rowNodes[i].dd.textContent = value;
     }
     copyModel.hidden = !session.modelStatus?.();
+    copyDepth.hidden = !session.depthStatus?.();
     const mode = session.mode;
     note.textContent = !session.loaded ? 'No source.'
       : ctx.r ? ''

@@ -18,6 +18,7 @@
  * directly, without a Stages object.
  */
 import { BG_HOLD_SECONDS, backgroundAlpha } from '../core/background.js';
+import { boxDepth, depthSpeedFactor } from '../core/depth.js';
 import { MASK_VOTES_STRICT } from '../core/mask.js';
 import { bornTracks, labelComponents, stepTracks } from '../core/track.js';
 import { fitSimilarity } from '../core/flow.js';
@@ -414,6 +415,21 @@ export class Stages {
   }
 
   /**
+   * The depth model's latest answer as a stage (docs/depth-stage.md): the
+   * coarse inverse-depth grid with min/max/median, the stamp of the frame
+   * it saw, and `age` — media seconds this frame is ahead of it. Null
+   * while depth is off or before the first answer. The model runs beside
+   * the pipeline; this never waits for it.
+   */
+  depth() {
+    return this._get('depth', () => {
+      const latest = this._frame.depth;
+      if (!latest || !this._frame.params.maskDepth) return null;
+      return { ...latest, age: Math.max(0, this._frame.time - latest.time) };
+    });
+  }
+
+  /**
    * Grouping and tracking (docs/tracking.md): the voted decision read back
    * on a coarse grid, shapes labelled, and the track step run once per
    * frame. Publishes onto frame.readings and returns the born tracks in
@@ -471,12 +487,42 @@ export class Stages {
         age: t.age,
         coasting: t.miss > 0,
       }));
+      // Depth, where the stage has it (docs/depth-stage.md): each box
+      // samples its median inverse depth and carries the factor that makes
+      // its speed comparable at the scene's median depth — or no factor
+      // where the map declines, and the raw speed stands unmarked. The
+      // factor is smoothed per id (successive maps renormalise, and a map
+      // is a look or two old against a mover's current box), and a coasted
+      // box samples nothing — its position is a prediction, not a find —
+      // but keeps the factor it had, as it keeps its speed.
+      const depth = this.depth();
+      if (depth) {
+        const factors = (state.factors ||= new Map());
+        for (const o of shown) {
+          let factor = null;
+          if (!o.coasting) {
+            const at = boxDepth(depth.grid, depth.cols, depth.rows, o, renderer.width, renderer.height);
+            factor = depthSpeedFactor(depth.median, at, depth.min, depth.max);
+          }
+          if (factor !== null) {
+            const prev = factors.get(o.id);
+            const smoothed = prev === undefined ? factor : prev + (factor - prev) * 0.25;
+            factors.set(o.id, smoothed);
+            o.depthFactor = smoothed;
+          } else if (o.coasting && factors.has(o.id)) {
+            o.depthFactor = factors.get(o.id);
+          }
+        }
+        const alive = new Set(shown.map((o) => o.id));
+        for (const id of factors.keys()) if (!alive.has(id)) factors.delete(id);
+      }
       state.published = shown;
       frame.readings = {
         ...(frame.readings || { mode: frame.params.algorithm }),
         objects: shown,
         width: renderer.width,
         height: renderer.height,
+        ...(depth ? { depthAge: depth.age } : {}),
       };
       return shown;
     });

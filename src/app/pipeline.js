@@ -91,6 +91,10 @@ export class Pipeline {
     // The shared measurement stages (docs/pipeline-stages.md): begun afresh
     // for every WebGL frame and handed to the mode as frame.stages.
     this._stages = new Stages();
+    /** The depth model's latest answer (docs/depth-stage.md), published by
+     * the session's side-runner; frame.stages.depth() serves it with its
+     * age. Null while depth is off or before the first answer. */
+    this.depth = null;
     // A mode may say something about what it sees (frame.note): passed on to
     // the status line when the text changes, at most about once a second.
     this._frame.note = (message, type = 'info') => this._note(message, type);
@@ -637,6 +641,7 @@ export class Pipeline {
       frame.params = this.params;
       frame.display = this._currentMode;
       frame.readings = null;
+      frame.depth = this.depth;
       frame.stages = this._stages.begin(frame);
       this._hasMagnitude = mode.render(frame) !== false;
       this.readings = frame.readings;

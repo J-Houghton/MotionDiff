@@ -17,7 +17,7 @@ import { lookbackTime } from '../../core/timebase.js';
 import { BG_K } from '../../core/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH } from '../../core/trails.js';
 import { MASK_VOTES } from '../../core/mask.js';
-import { GAP, MASK_FILL, MASK_NAMES, MASK_TRACK, THRESHOLD, TRAIL, asMs } from './params.js';
+import { DEPTH_SHOW, GAP, MASK_DEPTH, MASK_FILL, MASK_NAMES, MASK_TRACK, THRESHOLD, TRAIL, asMs } from './params.js';
 
 // Pass 1. Mirrors boxBlur (core/blur.js) on each frame, then
 // threeFrameDifference and thresholdMask (core/mask.js).
@@ -334,6 +334,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     'Box the movers groups what the mask finds into shapes and follows each one: a box with a number that stays with it, its measured speed, and an arrow one second ahead. A mover must persist a few frames before it is boxed, and survives a brief loss; what the mask merges (two movers touching) is one box, and a flat-coloured mover whose interior the mask cannot see may briefly carry a box per edge.',
     'Name the movers loads a small object detector (21–41 MB, fetched only when asked, then cached) that looks at the whole original frame a few times a second, beside the pipeline. Its boxes are matched to the tracked boxes: a match writes the model\'s best guess on the plate (marked ≈, an estimate) and the box carries the name while it lives. The two opinions are drawn apart on purpose: a solid box was found by motion and the model both, a dashed box by motion only, and a dashed blue box is the model\'s own find from its last look — often a thing that is simply not moving — ageing until the next look. It names things as one of 80 everyday classes; synthetic shapes and unusual footage get no name or a wrong one, and the readings margin shows which backend runs it and how long a look takes.',
     'The count line (X, or the link in the readings margin) counts boxed movers crossing a line you draw, each way. Counts are of boxes: a merged clump counts once, and a mover whose box dies before the line never counts. A new source clears the line.',
+    'Depth the scene loads a depth model (about 25 MB, fetched only when asked, then cached) that estimates relative depth beside the pipeline, a look or two behind the picture — the overlay\'s age chip says by how much. With it on, each box\'s shown speed is scaled to the scene\'s median depth (marked ≈), so the far carriageway stops reading slower than the near one; where the estimate is too flat or too far to trust, the plain measured speed shows unmarked. The depth picture and everything scaled by it is a model\'s estimate, not a measurement.',
     'Auto threshold learns each pixel\'s own noise (the background model\'s variance) and asks a difference to clear it as well as the set threshold, which becomes a floor: grainy footage cleans up without raising the threshold for the whole picture. The noise takes a second or two to be learnt.',
   ],
   data: { kind: 'mask', what: '1 where the pixel is moving, 0 where it is still; G holds the strength of the difference' },
@@ -350,6 +351,8 @@ export default /** @type {import('./index.js').Mode} */ ({
     MASK_GRADIENT,
     MASK_TRACK,
     MASK_NAMES,
+    MASK_DEPTH,
+    DEPTH_SHOW,
     { key: 'maskShow', label: 'Show', type: 'select', default: 'cutout', options: { 'Cut-out': 'cutout', 'Solid mask': 'solid' } },
     TRAIL,
   ],
