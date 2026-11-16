@@ -3,14 +3,13 @@
 Status of everything planned for MotionDiff. Updated at the end of every working
 session. Statuses: **done**, **in progress**, **planned**, **deferred**.
 
-Last updated: 2026-11-15 (session 7, the clean-up: motion-guided magnification
-landed on master, which its stacked-base merge had missed; everything the app
-offers inventoried against its evidence; HLS, screen capture, schlieren's
-experimental Traces view and the sonification engine removed to a local archive
-at the owner's decision (hls.js and tone dependencies gone with them; main
-bundle 880 → 360 kB); WebM recording and both render fallbacks verified and
-kept; every remaining effect proven byte-identical before/after, 11/11 parity
-probes. Proof under "Session 7" in docs/verdicts.md.)
+Last updated: 2026-11-16 (session 9: the model workers' backend ladder now
+proves a look before it says ready, after naming failed every look on the
+owner's desktop GPU. Naming lands on the CPU there until the WebGPU decision
+below is made; depth, verified on the owner's desktop, is unchanged. Proof
+under "Session 9" in docs/verdicts.md. Stale rows corrected in the same
+pass: the schlieren guide's live wiring, two item numbers that pointed at
+the wrong rows, and the depth row's status.)
 
 The governing rule for every item: lightweight, and easy for a fresh agent to pick
 up — accurate docs, tests that explain intent, and nothing in the repo that isn't
@@ -31,13 +30,15 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 |---|---|---|---|---|
 | Schlieren: hot air and gas made visible | **done**, session 4 | A candle plume appears where the video shows a still background (`candle-dots`, `plume`) | | `docs/schlieren.md`, verdict V7 |
 | Schlieren on a real phone, and on the owner's footage | **in progress** | The same, live from a phone camera; weak sources (a mug, a heater); natural backgrounds; a held reference | Small once footage exists | Waiting for the footage listed in `docs/schlieren.md` and for a deploy to test on a phone. Defaults (window, smoothing, sensitivity) may need tuning for phone noise and compression |
-| Schlieren: a step-by-step setup guide in the picture | **done**, session 5 (Session A) | First-time users reach a working setup without the help sheet: background, steady camera, settle, hold | | Verdict IA5. A checklist card with live state dots from `pipeline.readings`; the live wiring waits on Session B's readings landing in master |
+| Schlieren: a step-by-step setup guide in the picture | **done**, session 5 (Session A) | First-time users reach a working setup without the help sheet: background, steady camera, settle, hold | | Verdict IA5. A checklist card with live state dots from `pipeline.readings.setup` (wired: `ui/guide.js`). Not yet tried live on a phone, where schlieren's live camera was the reported problem |
 | Mirror: the front camera flipped like a mirror, fullscreen | **done**, session 5 (Session A) | An installation where viewers see their own motion | | Verdict IA4. Display-only flip; the legend flips with it. Still unconfirmed on a real phone |
 | Camera zoom by pinch (owner's request) | **done**, session 5 (Session A) | Two fingers zoom the camera where the driver allows it | | In IA4. iOS Safari exposes no zoom control; still unconfirmed on a real phone |
 | Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. The experimental traces view this would have replaced was removed in the session-7 clean-up (archived) |
 | Data out: export tracks and readings; count movers over a drawn line | **done**, session 7 | On `truth`, counts equal the scene's known crossings (2 one way, 1 the other, each within 0.4 s); the exported CSV reads the square's known speed | | docs/data-out.md, verdict D-1. Collect/export in the panel's Export folder; the count line behind X and the margin link |
-| Naming what is tracked (proof of concept) | **rebuilt, session 8** (#36 merged) | On `traffic`, settled labels vehicle-family and the motion/model disagreement drawn: solid found-by-both, dashed motion-only, dashed blue model-only | | docs/naming-poc.md, verdict M-1 (take 1: MobileNetV2 crops, N-1, archived). RT-DETR v2 whole-frame in a worker, matched to tracks; YOLO stays rejected (AGPL-3.0) |
-| Depth as a stage; speeds comparable across depth (proof of concept) | **built, session 8** — PR #37 awaits the owner's desktop | On `traffic`, the far carriageway's ≈ speeds stop reading slower than the near lane; with the switch off, byte-identical to master | | docs/depth-stage.md, verdict E-1. Depth Anything V2 Small (Apache-2.0; Base/Large are CC-BY-NC, never fetched) in a worker; `stages.depth()` reports the map's age |
+| Naming what is tracked (proof of concept) | **rebuilt, session 8** (#36 merged); **on the CPU only** since the owner's desktop check | On `traffic`, settled labels vehicle-family and the motion/model disagreement drawn: solid found-by-both, dashed motion-only, dashed blue model-only | | docs/naming-poc.md, verdict M-1 (take 1: MobileNetV2 crops, N-1, archived). RT-DETR v2 whole-frame in a worker, matched to tracks; YOLO stays rejected (AGPL-3.0). The pinned runtime's WebGPU backend cannot run this model (L-1): it names at the CPU's rate, about a look every one to two seconds |
+| The model workers' backend ladder proves a look | **done**, session 9 — awaits the owner's desktop | On a GPU machine, *Name the movers* says it is running on the CPU and why, and names boxes, where it used to fail every look; depth reads as before | | docs/model-ladder.md, verdict L-1. A rung is ready only after one throwaway inference; a look that fails later steps down once; `core/ladder.js` holds the order and the decision; `?modelfault=` shows each branch on a healthy machine |
+| WebGPU back for naming | **planned** — the owner's decision between three routes | On a GPU machine the status line reads `Naming is on (webgpu/fp16)` and looks come several times a second instead of one every second or two | Small for the first route | Researched session 9, not built: (a) Transformers.js 4.x for the detector worker only — measured here at 0.4 s a look against 1.6 s on the CPU, same detections; (b) patched weights, which need hosting; (c) another detector — none runs on the pinned runtime's WebGPU either. Depth stays on 3.8.1 whichever is chosen |
+| Depth as a stage; speeds comparable across depth (proof of concept) | **done**, session 8 (#37 merged); loads and works on the owner's desktop (2026-11-16) | On `traffic`, the far carriageway's ≈ speeds stop reading slower than the near lane; with the switch off, byte-identical to master | | docs/depth-stage.md, verdict E-1. Depth Anything V2 Small (Apache-2.0; Base/Large are CC-BY-NC, never fetched) in a worker; `stages.depth()` reports the map's age. E-1's fourth check (the speed correction's margin widening where looks are fast) has not been re-measured on a GPU |
 | Camera compensation (global motion, then subtract it) | **done**, session 6 | On `handheld` the scenery cancels in Raw and in the mask with the crowd kept; `river`'s banks go dark under the zoom term; a still camera is byte-identical on and off | | `cameraComp` ("Steady camera"), docs/camera-compensation.md, V-6C. Three guards keep a still camera still |
 | Real-time stabiliser | planned, after compensation | `handheld` plays back steady | Medium | |
 | Sonification | **archived**, session-7 clean-up | | | Built sessions 1–2, never blind-judged; removed with Tone.js at the owner's decision (archive/sonification/). The pooled motion grid it read stays, feeding the readings panel |
@@ -104,7 +105,7 @@ Ranked by visible effect for the effort.
 | Luma-only branch | No visible effect of its own; a speed measure. Revisit if a phone needs it |
 | Centred three-frame variant | Costs a gap of latency; the causal form passes its checks |
 | Worker fallback for the mask, history and background modes | No effect where WebGL2 exists; those modes report that they cannot run |
-| Automatic per-frame threshold from a noise model on the GPU | Superseded by item 5 |
+| Automatic per-frame threshold from a noise model on the GPU | Superseded by item 2 (the per-pixel noise threshold, `maskAuto`) |
 | Sparse optical flow | Dense low-resolution flow is the better fit for WebGL2, and is built |
 | Plain traces that show which way they run in a still picture | Tried with a tinted tail; a blind judge could not tell (`docs/verdicts.md`, session 4). Heading colours do it |
 | Temperature or density values from schlieren | Needs calibration and tomography; the picture is the product |
@@ -126,7 +127,7 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
 | Traces keep flowing while paused | VA1 | Streamlines of the paused instant; `Session.pausedFlow` keeps tooling deterministic |
 | Arrow grid for flow | VA2 | Owner's decision, off the deferred list |
 | Mirror mode; camera zoom by pinch | IA4 | Needs the owner's phone |
-| Schlieren setup guide in the picture | IA5 | Live wiring waits on Session B's `pipeline.readings` in master |
+| Schlieren setup guide in the picture | IA5 | Live from `pipeline.readings.setup` since Session B's readings reached master |
 | This machine's tooling | — | Headless Chrome on WSL2 needs `--enable-unsafe-swiftshader` (a wrapper outside the repo); software GL, so timings here are not comparable |
 
 ### Session 4
@@ -167,6 +168,11 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
 | Research write-up, design mockups | `3922a07` |
 
 ## Known gaps
+- **Naming runs on the CPU even where there is a GPU** (session 9): the
+  pinned runtime's WebGPU backend rejects RT-DETR's ceil-mode AveragePool
+  at run time. The ladder now lands on wasm and says so; the routes back to
+  the GPU are under Applications. A look that hangs after the model is
+  ready (no answer, no error) is still not detected for either model.
 - Mirror mode and pinch zoom are still unconfirmed on a real phone (the app
   itself runs there; these two controls specifically have not been tried).
 - Motion magnification turns fine repeated texture (fur) painterly: the field
@@ -180,7 +186,7 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
 - The filmstrip tool: a synthetic scene rendered after a real-clip scene in
   one run can differ slightly from the same scene rendered alone (reproduced
   on old master; compare strips from runs with the same scene order).
-- **Schlieren live on a phone does not work well yet** (owner's first try, session 4): the preset clips work there, the live camera gives a flat grey picture, which means nothing could be measured (a plain background or a moving phone are the likely causes; not diagnosed). The setup guide under Applications is the next step.
+- **Schlieren live on a phone does not work well yet** (owner's first try, session 4): the preset clips work there, the live camera gives a flat grey picture, which means nothing could be measured (a plain background or a moving phone are the likely causes; not diagnosed). The setup guide built for this (IA5) has not been tried on a phone since.
 - **Frame rates on a real phone have not been measured.** The app runs on the
   owner's phones (deployed site), but frame-rate figures are from one desktop
   GPU. Schlieren has been checked on synthetic scenes and
@@ -197,7 +203,8 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
   hue that drifts across a trail wider than 56 px.
 - Background model: ragged edges while something is being absorbed; soft, blobby
   cut-outs on real footage.
-- Motion mask on a moving camera: scenery turns into blobs (item 4 is the fix).
+- Motion mask on a moving camera: scenery turns into blobs unless *Steady
+  camera* (`cameraComp`, session 6) is on.
 - Colour-by-age "mixed": motion that pauses briefly and restarts reads pink where the
   old ring showed orange.
 - On a phone held upright, a landscape clip is shown whole and small (a double tap

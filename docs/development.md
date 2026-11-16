@@ -21,6 +21,8 @@ npm run typecheck  # JSDoc type check (tsc, no emit): the mode contract, worker 
 
 Useful URL switches in a dev build: `?renderer=canvas2d` forces the Canvas 2D fallback, `?nofloat` pretends the GPU has no float render targets. The console logs which renderer is active.
 
+Two switches for the model workers work in any build: `?detdtype=fp32` pins the detector's WebGPU rung, and `?modelfault=<rung>:<stage>` makes a backend fail on purpose (`webgpu:prove`, `webgpu/fp16:look`, `wasm:look`, `all:load`; see [model-ladder.md](model-ladder.md)), so the ladder's step-downs can be seen on a machine whose backends all work.
+
 ## Layout
 ```text
 .
@@ -43,7 +45,12 @@ Useful URL switches in a dev build: `?renderer=canvas2d` forces the Canvas 2D fa
 │   │   ├── magnitude.js            Shared unsigned motion magnitude, grid pooling
 │   │   ├── timebase.js             Media-time base: stamps, seek and loop detection, lookback
 │   │   ├── buffer.js               Frame ring bookkeeping, memory budget
-│   │   └── analyze.js              Auto-configure: noise floor, threshold and gap
+│   │   ├── analyze.js              Auto-configure: noise floor, threshold and gap
+│   │   ├── track.js                Grouping the mask into boxes, tracking them, calibration
+│   │   ├── dataout.js              Exported rows and the count line
+│   │   ├── boxmatch.js             Matching a model's boxes to the tracker's
+│   │   ├── depth.js                Sampling a depth map; speeds comparable across depth
+│   │   └── ladder.js               The model workers' backend ladder: order, step-down, words
 │   ├── app/
 │   │   ├── effects.js              The six effects: modes folded by what they do, variants as visible choices
 │   │   ├── modes/                  The mode registry: one module per mode, index.js, shared params
@@ -52,8 +59,15 @@ Useful URL switches in a dev build: `?renderer=canvas2d` forces the Canvas 2D fa
 │   │   ├── renderer.webgl.js       WebGL2 renderer and the built-in shaders
 │   │   ├── pipeline.worker.js      Canvas 2D fallback: diff, blur, trails, magnify in a worker
 │   │   ├── renderer.js             Canvas 2D compositing for the fallback
+│   │   ├── stages.js               Shared measurement stages: each measurement once per frame
 │   │   ├── flow.js                 Optical flow on the GPU, shared by the flow and schlieren modes
 │   │   ├── particles.js            Draws the particle traces
+│   │   ├── arrows.js               Draws the arrow grid for flow
+│   │   ├── detect.js               Naming: owns the detector's worker, matches its boxes to tracks
+│   │   ├── detect.worker.js        RT-DETR v2 through Transformers.js, fetched at runtime
+│   │   ├── depthstage.js           Depth: owns the depth worker, keeps the latest map
+│   │   ├── depth.worker.js         Depth Anything V2 Small through Transformers.js, fetched at runtime
+│   │   ├── modelladder.js          Drives both model workers down the backend ladder
 │   │   ├── probes.js               Dev-only shader-versus-core parity probes
 │   │   ├── loader.js               URL source detection
 │   │   ├── source-profile.js       Per-source capture settings
@@ -63,6 +77,13 @@ Useful URL switches in a dev build: `?renderer=canvas2d` forces the Canvas 2D fa
 │   │   ├── shell.js                The DOM: stage, split compare, caption, transport, sheets
 │   │   ├── panel.js                Parameter panel (Tweakpane), built from each mode's schema
 │   │   ├── ruler.js                The time ruler
+│   │   ├── readings.js             The readings panel beside the Plate
+│   │   ├── legend.js               The direction legend (hue wheel)
+│   │   ├── guide.js                Schlieren's setup guide in the picture
+│   │   ├── boxes.js                Tracking boxes, id plates, model-only finds
+│   │   ├── calibrate.js            Marking a known length; speeds in real units
+│   │   ├── countline.js            Drawing the count line
+│   │   ├── depthview.js            The depth estimate laid over the picture
 │   │   └── keys.js                 The keyboard map
 │   ├── styles/main.css             Both layouts, both themes
 │   └── main.js                     Wiring

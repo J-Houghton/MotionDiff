@@ -33,12 +33,17 @@ back off.
    imports `app/detect.js`, which starts a worker; the worker loads
    Transformers.js from the CDN and the model from Hugging Face, and
    works down a ladder — **WebGPU fp16, WebGPU fp32, wasm q8** — until
-   one loads, saying which it landed on (the status line) and why it
-   stepped down (the console). **Each rung gets a fresh worker**: a crash
-   out of the runtime (fp16 crashed outright on a real GPU the first time
-   out) leaves that worker's wasm instance poisoned, and a retry inside
-   it fails at the same spot whatever the backend.
+   one **loads and proves a look** (docs/model-ladder.md), saying where
+   it landed and why on the status line and each rung's own failure in
+   the console. **Each rung gets a fresh worker**: a crash out of the
+   runtime (fp16 crashed outright on a real GPU the first time out)
+   leaves that worker's wasm instance poisoned, and a retry inside it
+   fails at the same spot whatever the backend.
    (`?detdtype=fp32` pins the WebGPU rung for triage.)
+   **On the pinned runtime this model lands on the CPU even where there
+   is a GPU**: its backbone's ceil-mode AveragePool is something that
+   runtime's WebGPU backend cannot run (verdict L-1). Getting the GPU
+   back is an open decision (ROADMAP).
 2. **Look**: a few times a second — self-throttled, **one request in
    flight at a time**, never faster than the model answers — the current
    frame is snapshotted (scaled to ≤ 960 px wide) and sent to the worker

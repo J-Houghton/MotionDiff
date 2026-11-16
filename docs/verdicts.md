@@ -1812,3 +1812,61 @@ in 4.3 s, median look 390–650 ms, 1.6–2.2 looks/s, map 0.4–0.8 s behind.
 Not verifiable here, named for the owner's desktop: that their GPU takes
 the same path (fp16 may load there where it crashes here), and the CPU
 look rate on their machine.
+
+**Result (2026-11-16): all seven registered checks hold, on a real WebGPU
+adapter.** Same machine and headless Chrome as the recording above
+(Intel Xe-LPG, `shader-f16`), `traffic`, mask + boxes, 30–45 s runs; every
+status-line change was logged with its time.
+1. The case that broke: `Naming is running on the CPU (wasm/q8) because
+   the GPU backend can't run this model`, 13 s after the switch (three
+   rungs tried; it was 7.3 s to the false "ready" before). Looks complete
+   at about 2 s each on this CPU with Chrome's GPU process busy (0.6
+   looks/s), boxes get names, model-only finds are drawn; "failed a look"
+   appears **0** times against 52. Console: `naming model stepped down:
+   webgpu/fp16 load: 94952944 | webgpu/fp32 first look: using ceil() in
+   shape computation is not yet supported for AveragePool`. The cause is
+   confirmed, not assumed: the fp16 graph holds three AveragePool nodes
+   with `ceil_mode=1` (2×2, stride 2), and the sentence is thrown by the
+   runtime's JavaScript WebGPU backend when it first computes a pool's
+   shape inside a run — the session builds without complaint.
+2. A look that fails after ready (depth, `?modelfault=webgpu/fp16:look`):
+   `Depth is on (webgpu/fp16)…`, then one `Depth is stepping down:
+   webgpu/fp16 failed a look`, then 5.4 s later `Depth is running on the
+   GPU (webgpu/fp32) because webgpu/fp16 failed a look`; looks resume at
+   1.2–1.4 /s. No per-look error.
+3. The last rung (naming, `?modelfault=wasm:look`): one `The detector
+   failed a look: …`, then `Naming switched itself off: the detector
+   failed 3 looks in a row on the CPU (…)`; the toggle is off and nothing
+   more is sent for the remaining 30 s.
+4. No rung can run it (`?modelfault=all:prove`, both options): both turn
+   themselves off; `Depth could not start: no backend could run the
+   model — webgpu/fp16 first look: …; webgpu/fp32 first look: …; wasm/q8
+   first look: …`, and the same for naming with its real fp16 load crash
+   first in the list.
+5. Depth where it worked, two runs: `Depth is on (webgpu/fp16): an
+   estimate beside the pipeline, a look or two behind`, word for word;
+   median look 360–396 ms, 2.4 looks/s, map 0.5–0.8 s behind — inside
+   the baseline's range at its fast end. **Load grew from 4.3 s to
+   6.5–6.6 s**, more than the "about one look" registered: on WebGPU the
+   proving look also compiles the shaders, a cost the first real look
+   used to carry (the baseline's first looks read 650–750 ms and then
+   settled; these start settled).
+6. No GPU (`navigator.gpu` hidden in the page): `Naming is on
+   (wasm/q8): …` and `Depth is on (wasm/q8): …`, the old sentences; no
+   console warning; both look.
+7. 19 new unit tests (333 in all) cover the order, the decision — a rung
+   that loads but fails its first look among them — the words and the
+   switch; typecheck and build pass. The ladder is a lazy 3.9 kB chunk
+   shared by the two models; the main bundle grew 0.5 kB (the two
+   loaders' sentences and the copied readings' extra line).
+
+Also seen, and recorded rather than hidden: on this GPU the detector's
+fp16 rung crashes at load with a bare number (`94952944`) on the pinned
+runtime; depth's fp16 rung loads and runs. The ladder absorbs it either
+way.
+
+Left for the owner's desktop: the same switch on the deployed build
+should now read "running on the CPU … because the GPU backend can't run
+this model" (or "would not load it", if every GPU rung there fails
+before a look), with names appearing at the CPU's rate; and depth should
+read exactly as it did.

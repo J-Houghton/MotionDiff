@@ -24,9 +24,9 @@ switch fails with a plain sentence and turns itself back off.
 1. **Switch on**: *Depth the scene* (`maskDepth`), beside *Box the
    movers* on the tracking modes. First enable dynamically imports
    `app/depthstage.js`, whose worker loads the runtime and model down a
-   ladder — WebGPU fp16, WebGPU fp32, wasm q8 — until one loads, saying
-   which it landed on (the status line) and why it stepped down (the
-   console).
+   ladder — WebGPU fp16, WebGPU fp32, wasm q8 — until one loads and
+   proves a look (docs/model-ladder.md), saying where it landed and why
+   (the status line) and each rung's own failure (the console).
 2. **Look**: a few times a second, one request in flight, the frame
    (scaled to ≤ 518 px wide — the model's own working size) goes to the
    worker stamped with its media time. The answer — relative **inverse**
