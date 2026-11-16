@@ -1765,3 +1765,50 @@ so albedo can masquerade as distance. That is the estimate's nature, not
 a rendering fault; the help's "an estimate, not a measurement" covers
 it, and the factor's per-id smoothing and clamp bound what it can do to
 a speed.
+
+## Session 9
+
+### L-1. The backend ladder proves a look (docs/model-ladder.md) — robustness
+**Expected, written before building (2026-11-16).**
+
+The case that broke, recorded on master (74f2d08) in this machine's
+headless Chrome — which, unlike the session-8 sandbox, has a real WebGPU
+adapter (Intel Xe-LPG): `traffic`, mask + boxes + names. The ladder
+logged `webgpu/fp16: 94952944` (a crash at load), landed on webgpu/fp32,
+said `Naming is on (webgpu/fp32)`, and then put `The detector failed a
+look: using ceil() in shape computation is not yet supported for
+AveragePool` on the status line 52 times in 30 s. No look completed.
+Depth on the same build and machine: `Depth is on (webgpu/fp16)`, loaded
+in 4.3 s, median look 390–650 ms, 1.6–2.2 looks/s, map 0.4–0.8 s behind.
+
+1. **The case that broke now works**: same clip, same machine, no
+   switches. Naming lands on wasm/q8; the status line says it is running
+   on the CPU because the GPU backend can't run this model; looks
+   complete and boxes get names; "failed a look" never appears. The
+   console warning names each rung's failure with its stage.
+2. **A look that fails after ready steps down once**: depth with
+   `?modelfault=webgpu/fp16:look` (the rung proves, then every real look
+   fails). One stepping-down line, no per-look error; it lands on
+   webgpu/fp32 with the reason in words; looks resume.
+3. **The last rung reports once, then switches off**: naming with
+   `?modelfault=wasm:look`. One "failed a look" line, then after three
+   failures in a row the option turns itself off with a sentence; no
+   further looks are sent.
+4. **No rung can run it**: `?modelfault=all:prove`. The option turns
+   itself off; the sentence says no backend could run the model and
+   names each rung.
+5. **Depth is unchanged where it worked**: no switches. It lands on
+   webgpu/fp16 with the sentence it had, word for word; look time,
+   cadence and map age within the baseline's range above. Load time is
+   allowed to grow by about one look (the proof), and is recorded.
+6. **No GPU**: with `navigator.gpu` hidden, both go straight to wasm/q8
+   with their old sentences and no console warning.
+7. **Logic the eye cannot check**: unit tests for the ladder's order, the
+   step-down decision — including a rung that loads but fails its first
+   look — the words, and the triage switch; `npm test`, `npm run
+   typecheck` and `npm run build` pass; the ladder code stays in the lazy
+   model chunks.
+
+Not verifiable here, named for the owner's desktop: that their GPU takes
+the same path (fp16 may load there where it crashes here), and the CPU
+look rate on their machine.
