@@ -617,10 +617,6 @@ describe('buildSourceProfile', () => {
     expect(p.frameCapture).toBe('draw-image');
   });
 
-  test('hls with rVFC → frameCapture video-frame', () => {
-    expect(buildSourceProfile('hls', true).frameCapture).toBe('video-frame');
-  });
-
   test('url without rVFC → frameCapture draw-image', () => {
     expect(buildSourceProfile('url', false).frameCapture).toBe('draw-image');
   });
@@ -632,9 +628,8 @@ describe('isStreamSource', () => {
     expect(isStreamSource('camera')).toBe(true);
   });
 
-  test('file, url, hls are not stream sources', () => {
+  test('file and url are not stream sources', () => {
     expect(isStreamSource('file')).toBe(false);
     expect(isStreamSource('url')).toBe(false);
-    expect(isStreamSource('hls')).toBe(false);
   });
 });

@@ -74,7 +74,6 @@ export class Pipeline {
     /** @type {HTMLCanvasElement|null} The output canvas element */
     this._outputCanvas = null;
 
-    this.hls = null;
 
     // Every mode's params with their defaults (see modes/index.js), plus two
     // that belong to no mode: the processing fps cap, and camera
@@ -250,17 +249,6 @@ export class Pipeline {
     if (this._worker) {
       this._worker.postMessage({ type: 'magReset' });
     }
-  }
-
-  setHlsInstance(hls) {
-    if (this.hls) {
-      this.hls.destroy();
-    }
-    this.hls = hls;
-  }
-
-  clearExternalResources() {
-    this.setHlsInstance(null);
   }
 
   setSourceProfile(profile) {

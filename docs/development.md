@@ -56,7 +56,7 @@ Useful URL switches in a dev build: `?renderer=canvas2d` forces the Canvas 2D fa
 │   │   ├── flow.js                 Optical flow on the GPU, shared by the flow and schlieren modes
 │   │   ├── particles.js            Draws the particle traces
 │   │   ├── probes.js               Dev-only shader-versus-core parity probes
-│   │   ├── loader.js               URL source detection, HLS
+│   │   ├── loader.js               URL source detection
 │   │   ├── source-profile.js       Per-source capture settings
 │   │   ├── clips.js                Sample clips and parameter presets
 │   │   ├── exporter.js             WebM export (MediaRecorder)
@@ -82,7 +82,7 @@ ui/     imports app/ only
 main.js imports app/ and ui/, and core/ for pure helpers
 ```
 
-- The rules are about imports between `src/` layers. Third-party packages may be imported at any layer (`ui/panel.js` uses Tweakpane, `app/loader.js` hls.js, `app/audio.js` lazy-loads Tone.js). Test files are exempt.
+- The rules are about imports between `src/` layers. Third-party packages may be imported at any layer (`ui/panel.js` uses Tweakpane). Test files are exempt.
 - Core modules do not import each other either. Each is self-contained; a constant two of them need (the reference frame rate, the luma weights) is repeated with a comment.
 - `core/` and `app/` stay free of any UI framework.
 

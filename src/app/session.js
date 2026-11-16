@@ -8,7 +8,7 @@
  */
 import { Pipeline } from './pipeline.js';
 import { AudioEngine } from './audio.js';
-import { attachHlsSource, isDashUrl, isHlsUrl, isYouTubeUrl } from './loader.js';
+import { isDashUrl, isHlsUrl, isYouTubeUrl } from './loader.js';
 import { CanvasRecorder } from './exporter.js';
 import { render, renderBlank, renderMagnify } from './renderer.js';
 import { buildSourceProfile } from './source-profile.js';
@@ -397,7 +397,6 @@ export class Session {
     this.calibration = null; // a scale belongs to one camera setup
     this._setPlaying(false);
 
-    this.pipeline.clearExternalResources();
     const attached = this.video.srcObject instanceof MediaStream ? this.video.srcObject : null;
     for (const stream of new Set([attached, this._stream])) stream?.getTracks().forEach((track) => track.stop());
     this._stream = null;
@@ -461,18 +460,7 @@ export class Session {
     video.playsInline = true;
 
     if (!isLocal && isHlsUrl(src)) {
-      pipeline.setSourceProfile(buildSourceProfile('hls', HAS_RVFC));
-      video.crossOrigin = 'anonymous';
-      this._pendingSource.kind = 'hls';
-      try {
-        const ready = this._whenMetadata();
-        await attachHlsSource(src, video, pipeline);
-        await ready;
-        await this._ready();
-      } catch (error) {
-        pipeline.clearExternalResources();
-        this._fail(`Could not load the HLS stream${error.message && error.message !== 'load failed' ? `: ${error.message}` : ''}`);
-      }
+      this._fail('HLS streams are not supported: use a direct media URL');
       return;
     }
 

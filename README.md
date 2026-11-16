@@ -27,7 +27,7 @@ How each mode works, and what its controls mean, is in **[docs/modes.md](docs/mo
 
 ## Using it
 
-1. The opening page is an atlas of six effects — highlight motion, cut out the movers, leave trails, map speed & direction, magnify the invisible, reveal heat & air — each with a filmstrip and a "watch it on …" button that opens it playing on footage that shows it off. Or open your own video file, paste a video or HLS URL, or choose the camera or the screen.
+1. The opening page is an atlas of six effects — highlight motion, cut out the movers, leave trails, map speed & direction, magnify the invisible, reveal heat & air — each with a filmstrip and a "watch it on …" button that opens it playing on footage that shows it off. Or open your own video file, paste a video URL, or choose the camera or the screen.
 2. Pick an effect (keys **1** to **6**) and its look from the choices under the picture; press **A** to let MotionDiff measure the clip and set the gap and threshold for you.
 3. Adjust from there in the parameter panel (**P**), or drag the markers on the time ruler under the picture. The measured numbers sit beside the picture as instruments (**I**).
 
