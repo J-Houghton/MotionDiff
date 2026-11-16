@@ -1519,3 +1519,26 @@ against after, same machine, same scene order:
 - Frame time (SwiftShader, indicative): interleaved renders of the six
   proof scenes, two rounds each — before 53.3/53.1 s, after 52.0/53.0 s;
   within noise.
+
+## Session 7 (additions)
+
+### D-1. Data out: exports and the count line (docs/data-out.md)
+**Expected, written before building.**
+1. Unit tests hold the crossing geometry: a step across the drawn segment
+   counts once with the right direction; beyond the segment's ends, or on
+   first sight already past the line, nothing counts; crossing back counts
+   the other way; the CSV and JSON serialisers round-trip, `speed_mps`
+   appearing exactly when a calibration is set.
+2. `truth`, mask + boxes, a vertical line (320, 0)–(320, 360), normal
+   playback: counts read exactly 2 left→right (the square near t = 2.1 s,
+   the first disc near 2.9 s) and 1 right→left (the second disc near
+   9.4 s), each event within 0.4 s, nothing from the noise background or
+   the stopped square.
+3. The same run with the 0.1 m/px calibration: the exported CSV's square
+   speed within 20% of 120 px/s moving (and `speed_mps` within 20% of 12);
+   the JSON's t monotonic, counts cumulative over the event list, meta
+   carrying calibration and version.
+4. Audit clean with the line overlay and counts row up; the row only in a
+   tracking mode with a line set.
+5. No regression: no line, collection off → truth-mask byte-identical to
+   master.
