@@ -3,8 +3,8 @@
  *
  * Every mode reduces its result to the same thing: one unsigned number per
  * pixel, 0 (no motion) to 1 (as much as the mode can express). Whatever
- * wants to know "how much motion, where" — the sonification grid today,
- * other consumers later — works from that buffer and never from a mode's own
+ * wants to know "how much motion, where" — the readings panel's pooled grid
+ * today, other consumers later — works from that buffer and never from a mode's own
  * output, so it needs no knowledge of Posy baselines, signs or colour.
  *
  * The magnitude must be taken per pixel BEFORE any spatial averaging. A

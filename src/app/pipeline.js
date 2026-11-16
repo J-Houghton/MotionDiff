@@ -57,8 +57,8 @@ export class Pipeline {
     this._currentFrame = null;
     this._sourceProfile = buildSourceProfile('file', HAS_RVFC);
 
-    // ── Sonification energy grid (see core/energy.js) ──
-    // Size 0 means "nobody is listening" — neither path computes a grid.
+    // ── Pooled motion-magnitude grid (core/magnitude.js) ──
+    // Size 0 means "nobody is reading" — neither path computes a grid.
     this._energyCols = 0;
     this._energyRows = 0;
     this._energyGrid = null;
@@ -171,7 +171,7 @@ export class Pipeline {
 
       // The motion magnitude grid comes with every kind of result. A result
       // without one means that frame had no measurement: don't keep
-      // sounding the previous frame's.
+      // reporting the previous frame's.
       if (msg.energyBuffer) {
         this._energyGrid = new Float32Array(msg.energyBuffer);
         this._energyGridCols = msg.energyCols;

@@ -14,7 +14,6 @@
     "typecheck": "tsc -p jsconfig.json"
   },
   "_dependencyNotes": {
-    "tone": "Web Audio synth voices for motion sonification; loaded lazily inside app/audio.js",
     "tweakpane": "parameter panel, generated from each mode's schema (ui/panel.js)"
   },
   "devDependencies": {
@@ -23,7 +22,6 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
-    "tone": "^15.1.22",
     "tweakpane": "^4.0.5"
   }
 }

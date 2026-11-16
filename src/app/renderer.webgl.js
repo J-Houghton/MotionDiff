@@ -1418,7 +1418,7 @@ export class WebGLRenderer {
    *
    * Nothing here runs unless a grid is asked for. The readback is tiny (8x4
    * is 32 texels) and every buffer is allocated once per grid size, so the
-   * audio update path allocates nothing per frame.
+   * per-frame readers (the readings panel) allocate nothing per frame.
    *
    * @param {number} cols
    * @param {number} rows

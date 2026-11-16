@@ -177,4 +177,4 @@ Every mode also gives its result as data, not only as a picture: one value set p
 | Optical flow | vector | Speed as a share of the speed range; velocity in picture pixels per second |
 | Schlieren | vector | Size of the shift as a share of the sensitivity; the shift in picture pixels |
 
-The sonification (the Sound section of the panel) is driven by the same data: it pools "how much motion, where" into a coarse grid and plays one voice per cell, panned by position and pitched by height.
+The readings panel's pen line is driven by the same data: it pools "how much motion, where" into a coarse grid, whatever the mode.

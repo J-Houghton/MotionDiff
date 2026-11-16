@@ -35,7 +35,7 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 | Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. The experimental traces view this would have replaced was removed in the session-7 clean-up (archived) |
 | Camera compensation (global motion, then subtract it) | **done**, session 6 | On `handheld` the scenery cancels in Raw and in the mask with the crowd kept; `river`'s banks go dark under the zoom term; a still camera is byte-identical on and off | | `cameraComp` ("Steady camera"), docs/camera-compensation.md, V-6C. Three guards keep a still camera still |
 | Real-time stabiliser | planned, after compensation | `handheld` plays back steady | Medium | |
-| Sonification | done; **deferred** beyond keeping it working | | | Could be driven by flow speed and heading |
+| Sonification | **archived**, session-7 clean-up | | | Built sessions 1–2, never blind-judged; removed with Tone.js at the owner's decision (archive/sonification/). The pooled motion grid it read stays, feeding the readings panel |
 
 ## Visualisations
 | Item | Status | Expected visible effect, and on what footage | Effort | Notes |
@@ -107,7 +107,6 @@ Ranked by visible effect for the effort.
 | Per-vehicle separation inside a merged mask clump | Needs a measurement the mask does not make (a flow-direction split); tracking boxes congestion per clump today (V-6T) |
 | Compression motion vectors | |
 | YOLO proof of concept | Run on the original frame, not on diff output; combine with motion in data |
-| Audio engine improvements | Keep it working, do not extend it |
 | Phase-based / Riesz magnification | Large shader cost and a separate patent |
 
 ## Done

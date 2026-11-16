@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { posyBlend, rawDiff } from '../diff.js';
-import { cellEnergies } from '../energy.js';
+import { posyBlend } from '../diff.js';
 import { bandMagnitude, diffMagnitude, poolMagnitude } from '../magnitude.js';
 
 /** Solid grey RGBA frame with an optional brighter rectangle. */
@@ -152,40 +151,3 @@ describe('magnitude before pooling (the moving-square case)', () => {
   });
 });
 
-describe('cellEnergies is poolMagnitude of diffMagnitude', () => {
-  it('matches on a Posy diff with remainder cells', () => {
-    const W = 37;
-    const H = 23;
-    const a = new Uint8ClampedArray(W * H * 4);
-    const b = new Uint8ClampedArray(W * H * 4);
-    for (let i = 0; i < a.length; i++) {
-      a[i] = (i * 37) % 256;
-      b[i] = (i * 91 + 13) % 256;
-    }
-    const diff = new Uint8ClampedArray(W * H * 4);
-    posyBlend(a, b, diff, 6);
-
-    const direct = cellEnergies(diff, W, H, 5, 3, true);
-    const pooled = poolMagnitude(diffMagnitude(diff, true, new Float32Array(W * H)), W, H, 5, 3);
-
-    for (let i = 0; i < direct.length; i++) expect(pooled[i]).toBeCloseTo(direct[i], 5);
-  });
-
-  it('matches on a Raw diff', () => {
-    const W = 16;
-    const H = 8;
-    const a = new Uint8ClampedArray(W * H * 4);
-    const b = new Uint8ClampedArray(W * H * 4);
-    for (let i = 0; i < a.length; i++) {
-      a[i] = (i * 53) % 256;
-      b[i] = (i * 17 + 5) % 256;
-    }
-    const diff = new Uint8ClampedArray(W * H * 4);
-    rawDiff(a, b, diff, 10);
-
-    const direct = cellEnergies(diff, W, H, 4, 2, false);
-    const pooled = poolMagnitude(diffMagnitude(diff, false, new Float32Array(W * H)), W, H, 4, 2);
-
-    for (let i = 0; i < direct.length; i++) expect(pooled[i]).toBeCloseTo(direct[i], 5);
-  });
-});

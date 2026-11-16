@@ -43,8 +43,7 @@ Useful URL switches in a dev build: `?renderer=canvas2d` forces the Canvas 2D fa
 │   │   ├── magnitude.js            Shared unsigned motion magnitude, grid pooling
 │   │   ├── timebase.js             Media-time base: stamps, seek and loop detection, lookback
 │   │   ├── buffer.js               Frame ring bookkeeping, memory budget
-│   │   ├── analyze.js              Auto-configure: noise floor, threshold and gap
-│   │   └── energy.js               Motion grid to pitch and pan, for sonification
+│   │   └── analyze.js              Auto-configure: noise floor, threshold and gap
 │   ├── app/
 │   │   ├── effects.js              The six effects: modes folded by what they do, variants as visible choices
 │   │   ├── modes/                  The mode registry: one module per mode, index.js, shared params
@@ -59,8 +58,7 @@ Useful URL switches in a dev build: `?renderer=canvas2d` forces the Canvas 2D fa
 │   │   ├── loader.js               URL source detection
 │   │   ├── source-profile.js       Per-source capture settings
 │   │   ├── clips.js                Sample clips and parameter presets
-│   │   ├── exporter.js             WebM export (MediaRecorder)
-│   │   └── audio.js                Sonification engine (Tone.js, loaded lazily)
+│   │   └── exporter.js             WebM export (MediaRecorder)
 │   ├── ui/
 │   │   ├── shell.js                The DOM: stage, split compare, caption, transport, sheets
 │   │   ├── panel.js                Parameter panel (Tweakpane), built from each mode's schema
@@ -108,7 +106,7 @@ main.js imports app/ and ui/, and core/ for pure helpers
 
 **A mode's note to the person.** `frame.note(message, type)` puts a sentence on the status line (schlieren reports its setup that way). It is rate-limited; keep the sentence short.
 
-**Shared motion magnitude** (`core/magnitude.js`). Every mode reduces its result to one unsigned value per pixel, 0..1. Anything that wants "how much motion, where" (the sonification grid today) pools from that, never from a mode's own signed output: pooling a signed difference cancels a moving edge to zero. A registry mode draws its data into `renderer.dataFramebuffer()` with the magnitude in R.
+**Shared motion magnitude** (`core/magnitude.js`). Every mode reduces its result to one unsigned value per pixel, 0..1. Anything that wants "how much motion, where" (the readings panel's pooled grid today) pools from that, never from a mode's own signed output: pooling a signed difference cancels a moving edge to zero. A registry mode draws its data into `renderer.dataFramebuffer()` with the magnitude in R.
 
 **Two render paths.** WebGL2 is preferred; Canvas 2D with `pipeline.worker.js` is the fallback. Posy, Raw and Magnify must keep working on both. A new mode may be WebGL-only, but must then report that through the status line on the fallback.
 
@@ -180,7 +178,6 @@ Clarifications made along the way, with their reasons:
 - "Age rises steadily along a path" is measured on the median across the trail, not on single pixels.
 
 ## Gotchas
-- Web Audio cannot start without a user gesture: audio initialisation must happen inside a click handler.
 - Rendering to float textures in WebGL2 needs `EXT_color_buffer_float` (or the half-float variant). Feature-detect, never assume.
 - `UNPACK_FLIP_Y_WEBGL` is on for the whole context: textures are stored bottom-up. A shader that indexes texels with `texelFetch` and cares about image rows must flip explicitly. `texSubImage3D` rejects that flag for array buffers, so pixels reach a ring layer through `uploadPixels` and `storeCurrent`.
 - The WebGL canvas has `preserveDrawingBuffer: false`: read it back in the same task that rendered it, or you get a cleared buffer.
