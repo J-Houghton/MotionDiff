@@ -50,15 +50,23 @@ back off.
    with the tracker's boxes *as they stood at that moment*. The result
    arrives late by one inference; it is matched against that snapshot,
    never against "the current frame".
-3. **Match**: greedy best-overlap-first IoU (`core/boxmatch.js`,
-   unit-tested) between the model's boxes and the snapshot's track boxes,
-   above a deliberately low bar (0.15: the mask's box is a clump or a
-   leading edge and rarely hugs a thing the way the detector's box does).
-   A matched pair votes the model's label onto the track id — one look is
-   enough to name it, later looks vote the name steady by majority over
-   the last five. Per id the last look's outcome is kept: **both** or
-   **motion only**. The model's unmatched boxes are kept as the
-   **model-only** finds of that look, with its time.
+3. **Match** (`core/boxmatch.js`, unit-tested): the two do not box the
+   same things the same way — the detector hugs an object, the mask boxes
+   whatever moved together: a thin leading strip of a car, two clumps of
+   one car, one clump over a queue of cars. So a motion box and a
+   detection match when they overlap well (IoU ≥ 0.15) **or when most
+   of the smaller lies inside the larger** (≥ 0.6, between boxes of
+   comparable size: a speck inside a bus is not the bus, and a false
+   detection the width of the frame names nothing). Each motion box
+   takes the detection that fits it best, containment plus IoU, so of
+   two that hold a strip the snugger wins; **several motion boxes may
+   take one detection's name**. A matched pair votes the model's label
+   onto the track id — one look is enough to name it, later looks vote
+   the name steady by majority over the last five. Per id the last
+   look's outcome is kept: **both** or **motion only**. A detection that
+   fits no motion box is a **model-only** find of that look; one that
+   fits a motion box which took another's name (the second car under a
+   clump) is covered — motion found it too — and is not drawn.
 4. **Show**: the id plate carries the settled name, marked as an estimate
    (`7 · 93 px/s · ≈car`). Track boxes keep the accent colour when the
    model agrees and turn dashed-amber when motion alone found them; the

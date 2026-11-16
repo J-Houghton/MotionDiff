@@ -1971,3 +1971,38 @@ third and fixed before this was written.**
    0.78 … 0.17, then the next look's finds 0.97 … 0.03, then nothing —
    through the old 0.3 floor to zero, and gone. The GPU-rate check
    proper waits for M-1 again.
+
+**C-1 result (2026-11-16): four of five checks hold; the fourth does not,
+and the reason is not the matcher.**
+1. `core/boxmatch.js` with 17 tests, the three named ones among them (a
+   strip inside a car; two clumps on one car; two cars side by side,
+   whole boxes and strips, that do not swap). **The rule went further
+   than registered, on the evidence**: replaying the looks showed the
+   strip-inside-a-car case is the smaller half of the problem. Of the
+   stranded detections that overlap a motion box, most (103 of 130 once
+   several boxes could share a name) lie the other way round — a
+   detection mostly inside a motion clump that covers a queue of cars
+   and took one car's name. So containment is judged on the smaller box
+   inside the larger, in both directions, and a detection under a clump
+   counts as found by both (`covered`), not as a model-only find. A
+   size guard came out of the held-out clip: without it a false "car"
+   960 px wide named nine boxes at once.
+2. The recorded `traffic` looks through both matchers: paired motion
+   boxes **107 → 153** of 429 (registered: at least 130); plate-sized
+   **65 → 83** of 113 (at least 80); model-only finds overlapping a
+   motion box **124 → 57** (at least a third fewer), all model-only
+   finds 138 → 71. 35 detections name more than one motion box.
+3. Held out, `highway`: 39 → 71 of 521 paired; model-only finds 19 → 11.
+4. **In the app on the CPU rung the share of named boxes did not move**:
+   plate-sized box-samples named 2.5% and 0.7% in two 30 s runs, against
+   1.9% and 0.4% before — inside the run-to-run noise. Diagnosed, not
+   tuned: at one look every two seconds an answer names the boxes of a
+   picture two seconds gone, and most track ids do not live that long
+   (ids churn on a busy road, V-6T), so a name arrives for an id the
+   tracker has already dropped. The matcher decides who is paired within
+   a look; the look rate decides whether that reaches the screen. The
+   in-app effect is measured again in M-1 below, where looks are fast.
+5. `core/track.js` and `app/stages.js` are not in the diff.
+
+Also recorded: one `traffic` track was named "train" in each run (a bus
+or lorry the model misread at the 0.45 score floor).
