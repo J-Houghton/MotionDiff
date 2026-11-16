@@ -17,7 +17,7 @@ import { lookbackTime } from '../../core/timebase.js';
 import { BG_K } from '../../core/background.js';
 import { TRAIL_HOLD, TRAIL_REFRESH } from '../../core/trails.js';
 import { MASK_VOTES } from '../../core/mask.js';
-import { GAP, MASK_FILL, MASK_TRACK, THRESHOLD, TRAIL, asMs } from './params.js';
+import { GAP, MASK_FILL, MASK_NAMES, MASK_TRACK, THRESHOLD, TRAIL, asMs } from './params.js';
 
 // Pass 1. Mirrors boxBlur (core/blur.js) on each frame, then
 // threeFrameDifference and thresholdMask (core/mask.js).
@@ -332,6 +332,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     'Fill holes closes gaps in a cut-out up to twice its size across, after the clean-up vote, without growing the cut-out.',
     'Ignore lighting differences each frame\'s edges instead of its brightness, so a lighting or exposure change stops marking the whole frame; it replaces the blur. The mask is then sparse — thin lines where edges moved — and soft, diffuse fronts respond weakly: a remedy for lighting drift, not a better general mask.',
     'Box the movers groups what the mask finds into shapes and follows each one: a box with a number that stays with it, its measured speed, and an arrow one second ahead. A mover must persist a few frames before it is boxed, and survives a brief loss; what the mask merges (two movers touching) is one box, and a flat-coloured mover whose interior the mask cannot see may briefly carry a box per edge.',
+    'Name the movers loads a small image classifier (about 4 MB, fetched only when asked) that looks at the original frame under each box a few times a second and writes its best guess on the plate; the box carries the name while it lives. It names things as one of 1,000 everyday classes: a merged clump is named as one thing, and unusual footage gets a wrong or absent name.',
     'The count line (X, or the link in the readings margin) counts boxed movers crossing a line you draw, each way. Counts are of boxes: a merged clump counts once, and a mover whose box dies before the line never counts. A new source clears the line.',
     'Auto threshold learns each pixel\'s own noise (the background model\'s variance) and asks a difference to clear it as well as the set threshold, which becomes a floor: grainy footage cleans up without raising the threshold for the whole picture. The noise takes a second or two to be learnt.',
   ],
@@ -348,6 +349,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     MASK_AUTO,
     MASK_GRADIENT,
     MASK_TRACK,
+    MASK_NAMES,
     { key: 'maskShow', label: 'Show', type: 'select', default: 'cutout', options: { 'Cut-out': 'cutout', 'Solid mask': 'solid' } },
     TRAIL,
   ],

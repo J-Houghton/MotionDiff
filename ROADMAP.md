@@ -36,6 +36,7 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 | Camera zoom by pinch (owner's request) | **done**, session 5 (Session A) | Two fingers zoom the camera where the driver allows it | | In IA4. iOS Safari exposes no zoom control; still unconfirmed on a real phone |
 | Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. The experimental traces view this would have replaced was removed in the session-7 clean-up (archived) |
 | Data out: export tracks and readings; count movers over a drawn line | **done**, session 7 | On `truth`, counts equal the scene's known crossings (2 one way, 1 the other, each within 0.4 s); the exported CSV reads the square's known speed | | docs/data-out.md, verdict D-1. Collect/export in the panel's Export folder; the count line behind X and the margin link |
+| Naming what is tracked (proof of concept) | **done**, session 7 | On `traffic`, at least half the settled labels on ≥ 2 s boxes are vehicle classes; nothing loads until asked | | docs/naming-poc.md, verdict N-1. MobileNetV2 int8 over crops of the original frame, beside the pipeline; supersedes the deferred "YOLO proof of concept" (YOLO itself rejected: AGPL-3.0) |
 | Camera compensation (global motion, then subtract it) | **done**, session 6 | On `handheld` the scenery cancels in Raw and in the mask with the crowd kept; `river`'s banks go dark under the zoom term; a still camera is byte-identical on and off | | `cameraComp` ("Steady camera"), docs/camera-compensation.md, V-6C. Three guards keep a still camera still |
 | Real-time stabiliser | planned, after compensation | `handheld` plays back steady | Medium | |
 | Sonification | **archived**, session-7 clean-up | | | Built sessions 1–2, never blind-judged; removed with Tone.js at the owner's decision (archive/sonification/). The pooled motion grid it read stays, feeding the readings panel |
@@ -109,7 +110,6 @@ Ranked by visible effect for the effort.
 | Worker fallback for optical flow and schlieren | As for the other WebGL-only modes |
 | Per-vehicle separation inside a merged mask clump | Needs a measurement the mask does not make (a flow-direction split); tracking boxes congestion per clump today (V-6T) |
 | Compression motion vectors | |
-| YOLO proof of concept | Run on the original frame, not on diff output; combine with motion in data |
 | Phase-based / Riesz magnification | Large shader cost and a separate patent |
 
 ## Done

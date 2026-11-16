@@ -91,6 +91,9 @@ export class Session {
     this.source = null;
     /** @type {{metresPerPixel: number}|null} Real-unit scale from the marking flow (ui/calibrate.js); belongs to one camera setup */
     this.calibration = null;
+    /** @type {Awaited<ReturnType<import('./naming.js').createNamer>>|null} Loaded only when "Name the movers" is first asked for */
+    this._naming = null;
+    this._namingLoading = false;
     /** @type {import('../core/dataout.js').CountLine|null} Count line in picture px (ui/countline.js); belongs to one camera setup */
     this.countLine = null;
     /** @type {ReturnType<typeof createCounter>|null} */
@@ -207,8 +210,31 @@ export class Session {
       const problem = this.modeProblem();
       if (problem) this.setStatus(problem, 'error');
     }
+    // Naming (docs/naming-poc.md) loads only when first asked for.
+    if (params.maskNames === true && !this._naming && !this._namingLoading) void this._loadNaming();
+    if (params.maskNames === false) this._naming?.clear();
     this._emit('params');
     this._redrawIfPaused();
+  }
+
+  /** The settled name for a tracked box, or null (naming off or unsettled). */
+  nameFor(id) {
+    return this.params.maskNames && this._naming ? this._naming.labelFor(id) : null;
+  }
+
+  async _loadNaming() {
+    this._namingLoading = true;
+    this.setStatus('Loading the naming model (about 4 MB, once)…', 'info');
+    try {
+      const { createNamer } = await import('./naming.js');
+      this._naming = await createNamer();
+      this.setStatus('Naming is on: boxes carry their best guess', 'success');
+    } catch (error) {
+      this.setParams({ maskNames: false });
+      this.setStatus(`Naming could not load (offline?): ${error.message}`, 'error');
+    } finally {
+      this._namingLoading = false;
+    }
   }
 
   /** @param {'diff'|'overlay'|'glow'|'data'} display */
@@ -648,6 +674,12 @@ export class Session {
     if (this._stream && !this.manual && !this.video.paused) frameMeta = { mediaTime: performance.now() / 1000 };
     this.pipeline.process(this.video, frameMeta);
     this._dataStep();
+    // Naming rides beside the pipeline too: a round of crops a few times a
+    // second, fire-and-forget; the picture never waits for it.
+    const named = this.pipeline.readings;
+    if (this._naming && this.params.maskNames && named?.objects?.length) {
+      this._naming.tick(this.video, named.objects, named.width, named.height);
+    }
   }
 
   // ── Data out (docs/data-out.md): the counter and the collected log ──
