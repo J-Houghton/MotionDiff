@@ -18,9 +18,10 @@ import { matchBoxes } from '../core/boxmatch.js';
 const SEND_WIDTH = 960;
 /** A look starts no more often than this, however fast the model answers. */
 const EVERY_MS = 250;
-/** Votes kept per id, and how many a label needs to settle. */
+/** Votes kept per id. One look is enough to name a track — on a slow
+ * backend a short-lived id may only ever be seen once — and later looks
+ * vote the name steady by majority. */
 const VOTES = 5;
-const SETTLE = 2;
 /** Inference times kept for the readings' median. */
 const TIMES = 9;
 
@@ -52,10 +53,8 @@ export function createDetector(options = {}) {
     const tally = {};
     for (const v of entry.votes) tally[v] = (tally[v] || 0) + 1;
     const [best, count] = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
-    if (count >= SETTLE) {
-      entry.label = best;
-      entry.share = count / entry.votes.length;
-    }
+    entry.label = best;
+    entry.share = count / entry.votes.length;
     return entry;
   }
 

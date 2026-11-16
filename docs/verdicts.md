@@ -1656,3 +1656,38 @@ Transformers.js Apache-2.0; RT-DETR v2 r18vd ONNX Apache-2.0 (upstream
 PekingU Apache-2.0); COCO names ride in the model config; YOLO stays
 rejected (AGPL-3.0). WebGPU is absent in this sandbox's headless Chrome:
 backend choice and GPU speed are owner-desktop checks, named below.
+
+**Result (2026-11-15): all six registered checks hold in the sandbox; the
+WebGPU backend itself is an owner-desktop check.** Numbers (wasm/q8,
+SwiftShader-era CPU, indicative):
+1. Light without it: a 6 s run with boxes on and naming never asked for
+   makes zero requests to jsDelivr or Hugging Face and loads no detect
+   chunk; the build keeps the detector in its own lazy chunks (worker
+   1.2 kB + 3.2 kB glue); truth-mask filmstrip **byte-identical** to
+   master's, same machine, same scene order.
+2. `traffic`, 12 s: **15 of 15** settled labels on ≥ 2 s tracks are
+   vehicle-family (13 car, 1 truck, 1 bus) — against the registered "at
+   least half", and N-1's 4 of 7. Honest limits: most labels rest on one
+   look at this cadence (share 1.00 of 1 vote), and labels ride clump
+   boxes the way the help says.
+3. Disagreement: on `truth`, zero model-only finds and the movers motion-
+   only as registered — except one: the white disc matched one look as
+   "toilet" at the 0.45 score floor (recorded, not hidden; the help's
+   "synthetic shapes get no name or a wrong one" in the flesh). On
+   `traffic`, model-only finds in 27 of 29 samples (cars, persons — the
+   parked and the far), drawn dashed blue with their age; of settled
+   tracks 13 of 15 read "both".
+4. Beside the pipeline: one look in flight at a time, ~1.1 s per look on
+   wasm here (≈1 look/s); fps 15 with names on and off alike (within the
+   registered 25%); media time advanced undisturbed (3.35 → 5.03 s) while
+   the model loaded in 2.0 s mid-playback.
+5. Readings: "naming model" row (backend/dtype · ms per look · looks/s)
+   and the Copy model readings button, shown only while naming runs.
+6. Audit at 1440×900 with named boxes, dashed model-only finds and the
+   margin up: nothing clipped, overlapping or off screen; min contrast
+   4.65; model-find labels got plates when the first audit flagged bare
+   text on the picture.
+
+Not verifiable here, named for the owner's desktop: WebGPU selection and
+fp16 correctness (`?detdtype=fp32` is the fallback switch), real look
+rates and frame cost on a hardware GPU, and the phone's wasm behaviour.

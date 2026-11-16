@@ -41,12 +41,15 @@ back off.
    with the tracker's boxes *as they stood at that moment*. The result
    arrives late by one inference; it is matched against that snapshot,
    never against "the current frame".
-3. **Match**: greedy IoU (`core/boxmatch.js`, unit-tested) between the
-   model's boxes and the snapshot's track boxes. A matched pair votes the
-   model's label onto the track id (majority over the last five looks, as
-   before). Per id the last look's outcome is kept: **both** or **motion
-   only**. The model's unmatched boxes are kept as the **model-only**
-   finds of that look, with its time.
+3. **Match**: greedy best-overlap-first IoU (`core/boxmatch.js`,
+   unit-tested) between the model's boxes and the snapshot's track boxes,
+   above a deliberately low bar (0.15: the mask's box is a clump or a
+   leading edge and rarely hugs a thing the way the detector's box does).
+   A matched pair votes the model's label onto the track id — one look is
+   enough to name it, later looks vote the name steady by majority over
+   the last five. Per id the last look's outcome is kept: **both** or
+   **motion only**. The model's unmatched boxes are kept as the
+   **model-only** finds of that look, with its time.
 4. **Show**: the id plate carries the settled name, marked as an estimate
    (`7 · 93 px/s · ≈car`). Track boxes keep the accent colour when the
    model agrees and turn dashed-amber when motion alone found them; the

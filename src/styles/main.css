@@ -536,7 +536,8 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
    accent; the model's own finds = dashed blue estimates with their label. */
 .boxes g[data-agree='motion'] rect { stroke-dasharray: 7 5; }
 .boxes .boxes-model rect { stroke: var(--ch-b); stroke-dasharray: 4 4; }
-.boxes .boxes-model text { fill: var(--ch-b); paint-order: stroke; stroke: var(--card); stroke-width: 3px; }
+.boxes .boxes-model .boxes-plate { stroke-dasharray: none; }
+.boxes .boxes-model text { fill: var(--ch-b); }
 
 /* calibration: the marked known-length line (ui/calibrate.js) */
 .cal { position: absolute; z-index: 5; inset: 0; overflow: visible; cursor: crosshair; }

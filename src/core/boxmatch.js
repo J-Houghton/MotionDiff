@@ -27,10 +27,11 @@ export function iou(a, b) {
   return union > 0 ? shared / union : 0;
 }
 
-/** Overlap below this is no match: a third shared is a generous pairing
- * bar, since the mask's box (a clump, a leading edge) rarely hugs a thing
- * the way a detector's does. */
-export const MATCH_IOU = 0.3;
+/** Overlap below this is no match. The bar is deliberately low: the mask's
+ * box is a clump or a leading edge (a thin strip over a car reads ~0.2
+ * against the car's true box), so demanding a snug fit would call most
+ * true pairs disagreements. Ranking is still best-overlap-first. */
+export const MATCH_IOU = 0.15;
 
 /**
  * Pair tracks with detections, greedy highest-overlap-first. One partner

@@ -150,12 +150,21 @@ export function initBoxes({ root, stage, session }) {
       rect.setAttribute('height', f.h.toFixed(1));
       g.append(rect);
       if (f.w * f.h >= 1800) {
+        const text = `≈${f.label}`;
+        const plate = document.createElementNS(SVG, 'rect');
+        plate.setAttribute('class', 'boxes-plate');
         const label = document.createElementNS(SVG, 'text');
-        label.textContent = `≈${f.label}`;
+        label.textContent = text;
         label.setAttribute('font-size', String(fontSize));
-        label.setAttribute('x', (Math.max(2, f.x) + 3).toFixed(1));
-        label.setAttribute('y', (Math.min(ph - 4, f.y + f.h + fontSize)).toFixed(1));
-        g.append(label);
+        const lx = Math.max(2, f.x);
+        const ly = Math.min(ph - 4, f.y + f.h + fontSize + 2);
+        label.setAttribute('x', (lx + 3).toFixed(1));
+        label.setAttribute('y', (ly - 2).toFixed(1));
+        plate.setAttribute('x', lx.toFixed(1));
+        plate.setAttribute('y', (ly - fontSize - 3).toFixed(1));
+        plate.setAttribute('width', String(Math.round(text.length * fontSize * 0.62) + 6));
+        plate.setAttribute('height', String(fontSize + 5));
+        g.append(plate, label);
       }
       finds.append(g);
     }
