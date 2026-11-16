@@ -13,6 +13,7 @@
  * the worker fetches runtime and model from their homes only then.
  */
 import { matchBoxes } from '../core/boxmatch.js';
+import { createModelLadder } from './modelladder.js';
 
 /** Longest frame side sent to the model (the capture is scaled down). */
 const SEND_WIDTH = 960;
@@ -26,15 +27,13 @@ const VOTES = 5;
 const TIMES = 9;
 
 /**
- * Start the worker and load the model. Resolves when the model is ready;
- * rejects with a plain message when it cannot be fetched (the caller turns
- * the option back off).
- * @param {{onStatus?: (message: string, type: string) => void}} [options]
+ * Start the worker and load the model. `ready` resolves when a backend
+ * has proved a look; it rejects with a plain message when none can (the
+ * caller turns the option back off). `onLost` is called when the ladder
+ * runs out later, after it had been ready.
+ * @param {{onStatus?: (message: string, type: string) => void, onLost?: (message: string) => void}} [options]
  */
 export function createDetector(options = {}) {
-  /** @type {Worker|null} Set once a ladder rung loads the model. */
-  let worker = null;
-
   /** @type {Map<number, {votes: string[], label: string|null, share: number, outcome: 'both'|'motion'}>} */
   const names = new Map();
   /** @type {{x: number, y: number, w: number, h: number, label: string, score: number, atMs: number}[]} */
@@ -42,7 +41,7 @@ export function createDetector(options = {}) {
   /** @type {{tracks: {id: number, x: number, y: number, w: number, h: number}[], toPicture: number, sentMs: number}|null} */
   let pending = null;
   let lastSendMs = 0;
-  const status = { backend: '…', dtype: '', loadMs: 0, lastInferMs: 0, inferTimes: /** @type {number[]} */ ([]), looks: /** @type {number[]} */ ([]) };
+  const status = { lastInferMs: 0, inferTimes: /** @type {number[]} */ ([]), looks: /** @type {number[]} */ ([]) };
 
   /** @param {number} id @param {string} label */
   function vote(id, label) {
@@ -89,70 +88,23 @@ export function createDetector(options = {}) {
     }));
   }
 
-  /** How long one rung may spend downloading and compiling before it is
-   * written off as hung (a wedged driver throws nothing at all). */
-  const RUNG_MS = 180000;
-
-  /** One rung: a fresh worker, so a crashed runtime cannot poison the next
-   * try — a wasm abort leaves its instance failing everywhere after. */
-  function attempt(device, dtype) {
-    return new Promise((resolve, reject) => {
-      const w = new Worker(new URL('./detect.worker.js', import.meta.url), { type: 'module' });
-      const timer = setTimeout(() => { w.terminate(); reject(new Error('took too long (hung?)')); }, RUNG_MS);
-      w.onmessage = (event) => {
-        const message = event.data;
-        clearTimeout(timer);
-        if (message.type === 'ready') resolve(w);
-        else { w.terminate(); reject(new Error(message.message || 'failed')); }
-      };
-      w.onerror = (event) => { clearTimeout(timer); w.terminate(); reject(new Error(event.message || 'worker failed')); };
-      w.postMessage({ type: 'load', device, dtype });
-    });
-  }
-
-  /** The loaded worker's steady-state messages: looks and their failures. */
-  function wire(w) {
-    w.onmessage = (event) => {
-      const message = event.data;
-      if (message.type === 'result') onResult(message);
-      else if (message.type === 'error' && pending) {
-        pending = null;
-        options.onStatus?.(`The detector failed a look: ${message.message}`, 'error');
-      }
-    };
-  }
-
-  const override = new URLSearchParams(location.search).get('detdtype') || undefined;
-  const ready = (async () => {
-    const t0 = performance.now();
-    // WebGPU rungs first where the browser has an adapter; wasm/q8 (21 MB)
-    // is the rung that runs anywhere. `?detdtype=` pins the WebGPU rung.
-    const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
-    const ladder = adapter
-      ? [...(override ? [['webgpu', override]] : [['webgpu', 'fp16'], ['webgpu', 'fp32']]), ['wasm', 'q8']]
-      : [['wasm', override || 'q8']];
-    const failures = [];
-    for (const [device, dtype] of ladder) {
-      try {
-        worker = await attempt(device, dtype);
-        wire(worker);
-        status.backend = device;
-        status.dtype = dtype;
-        status.loadMs = Math.round(performance.now() - t0);
-        // The status line shows where the ladder landed; this says why it
-        // stepped down, for whoever is triaging.
-        if (failures.length) console.warn('naming model stepped down:', failures.join(' | '));
-        return;
-      } catch (error) {
-        failures.push(`${device}/${dtype}: ${String(error?.message || error)}`);
-      }
-    }
-    throw new Error(`no backend would load the model — ${failures.join('; ')}`);
-  })();
+  // The backend ladder (docs/model-ladder.md): a rung is ready only once
+  // it has proved a look, and a look that fails later steps down once.
+  // `?detdtype=fp32` pins the WebGPU rung for triage.
+  const ladder = createModelLadder({
+    spawn: () => new Worker(new URL('./detect.worker.js', import.meta.url), { type: 'module' }),
+    noun: 'Naming',
+    model: 'detector',
+    pin: new URLSearchParams(location.search).get('detdtype'),
+    onResult,
+    onLookFailed: () => { pending = null; },
+    onStatus: options.onStatus,
+    onLost: options.onLost,
+  });
 
   return {
-    /** Resolves when the model answered ready; rejects when it cannot load. */
-    ready,
+    /** Resolves when a backend has proved a look; rejects when none can. */
+    ready: ladder.ready,
 
     /**
      * Called per processed frame; starts a look at most every EVERY_MS and
@@ -166,7 +118,7 @@ export function createDetector(options = {}) {
       const alive = new Set(objects.map((o) => o.id));
       for (const id of names.keys()) if (!alive.has(id)) names.delete(id);
       const now = performance.now();
-      if (!worker || pending || now - lastSendMs < EVERY_MS) return;
+      if (!ladder.live() || pending || now - lastSendMs < EVERY_MS) return;
       const vw = video.videoWidth;
       const vh = video.videoHeight;
       if (!vw || !vh || !pictureWidth || !pictureHeight) return;
@@ -183,7 +135,13 @@ export function createDetector(options = {}) {
         sentMs: now,
       };
       createImageBitmap(video, { resizeWidth: sendW, resizeHeight: sendH, resizeQuality: 'low' })
-        .then((bitmap) => worker.postMessage({ type: 'frame', bitmap, time: video.currentTime }, [bitmap]))
+        .then((bitmap) => {
+          // The rung may have been retired while the picture was scaled.
+          if (!ladder.post({ type: 'frame', bitmap, time: video.currentTime }, [bitmap])) {
+            bitmap.close();
+            pending = null;
+          }
+        })
         .catch(() => { pending = null; });
     },
 
@@ -208,9 +166,7 @@ export function createDetector(options = {}) {
     status() {
       const sorted = [...status.inferTimes].sort((a, b) => a - b);
       return {
-        backend: status.backend,
-        dtype: status.dtype,
-        loadMs: status.loadMs,
+        ...ladder.facts(),
         lastInferMs: status.lastInferMs,
         medianInferMs: sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0,
         looksPerSecond: +(status.looks.length / 5).toFixed(1),
@@ -224,7 +180,7 @@ export function createDetector(options = {}) {
     },
 
     dispose() {
-      worker?.terminate();
+      ladder.dispose();
     },
   };
 }
