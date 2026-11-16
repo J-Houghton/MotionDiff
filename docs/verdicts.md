@@ -1765,3 +1765,335 @@ so albedo can masquerade as distance. That is the estimate's nature, not
 a rendering fault; the help's "an estimate, not a measurement" covers
 it, and the factor's per-id smoothing and clamp bound what it can do to
 a speed.
+
+## Session 9
+
+### L-1. The backend ladder proves a look (docs/model-ladder.md) — robustness
+**Expected, written before building (2026-11-16).**
+
+The case that broke, recorded on master (74f2d08) in this machine's
+headless Chrome — which, unlike the session-8 sandbox, has a real WebGPU
+adapter (Intel Xe-LPG): `traffic`, mask + boxes + names. The ladder
+logged `webgpu/fp16: 94952944` (a crash at load), landed on webgpu/fp32,
+said `Naming is on (webgpu/fp32)`, and then put `The detector failed a
+look: using ceil() in shape computation is not yet supported for
+AveragePool` on the status line 52 times in 30 s. No look completed.
+Depth on the same build and machine: `Depth is on (webgpu/fp16)`, loaded
+in 4.3 s, median look 390–650 ms, 1.6–2.2 looks/s, map 0.4–0.8 s behind.
+
+1. **The case that broke now works**: same clip, same machine, no
+   switches. Naming lands on wasm/q8; the status line says it is running
+   on the CPU because the GPU backend can't run this model; looks
+   complete and boxes get names; "failed a look" never appears. The
+   console warning names each rung's failure with its stage.
+2. **A look that fails after ready steps down once**: depth with
+   `?modelfault=webgpu/fp16:look` (the rung proves, then every real look
+   fails). One stepping-down line, no per-look error; it lands on
+   webgpu/fp32 with the reason in words; looks resume.
+3. **The last rung reports once, then switches off**: naming with
+   `?modelfault=wasm:look`. One "failed a look" line, then after three
+   failures in a row the option turns itself off with a sentence; no
+   further looks are sent.
+4. **No rung can run it**: `?modelfault=all:prove`. The option turns
+   itself off; the sentence says no backend could run the model and
+   names each rung.
+5. **Depth is unchanged where it worked**: no switches. It lands on
+   webgpu/fp16 with the sentence it had, word for word; look time,
+   cadence and map age within the baseline's range above. Load time is
+   allowed to grow by about one look (the proof), and is recorded.
+6. **No GPU**: with `navigator.gpu` hidden, both go straight to wasm/q8
+   with their old sentences and no console warning.
+7. **Logic the eye cannot check**: unit tests for the ladder's order, the
+   step-down decision — including a rung that loads but fails its first
+   look — the words, and the triage switch; `npm test`, `npm run
+   typecheck` and `npm run build` pass; the ladder code stays in the lazy
+   model chunks.
+
+Not verifiable here, named for the owner's desktop: that their GPU takes
+the same path (fp16 may load there where it crashes here), and the CPU
+look rate on their machine.
+
+**Result (2026-11-16): all seven registered checks hold, on a real WebGPU
+adapter.** Same machine and headless Chrome as the recording above
+(Intel Xe-LPG, `shader-f16`), `traffic`, mask + boxes, 30–45 s runs; every
+status-line change was logged with its time.
+1. The case that broke: `Naming is running on the CPU (wasm/q8) because
+   the GPU backend can't run this model`, 13 s after the switch (three
+   rungs tried; it was 7.3 s to the false "ready" before). Looks complete
+   at about 2 s each on this CPU with Chrome's GPU process busy (0.6
+   looks/s), boxes get names, model-only finds are drawn; "failed a look"
+   appears **0** times against 52. Console: `naming model stepped down:
+   webgpu/fp16 load: 94952944 | webgpu/fp32 first look: using ceil() in
+   shape computation is not yet supported for AveragePool`. The cause is
+   confirmed, not assumed: the fp16 graph holds three AveragePool nodes
+   with `ceil_mode=1` (2×2, stride 2), and the sentence is thrown by the
+   runtime's JavaScript WebGPU backend when it first computes a pool's
+   shape inside a run — the session builds without complaint.
+2. A look that fails after ready (depth, `?modelfault=webgpu/fp16:look`):
+   `Depth is on (webgpu/fp16)…`, then one `Depth is stepping down:
+   webgpu/fp16 failed a look`, then 5.4 s later `Depth is running on the
+   GPU (webgpu/fp32) because webgpu/fp16 failed a look`; looks resume at
+   1.2–1.4 /s. No per-look error.
+3. The last rung (naming, `?modelfault=wasm:look`): one `The detector
+   failed a look: …`, then `Naming switched itself off: the detector
+   failed 3 looks in a row on the CPU (…)`; the toggle is off and nothing
+   more is sent for the remaining 30 s.
+4. No rung can run it (`?modelfault=all:prove`, both options): both turn
+   themselves off; `Depth could not start: no backend could run the
+   model — webgpu/fp16 first look: …; webgpu/fp32 first look: …; wasm/q8
+   first look: …`, and the same for naming with its real fp16 load crash
+   first in the list.
+5. Depth where it worked, two runs: `Depth is on (webgpu/fp16): an
+   estimate beside the pipeline, a look or two behind`, word for word;
+   median look 360–396 ms, 2.4 looks/s, map 0.5–0.8 s behind — inside
+   the baseline's range at its fast end. **Load grew from 4.3 s to
+   6.5–6.6 s**, more than the "about one look" registered: on WebGPU the
+   proving look also compiles the shaders, a cost the first real look
+   used to carry (the baseline's first looks read 650–750 ms and then
+   settled; these start settled).
+6. No GPU (`navigator.gpu` hidden in the page): `Naming is on
+   (wasm/q8): …` and `Depth is on (wasm/q8): …`, the old sentences; no
+   console warning; both look.
+7. 19 new unit tests (333 in all) cover the order, the decision — a rung
+   that loads but fails its first look among them — the words and the
+   switch; typecheck and build pass. The ladder is a lazy 3.9 kB chunk
+   shared by the two models; the main bundle grew 0.5 kB (the two
+   loaders' sentences and the copied readings' extra line).
+
+Also seen, and recorded rather than hidden: on this GPU the detector's
+fp16 rung crashes at load with a bare number (`94952944`) on the pinned
+runtime; depth's fp16 rung loads and runs. The ladder absorbs it either
+way.
+
+Left for the owner's desktop: the same switch on the deployed build
+should now read "running on the CPU … because the GPU backend can't run
+this model" (or "would not load it", if every GPU rung there fails
+before a look), with names appearing at the CPU's rate; and depth should
+read exactly as it did.
+
+### F-1, C-1 and M-1 again: naming made visibly better (docs/naming-poc.md)
+**Expected, written before building (2026-11-16).** Three steps, one
+commit each, registered together so the order is on record.
+
+What the owner sees (laptop, integrated GPU, naming on the CPU rung):
+dashed model boxes sitting in empty space, and names that do not follow
+the motion boxes, many of which stay unnamed. Measured here on the same
+rung (`traffic`, mask + boxes + names, `?modelfault=webgpu:load`, 30 s
+sampled five times a second; looks take about 1.9 s):
+- Every model-only find drawn was stale: 1021 of 1021 find-samples older
+  than 1.5 s (youngest 1.9 s, median 3.0 s, oldest 4.3 s). They are
+  stamped when the frame is sent, arrive one look later, never move, and
+  stay — at an opacity floored at 0.3 — until the next look replaces
+  them.
+- **2.2%** of drawn box-samples carried a name (1.9% of the boxes large
+  enough to show a plate); 12 of 64 tracks that lived two seconds ever
+  got one.
+- On 19 recorded looks of `traffic` (the tracker's boxes as sent, and
+  what the model returned, replayed through the matcher): 107 of 429
+  motion boxes found a partner (65 of 113 plate-sized ones); 138 of 245
+  detections were left as model-only finds, and **124 of those 138
+  overlap a motion box** — they are not the model seeing something
+  motion missed, they are the matcher failing to pair. 236 of the 429
+  motion boxes touch no detection at all (far field, clutter, coasting):
+  no matcher can name those. `highway`, 14 looks, held out: 39 of 521
+  paired.
+
+**F-1. Stale finds — robustness.**
+1. The rule is a pure function with tests: a find's age is measured in
+   media time from the frame the model looked at; it is drawn at full
+   strength while young, fades to **nothing**, and is dropped at a bound
+   of a few look periods, capped at an absolute age; a find that arrives
+   already past its prime is never drawn.
+2. On the CPU rung here (the run above repeated): no find-sample older
+   than the bound, against 1021; no opacity floor. With looks slower
+   than the cap this means **no model-only finds are drawn at all** on
+   that rung — that is the rule working, and is named as a limit.
+3. Paused, a find stays with the frozen picture it belongs to (its age
+   is media time); after a seek or a loop it is gone.
+4. Fresh finds still show where looks are fast — checked in M-1 again,
+   once the GPU rung exists.
+
+**C-1. Matching loose boxes — robustness.**
+1. In `core/boxmatch.js`, with tests: a motion box matches the detection
+   that holds most of it (containment) or overlaps it well (IoU);
+   several motion boxes may take one detection's name. Named tests: a
+   strip inside a car; two clumps on one car; two cars side by side that
+   must not swap.
+2. On the recorded `traffic` looks, same looks through both matchers:
+   paired motion boxes rise from 107 to **at least 130** of 429, and
+   plate-sized ones from 65 to **at least 80** of 113; model-only finds
+   that overlap a motion box fall from 124 by **at least a third**.
+3. Held out, `highway`: no fewer boxes paired than before (39).
+4. In the app on the CPU rung: the share of plate-sized box-samples
+   carrying a name rises from 1.9%. (How far depends on the look rate as
+   much as the matcher: a name arrives a look late and dies with its id.)
+5. The motion boxes themselves are untouched: `core/track.js` and the
+   stages are not in the diff.
+
+**M-1 again, on Transformers.js 4.3.2 (the detector worker only) —
+robustness.** The six M-1 checks as registered in Session 8, re-run on
+this machine's real WebGPU adapter, plus:
+7. The ladder lands on a GPU rung here (`Naming is on (webgpu/…)`), and
+   looks come at least twice a second, against 0.6.
+8. With the GPU rungs made to fail (`?modelfault=webgpu:load`), it still
+   lands on the CPU on the new runtime, says why, and names.
+9. Depth is untouched: `depth.worker.js` is byte-identical to the
+   branch's base, still on 3.8.1, and reads as in L-1.
+10. With fast looks the model-only finds drawn are fresh (none older
+    than F-1's bound) and fade out rather than sit.
+
+Not verifiable here: the owner's laptop GPU (whether the new runtime's
+GPU rungs load where the old one's would not), and its CPU look rate.
+
+**F-1 result (2026-11-16): the four checks hold; one bug found by the
+third and fixed before this was written.**
+1. `core/finds.js` (`findBound`, `findOpacity`, `lookPeriod`), 13 tests:
+   three look periods capped at 1.5 s; full strength for the first two
+   thirds of that, a straight fade to nothing over the last; a find that
+   arrives already in its fade is never drawn (the registered "past its
+   prime", made exact: one arriving at 1.3 s against a 1.5 s bound would
+   only blink).
+2. CPU rung, the baseline run repeated (looks 2.6 s this time): **0**
+   find-samples in 30 s, against 1021 — nothing older than the bound
+   because nothing arrives inside it. Named as a limit in the design
+   note and the help text: on a slow backend the model-only finds do not
+   appear.
+3. Slow motion (0.25×) makes looks fast in media time on the same rung,
+   so the fresh case could be exercised before a GPU rung exists: finds
+   drawn in 100 of 117 samples, ages 0.46–1.04 s. Paused on a frame with
+   finds: still there four seconds later (the look in flight landed, its
+   finds 54 ms from the frozen frame). Seek six seconds on: gone within
+   100 ms. **The first run of this check failed**: the finds' clock was
+   read only when a look was scheduled, and nothing schedules one after
+   a seek while paused, so the old finds stayed. The detector now reads
+   the picture's own time whenever it is asked.
+4. Back to full speed from slow motion, sampled every 50 ms: 1, 0.9,
+   0.78 … 0.17, then the next look's finds 0.97 … 0.03, then nothing —
+   through the old 0.3 floor to zero, and gone. The GPU-rate check
+   proper waits for M-1 again.
+
+**C-1 result (2026-11-16): four of five checks hold; the fourth does not,
+and the reason is not the matcher.**
+1. `core/boxmatch.js` with 17 tests, the three named ones among them (a
+   strip inside a car; two clumps on one car; two cars side by side,
+   whole boxes and strips, that do not swap). **The rule went further
+   than registered, on the evidence**: replaying the looks showed the
+   strip-inside-a-car case is the smaller half of the problem. Of the
+   stranded detections that overlap a motion box, most (103 of 130 once
+   several boxes could share a name) lie the other way round — a
+   detection mostly inside a motion clump that covers a queue of cars
+   and took one car's name. So containment is judged on the smaller box
+   inside the larger, in both directions, and a detection under a clump
+   counts as found by both (`covered`), not as a model-only find. A
+   size guard came out of the held-out clip: without it a false "car"
+   960 px wide named nine boxes at once.
+2. The recorded `traffic` looks through both matchers: paired motion
+   boxes **107 → 153** of 429 (registered: at least 130); plate-sized
+   **65 → 83** of 113 (at least 80); model-only finds overlapping a
+   motion box **124 → 57** (at least a third fewer), all model-only
+   finds 138 → 71. 35 detections name more than one motion box.
+3. Held out, `highway`: 39 → 71 of 521 paired; model-only finds 19 → 11.
+4. **In the app on the CPU rung the share of named boxes did not move**:
+   plate-sized box-samples named 2.5% and 0.7% in two 30 s runs, against
+   1.9% and 0.4% before — inside the run-to-run noise. Diagnosed, not
+   tuned: at one look every two seconds an answer names the boxes of a
+   picture two seconds gone, and most track ids do not live that long
+   (ids churn on a busy road, V-6T), so a name arrives for an id the
+   tracker has already dropped. The matcher decides who is paired within
+   a look; the look rate decides whether that reaches the screen. The
+   in-app effect is measured again in M-1 below, where looks are fast.
+5. `core/track.js` and `app/stages.js` are not in the diff.
+
+Also recorded: one `traffic` track was named "train" in each run (a bus
+or lorry the model misread at the 0.45 score floor).
+
+**M-1 again, result (2026-11-16): the detector's worker on Transformers.js
+4.3.2 — nine of the ten checks hold on this machine's real WebGPU adapter;
+the fourth holds only just, and the third has a recorded exception.**
+Headless Chrome, Intel Xe-LPG, fresh browser profile each run (so every
+load includes the downloads).
+1. Light without it: 6 s with boxes on and naming never asked for makes
+   0 requests to jsDelivr or Hugging Face and loads none of the model
+   modules; the build keeps them in lazy chunks (detector 3.7 kB, its
+   worker 1.6 kB, the ladder 3.9 kB; main bundle 379.3 kB); `truth-mask`
+   and `truth-raw` filmstrips and the mask's data output are
+   **byte-identical** to master's (74f2d08), same machine, same order.
+2. `traffic`, 12 s: **13 of 13** settled labels on ≥ 2 s tracks are
+   vehicle-family (12 car, 1 truck); a second, 20 s run: 24 of 24 (20
+   car, 2 train, 1 truck, 1 bus — "train" is a lorry or bus misread).
+3. Disagreement. `traffic`: model-only finds drawn in 74 of 84 samples;
+   of the settled labelled tracks **8 of 13** read "both" (13 of 24 in
+   the second run). Of all tracks that lived two seconds, labelled or
+   not, 8 of 21 read "both" and 13 motion-only — the far field the
+   model does not see. `truth`: 6 of 7 settled tracks motion-only, **but
+   two were named "toilet"** (the white disc again, as in Session 8),
+   and a stray model-only find was drawn in 41 of 187 samples. Looks
+   four times as fast show the model's misreads of synthetic shapes
+   four times as often; the help text's "synthetic shapes get no name or
+   a wrong one" stands. Recorded as the exception it is.
+4. Beside the pipeline: one look in flight; the picture kept playing
+   while the model loaded (media time 2.2 → 14.1 s over an 11.9 s
+   load). **Frame rate with names on is 24 fps against 30 off**
+   (interleaved 8 s windows: off 30.0, 29.7, 30.0; on 24.2, 21.6, 24.1).
+   Median frame time 41.5 ms against 33.3: +24.5%, inside the registered
+   25% by half a point, and the worst window is outside it. On an
+   integrated GPU the detector now shares the GPU with the picture; on
+   the CPU rung it cost nothing (29.9 on and off). Named as a limit.
+5. Readings: the "naming model" row reads `webgpu/fp16 · 418 ms ·
+   2.2/s`, and *Copy model readings* is shown.
+6. Audit at 1440×900 with named boxes, dashed model-only finds and the
+   margin up, light theme: nothing clipped, overlapping or off screen;
+   min contrast 4.65, as in Session 8. In the dark theme the audit
+   reports 3.38:1 for every box plate, named or not: it reads the SVG
+   text's CSS `color` where the overlay paints with `fill`. The styles
+   are not in this branch's diff; recorded as a fault of the measuring
+   tool to fix, not passed over.
+7. The ladder lands on the first rung: `Naming is on (webgpu/fp16):
+   boxes carry the model's best guess`, median look **0.42–0.44 s, 2.2
+   looks/s** against 0.6. (On 3.8.1 this GPU's fp16 rung crashed at load
+   and fp32 could not run the model.)
+8. GPU rungs made to fail (`?modelfault=webgpu:load`): `Naming is
+   running on the CPU (wasm/q8) because the GPU backend would not load
+   it`, looks 1.5–1.8 s on the new runtime's CPU backend (1.9–2.6 s on
+   3.8.1), names appear (5 settled labels in 20 s, all vehicle-family
+   or person), no model-only finds drawn, 29.9 fps.
+9. Depth untouched: `depth.worker.js` and `depthstage.js` have no diff
+   since L-1, the built depth worker chunk has the same content hash,
+   and it still pins 3.8.1. Alone it reads `Depth is on (webgpu/fp16)…`
+   at 371–406 ms, 2.2–2.4 looks/s. With naming on as well, both run on
+   webgpu/fp16 from their two runtimes at about 1.8–2 looks/s each.
+10. Fresh finds at fast looks: 327 find-samples aged 0.41–1.11 s, none
+    past the 1.5 s cap (0.38–1.43 s over all runs); lowest strength
+    seen while one was being replaced 0.55, and 0.04 on the way out.
+
+**What the three steps did to the picture together** (`traffic`, share of
+drawn box-samples carrying a name; plate-sized boxes in brackets):
+- 3.8.1, CPU rung, old matcher (what the owner saw): 2.2% (1.9%).
+- 4.3.2 on the GPU, old matcher: 20.1%, 20.0% (31.6%, 34.4%).
+- 4.3.2 on the GPU, new matcher: 22.7%, 25.2%, 26.6% (35.5%, 35.9%,
+  37.0%); settled two-second tracks named 49 of 70.
+- Model-only find-samples in 20 s at GPU rate: 1160 and 1177 with the
+  old matcher, **502** with the new.
+So the look rate is most of the gain in names, the matcher adds about
+five points and more than halves the model-only boxes, and on a slow
+rung the stale-finds rule removes them altogether. About three quarters
+of drawn boxes still carry no name: more than half of all motion boxes
+touch nothing the model detected (236 of 429 on the recorded looks).
+
+Not verified here: any GPU but this one; the owner's laptop, where the
+old runtime's GPU rungs "would not load" — whether the new runtime's do
+is the first thing to read off its status line; Firefox and Safari; and
+a phone.
+
+### Parked: both model options marked experimental — interface
+Registered with the step (2026-11-16): the two toggles say "experimental"
+in their labels without clipping or overlapping anything in the panel, at
+desktop and phone sizes. **Result:** `Name the movers — experimental
+(loads a model)` and `Depth the scene — experimental (loads a model)`,
+five lines each in the panel's label column (the old labels took five).
+A first wording, "(experimental; loads a detector model)", ran its
+longest word into the checkbox and was dropped. At 1440×900 the word
+"experimental" is 5 px wider than the 94 px label column and stays clear
+of the checkbox; at 390×844 it fits. Audit with the panel open, light
+theme: nothing clipped, overlapping or off screen, min contrast 4.65.
+Where the options stand is docs/ml-status.md.

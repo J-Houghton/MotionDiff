@@ -142,11 +142,13 @@ export function initBoxes({ root, stage, session }) {
     }
 
     // Model-only finds: where the model saw something at its last look —
-    // an ageing estimate, not a track, and drawn to say so.
+    // an ageing estimate, not a track, and drawn to say so. The detector
+    // hands over only those still worth drawing, each with its strength:
+    // a find fades to nothing and is gone (core/finds.js).
     finds.textContent = '';
     for (const f of session.modelFinds() || []) {
       const g = document.createElementNS(SVG, 'g');
-      g.setAttribute('opacity', String(Math.max(0.3, 1 - f.ageMs / 4000).toFixed(2)));
+      g.setAttribute('opacity', f.opacity.toFixed(2));
       const rect = document.createElementNS(SVG, 'rect');
       rect.setAttribute('x', f.x.toFixed(1));
       rect.setAttribute('y', f.y.toFixed(1));

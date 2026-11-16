@@ -13,6 +13,8 @@
  * the worker fetches runtime and model from their homes only then.
  */
 import { matchBoxes } from '../core/boxmatch.js';
+import { findBound, findOpacity, lookPeriod } from '../core/finds.js';
+import { createModelLadder } from './modelladder.js';
 
 /** Longest frame side sent to the model (the capture is scaled down). */
 const SEND_WIDTH = 960;
@@ -24,25 +26,32 @@ const EVERY_MS = 250;
 const VOTES = 5;
 /** Inference times kept for the readings' median. */
 const TIMES = 9;
+/** Looks whose media times are kept to know the look rate (core/finds.js). */
+const PERIOD_LOOKS = 6;
 
 /**
- * Start the worker and load the model. Resolves when the model is ready;
- * rejects with a plain message when it cannot be fetched (the caller turns
- * the option back off).
- * @param {{onStatus?: (message: string, type: string) => void}} [options]
+ * Start the worker and load the model. `ready` resolves when a backend
+ * has proved a look; it rejects with a plain message when none can (the
+ * caller turns the option back off). `onLost` is called when the ladder
+ * runs out later, after it had been ready.
+ * @param {{onStatus?: (message: string, type: string) => void, onLost?: (message: string) => void}} [options]
  */
 export function createDetector(options = {}) {
-  /** @type {Worker|null} Set once a ladder rung loads the model. */
-  let worker = null;
-
   /** @type {Map<number, {votes: string[], label: string|null, share: number, outcome: 'both'|'motion'}>} */
   const names = new Map();
-  /** @type {{x: number, y: number, w: number, h: number, label: string, score: number, atMs: number}[]} */
+  /** @type {{x: number, y: number, w: number, h: number, label: string, score: number, time: number, arrivalAge: number}[]} */
   let modelOnly = [];
-  /** @type {{tracks: {id: number, x: number, y: number, w: number, h: number}[], toPicture: number, sentMs: number}|null} */
+  /** @type {{tracks: {id: number, x: number, y: number, w: number, h: number}[], toPicture: number, time: number}|null} */
   let pending = null;
   let lastSendMs = 0;
-  const status = { backend: '…', dtype: '', loadMs: 0, lastInferMs: 0, inferTimes: /** @type {number[]} */ ([]), looks: /** @type {number[]} */ ([]) };
+  /** @type {HTMLVideoElement|null} The picture, kept from the first tick:
+   * its media time is the clock finds age by, read live so a seek or a
+   * step while paused counts at once. */
+  let picture = null;
+  const mediaNow = () => (picture ? picture.currentTime : NaN);
+  /** @type {number[]} Media times of the recent looks, for the look rate. */
+  const lookTimes = [];
+  const status = { lastInferMs: 0, inferTimes: /** @type {number[]} */ ([]), looks: /** @type {number[]} */ ([]) };
 
   /** @param {number} id @param {string} label */
   function vote(id, label) {
@@ -81,78 +90,36 @@ export function createDetector(options = {}) {
       if (entry) entry.outcome = 'motion';
       else names.set(track.id, { votes: [], label: null, share: 0, outcome: 'motion' });
     }
-    // The model's own finds, back in picture pixels, stamped with the look.
+    // The model's own finds, back in picture pixels, stamped with the
+    // frame they were seen in and how far the picture had already moved on
+    // when the answer came back (core/finds.js decides what is still shown).
+    lookTimes.push(snapshot.time);
+    if (lookTimes.length > PERIOD_LOOKS) lookTimes.shift();
     const k = snapshot.toPicture;
+    const arrivalAge = Math.abs(mediaNow() - snapshot.time);
     modelOnly = detectionOnly.map((d) => ({
       x: d.x * k, y: d.y * k, w: d.w * k, h: d.h * k,
-      label: d.label, score: d.score, atMs: snapshot.sentMs,
+      label: d.label, score: d.score, time: snapshot.time, arrivalAge,
     }));
   }
 
-  /** How long one rung may spend downloading and compiling before it is
-   * written off as hung (a wedged driver throws nothing at all). */
-  const RUNG_MS = 180000;
-
-  /** One rung: a fresh worker, so a crashed runtime cannot poison the next
-   * try — a wasm abort leaves its instance failing everywhere after. */
-  function attempt(device, dtype) {
-    return new Promise((resolve, reject) => {
-      const w = new Worker(new URL('./detect.worker.js', import.meta.url), { type: 'module' });
-      const timer = setTimeout(() => { w.terminate(); reject(new Error('took too long (hung?)')); }, RUNG_MS);
-      w.onmessage = (event) => {
-        const message = event.data;
-        clearTimeout(timer);
-        if (message.type === 'ready') resolve(w);
-        else { w.terminate(); reject(new Error(message.message || 'failed')); }
-      };
-      w.onerror = (event) => { clearTimeout(timer); w.terminate(); reject(new Error(event.message || 'worker failed')); };
-      w.postMessage({ type: 'load', device, dtype });
-    });
-  }
-
-  /** The loaded worker's steady-state messages: looks and their failures. */
-  function wire(w) {
-    w.onmessage = (event) => {
-      const message = event.data;
-      if (message.type === 'result') onResult(message);
-      else if (message.type === 'error' && pending) {
-        pending = null;
-        options.onStatus?.(`The detector failed a look: ${message.message}`, 'error');
-      }
-    };
-  }
-
-  const override = new URLSearchParams(location.search).get('detdtype') || undefined;
-  const ready = (async () => {
-    const t0 = performance.now();
-    // WebGPU rungs first where the browser has an adapter; wasm/q8 (21 MB)
-    // is the rung that runs anywhere. `?detdtype=` pins the WebGPU rung.
-    const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
-    const ladder = adapter
-      ? [...(override ? [['webgpu', override]] : [['webgpu', 'fp16'], ['webgpu', 'fp32']]), ['wasm', 'q8']]
-      : [['wasm', override || 'q8']];
-    const failures = [];
-    for (const [device, dtype] of ladder) {
-      try {
-        worker = await attempt(device, dtype);
-        wire(worker);
-        status.backend = device;
-        status.dtype = dtype;
-        status.loadMs = Math.round(performance.now() - t0);
-        // The status line shows where the ladder landed; this says why it
-        // stepped down, for whoever is triaging.
-        if (failures.length) console.warn('naming model stepped down:', failures.join(' | '));
-        return;
-      } catch (error) {
-        failures.push(`${device}/${dtype}: ${String(error?.message || error)}`);
-      }
-    }
-    throw new Error(`no backend would load the model — ${failures.join('; ')}`);
-  })();
+  // The backend ladder (docs/model-ladder.md): a rung is ready only once
+  // it has proved a look, and a look that fails later steps down once.
+  // `?detdtype=fp32` pins the WebGPU rung for triage.
+  const ladder = createModelLadder({
+    spawn: () => new Worker(new URL('./detect.worker.js', import.meta.url), { type: 'module' }),
+    noun: 'Naming',
+    model: 'detector',
+    pin: new URLSearchParams(location.search).get('detdtype'),
+    onResult,
+    onLookFailed: () => { pending = null; },
+    onStatus: options.onStatus,
+    onLost: options.onLost,
+  });
 
   return {
-    /** Resolves when the model answered ready; rejects when it cannot load. */
-    ready,
+    /** Resolves when a backend has proved a look; rejects when none can. */
+    ready: ladder.ready,
 
     /**
      * Called per processed frame; starts a look at most every EVERY_MS and
@@ -165,8 +132,9 @@ export function createDetector(options = {}) {
       // A label lives as long as its id: forget what the tracker dropped.
       const alive = new Set(objects.map((o) => o.id));
       for (const id of names.keys()) if (!alive.has(id)) names.delete(id);
+      picture = video;
       const now = performance.now();
-      if (!worker || pending || now - lastSendMs < EVERY_MS) return;
+      if (!ladder.live() || pending || now - lastSendMs < EVERY_MS) return;
       const vw = video.videoWidth;
       const vh = video.videoHeight;
       if (!vw || !vh || !pictureWidth || !pictureHeight) return;
@@ -180,10 +148,16 @@ export function createDetector(options = {}) {
       pending = {
         tracks: objects.map((o) => ({ id: o.id, x: o.x * toSent, y: o.y * toSent, w: o.w * toSent, h: o.h * toSent })),
         toPicture: pictureWidth / sendW,
-        sentMs: now,
+        time: video.currentTime,
       };
       createImageBitmap(video, { resizeWidth: sendW, resizeHeight: sendH, resizeQuality: 'low' })
-        .then((bitmap) => worker.postMessage({ type: 'frame', bitmap, time: video.currentTime }, [bitmap]))
+        .then((bitmap) => {
+          // The rung may have been retired while the picture was scaled.
+          if (!ladder.post({ type: 'frame', bitmap, time: pending ? pending.time : video.currentTime }, [bitmap])) {
+            bitmap.close();
+            pending = null;
+          }
+        })
         .catch(() => { pending = null; });
     },
 
@@ -198,19 +172,31 @@ export function createDetector(options = {}) {
       return names.get(id)?.outcome ?? null;
     },
 
-    /** The model-only finds of the last look, picture px, with their age. */
+    /**
+     * The model-only finds still worth drawing, picture px, each with its
+     * age and how strongly to draw it. A find does not outlive its
+     * usefulness: it fades to nothing and is dropped at a bound tied to
+     * the look rate, and one that arrived stale is never returned at all
+     * (core/finds.js). Ages are media time, so a paused picture keeps the
+     * finds that belong to it.
+     */
     finds() {
-      const now = performance.now();
-      return modelOnly.map((f) => ({ ...f, ageMs: now - f.atMs }));
+      const bound = findBound(lookPeriod(lookTimes));
+      const now = mediaNow();
+      const shown = [];
+      for (const f of modelOnly) {
+        const age = Math.abs(now - f.time);
+        const opacity = findOpacity(age, f.arrivalAge, bound);
+        if (opacity > 0) shown.push({ x: f.x, y: f.y, w: f.w, h: f.h, label: f.label, score: f.score, ageMs: age * 1000, opacity });
+      }
+      return shown;
     },
 
     /** For the readings margin and its copy button. */
     status() {
       const sorted = [...status.inferTimes].sort((a, b) => a - b);
       return {
-        backend: status.backend,
-        dtype: status.dtype,
-        loadMs: status.loadMs,
+        ...ladder.facts(),
         lastInferMs: status.lastInferMs,
         medianInferMs: sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0,
         looksPerSecond: +(status.looks.length / 5).toFixed(1),
@@ -224,7 +210,7 @@ export function createDetector(options = {}) {
     },
 
     dispose() {
-      worker?.terminate();
+      ladder.dispose();
     },
   };
 }

@@ -12,11 +12,12 @@ This supersedes the session-7 take (MobileNetV2 over box crops, verdict
 N-1): a crop classifier could only name what motion had already found. The
 first take is in git history under this same file name.
 
-## Licences, checked against this repo's MIT (2026-11-15)
+## Licences, checked against this repo's MIT (2026-11-15; runtime row 2026-11-16)
 
 | Piece | Licence | Compatible |
 |---|---|---|
-| Transformers.js (`@huggingface/transformers`, jsDelivr CDN, version pinned) | Apache-2.0 | yes |
+| Transformers.js (`@huggingface/transformers`, jsDelivr CDN, pinned at **4.3.2** for this worker; depth stays on 3.8.1) | Apache-2.0 | yes |
+| onnxruntime-web (1.31.0-dev build, fetched from jsDelivr by Transformers.js 4 itself) | MIT | yes |
 | RT-DETR v2 r18vd (`onnx-community/rtdetr_v2_r18vd-ONNX` on Hugging Face; upstream weights PekingU/rtdetr_v2_r18vd, both Apache-2.0; 21 MB quantised, 41 MB fp16) | Apache-2.0 | yes — fetched at runtime, never redistributed with this repo |
 | COCO class names | carried inside the model's own config, nothing in this repo | yes |
 | Ultralytics YOLO (the obvious alternative) | AGPL-3.0 | **no — rejected**, as before |
@@ -33,33 +34,54 @@ back off.
    imports `app/detect.js`, which starts a worker; the worker loads
    Transformers.js from the CDN and the model from Hugging Face, and
    works down a ladder — **WebGPU fp16, WebGPU fp32, wasm q8** — until
-   one loads, saying which it landed on (the status line) and why it
-   stepped down (the console). **Each rung gets a fresh worker**: a crash
-   out of the runtime (fp16 crashed outright on a real GPU the first time
-   out) leaves that worker's wasm instance poisoned, and a retry inside
-   it fails at the same spot whatever the backend.
+   one **loads and proves a look** (docs/model-ladder.md), saying where
+   it landed and why on the status line and each rung's own failure in
+   the console. **Each rung gets a fresh worker**: a crash out of the
+   runtime (fp16 crashed outright on a real GPU the first time out)
+   leaves that worker's wasm instance poisoned, and a retry inside it
+   fails at the same spot whatever the backend.
    (`?detdtype=fp32` pins the WebGPU rung for triage.)
+   **The detector's worker runs Transformers.js 4.3.2**, the depth
+   worker 3.8.1: the 3.x WebGPU backend cannot run this model's
+   ceil-mode AveragePool (verdict L-1) and the 4.x one, rewritten, can
+   (route (a), "M-1 again" in the verdicts). Where the GPU rungs still
+   fail, the ladder lands on the CPU on the new runtime the same way.
 2. **Look**: a few times a second — self-throttled, **one request in
    flight at a time**, never faster than the model answers — the current
    frame is snapshotted (scaled to ≤ 960 px wide) and sent to the worker
    with the tracker's boxes *as they stood at that moment*. The result
    arrives late by one inference; it is matched against that snapshot,
    never against "the current frame".
-3. **Match**: greedy best-overlap-first IoU (`core/boxmatch.js`,
-   unit-tested) between the model's boxes and the snapshot's track boxes,
-   above a deliberately low bar (0.15: the mask's box is a clump or a
-   leading edge and rarely hugs a thing the way the detector's box does).
-   A matched pair votes the model's label onto the track id — one look is
-   enough to name it, later looks vote the name steady by majority over
-   the last five. Per id the last look's outcome is kept: **both** or
-   **motion only**. The model's unmatched boxes are kept as the
-   **model-only** finds of that look, with its time.
+3. **Match** (`core/boxmatch.js`, unit-tested): the two do not box the
+   same things the same way — the detector hugs an object, the mask boxes
+   whatever moved together: a thin leading strip of a car, two clumps of
+   one car, one clump over a queue of cars. So a motion box and a
+   detection match when they overlap well (IoU ≥ 0.15) **or when most
+   of the smaller lies inside the larger** (≥ 0.6, between boxes of
+   comparable size: a speck inside a bus is not the bus, and a false
+   detection the width of the frame names nothing). Each motion box
+   takes the detection that fits it best, containment plus IoU, so of
+   two that hold a strip the snugger wins; **several motion boxes may
+   take one detection's name**. A matched pair votes the model's label
+   onto the track id — one look is enough to name it, later looks vote
+   the name steady by majority over the last five. Per id the last
+   look's outcome is kept: **both** or **motion only**. A detection that
+   fits no motion box is a **model-only** find of that look; one that
+   fits a motion box which took another's name (the second car under a
+   clump) is covered — motion found it too — and is not drawn.
 4. **Show**: the id plate carries the settled name, marked as an estimate
    (`7 · 93 px/s · ≈car`). Track boxes keep the accent colour when the
    model agrees and turn dashed-amber when motion alone found them; the
-   model-only finds are drawn as grey dashed boxes with `≈label` and fade
-   as they age (they are where the model last looked, not where the thing
-   is now). The readings margin names the backend, the model's load and
+   model-only finds are drawn as dashed blue boxes with `≈label`, **only
+   while they are fresh** (`core/finds.js`). A find is where the model
+   saw something in one frame: it does not move, and the answer arrives
+   a look late. So it is drawn at full strength while young, fades to
+   nothing, and is dropped at three look periods or 1.5 s of media time,
+   whichever is less; one that arrives already in its fade is never
+   drawn. Where a look takes longer than about a second — the CPU rung —
+   that means **no model-only finds are drawn at all**: they would be
+   boxes in empty space. Age is media time, so a paused picture keeps
+   the finds that belong to it and a seek drops them. The readings margin names the backend, the model's load and
    inference times and its cadence, with a **Copy model readings** button
    so the numbers can be pasted back into a report.
 
@@ -69,8 +91,9 @@ back off.
   people, animals, street furniture). A synthetic square or rain gets no
   name; the score says how sure it was.
 - Everything from the model is an estimate and marked `≈`. Model-only boxes
-  are where the model saw something at its last look — up to a second or
-  two old — not a track.
+  are where the model saw something at its last look — at most a second
+  and a half old, then gone — not a track. On a slow backend they do not
+  appear.
 - A model-only find is not automatically a missed mover: it sees parked
   cars motion rightly ignores. A motion-only box is not automatically a
   model miss: the mask boxes clumps and part-boxes the model does not

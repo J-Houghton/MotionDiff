@@ -248,16 +248,25 @@ export class Session {
     this.setStatus('Loading the naming model (21–41 MB, once; the browser caches it)…', 'info');
     const detector = (await import('./detect.js')).createDetector({
       onStatus: (message, type) => this.setStatus(message, type),
+      // The ladder ran out after it had been running (docs/model-ladder.md).
+      onLost: (message) => {
+        detector.dispose();
+        this._naming = null;
+        this.setParams({ maskNames: false });
+        this.setStatus(message, 'error');
+      },
     });
     try {
       await detector.ready;
       this._naming = detector;
+      // Where the ladder landed: in words, with the reason, when it had to
+      // step down; the plain sentence when the first backend proved.
       const s = detector.status();
-      this.setStatus(`Naming is on (${s.backend}/${s.dtype}): boxes carry the model's best guess`, 'success');
+      this.setStatus(s.landed || `Naming is on (${s.backend}/${s.dtype}): boxes carry the model's best guess`, 'success');
     } catch (error) {
       detector.dispose();
       this.setParams({ maskNames: false });
-      this.setStatus(`Naming could not load (offline?): ${error.message}`, 'error');
+      this.setStatus(`Naming could not start: ${error.message}`, 'error');
     } finally {
       this._namingLoading = false;
     }
@@ -277,16 +286,25 @@ export class Session {
     this._depthLoading = true;
     this.setStatus('Loading the depth model (about 25 MB, once; the browser caches it)…', 'info');
     const { createDepthStage } = await import('./depthstage.js');
-    const stage = createDepthStage({ onStatus: (message, type) => this.setStatus(message, type) });
+    const stage = createDepthStage({
+      onStatus: (message, type) => this.setStatus(message, type),
+      // The ladder ran out after it had been running (docs/model-ladder.md).
+      onLost: (message) => {
+        stage.dispose();
+        this._depth = null;
+        this.setParams({ maskDepth: false });
+        this.setStatus(message, 'error');
+      },
+    });
     try {
       await stage.ready;
       this._depth = stage;
       const s = stage.status();
-      this.setStatus(`Depth is on (${s.backend}/${s.dtype}): an estimate beside the pipeline, a look or two behind`, 'success');
+      this.setStatus(s.landed || `Depth is on (${s.backend}/${s.dtype}): an estimate beside the pipeline, a look or two behind`, 'success');
     } catch (error) {
       stage.dispose();
       this.setParams({ maskDepth: false });
-      this.setStatus(`Depth could not load (offline?): ${error.message}`, 'error');
+      this.setStatus(`Depth could not start: ${error.message}`, 'error');
     } finally {
       this._depthLoading = false;
     }

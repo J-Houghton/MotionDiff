@@ -82,6 +82,8 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
       `model rtdetr_v2_r18vd · backend ${s.backend}/${s.dtype}`,
       `load ${s.loadMs} ms · infer last ${s.lastInferMs} ms, median ${s.medianInferMs} ms · ${s.looksPerSecond} looks/s`,
       `frame rate ${session.fps.toFixed(1)} fps · processing ${session.pipeline.width}×${session.pipeline.height} · names on`,
+      // Why the backend ladder stepped down, when it did (docs/model-ladder.md).
+      ...(s.steps.length ? [`stepped down — ${s.steps.join(' | ')}`] : []),
     ].join('\n');
     try {
       await navigator.clipboard.writeText(text);
@@ -102,6 +104,7 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
       `model depth-anything-v2-small · backend ${s.backend}/${s.dtype}`,
       `load ${s.loadMs} ms · look last ${s.lastInferMs} ms, median ${s.medianInferMs} ms · ${s.looksPerSecond} looks/s · map ${age === undefined ? '—' : age.toFixed(1) + ' s'} behind`,
       `frame rate ${session.fps.toFixed(1)} fps · processing ${session.pipeline.width}×${session.pipeline.height} · depth on`,
+      ...(s.steps.length ? [`stepped down — ${s.steps.join(' | ')}`] : []),
     ].join('\n');
     try {
       await navigator.clipboard.writeText(text);
