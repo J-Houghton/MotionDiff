@@ -1519,3 +1519,57 @@ against after, same machine, same scene order:
 - Frame time (SwiftShader, indicative): interleaved renders of the six
   proof scenes, two rounds each — before 53.3/53.1 s, after 52.0/53.0 s;
   within noise.
+
+## Session 7 (additions)
+
+### D-1. Data out: exports and the count line (docs/data-out.md)
+**Expected, written before building.**
+1. Unit tests hold the crossing geometry: a step across the drawn segment
+   counts once with the right direction; beyond the segment's ends, or on
+   first sight already past the line, nothing counts; crossing back counts
+   the other way; the CSV and JSON serialisers round-trip, `speed_mps`
+   appearing exactly when a calibration is set.
+2. `truth`, mask + boxes, a vertical line (320, 0)–(320, 360), normal
+   playback: counts read exactly 2 left→right (the square near t = 2.1 s,
+   the first disc near 2.9 s) and 1 right→left (the second disc near
+   9.4 s), each event within 0.4 s, nothing from the noise background or
+   the stopped square.
+3. The same run with the 0.1 m/px calibration: the exported CSV's square
+   speed within 20% of 120 px/s moving (and `speed_mps` within 20% of 12);
+   the JSON's t monotonic, counts cumulative over the event list, meta
+   carrying calibration and version.
+4. Audit clean with the line overlay and counts row up; the row only in a
+   tracking mode with a line set.
+5. No regression: no line, collection off → truth-mask byte-identical to
+   master.
+
+**Result (2026-11-16): all five registered checks hold.** Numbers first:
+1. Unit: 12 tests pass, among them the deferred on-the-line case, which
+   found a real fault while building (the raw segment test forgets which
+   side a box came from; the counter now remembers its last definite side).
+2. `truth`, headless, normal playback: counts exactly **2 left→right and
+   1 right→left**; events at t = 1.99 s (the square; registered ≈ 2.1),
+   2.86 s (first disc; ≈ 2.9) and 9.39 s (second disc; ≈ 9.4) — all within
+   0.12 s of the known crossing times, against the registered 0.4 s. No
+   other event: nothing from the noise background, nothing from the
+   stopped square. (The log honestly carries three transient rows from a
+   thin edge box at the square's height far from the line — the mask's
+   known per-edge trait, V-6T — which counted nothing.)
+3. Exports, same run, 0.1 m/px: 181 readings rows, 298 track rows. The
+   square's speed column 1.5–3.2 s: 27 of 27 samples within 20% of
+   120 px/s (103.9–140.8, the V-6T band), `speed_mps` 10.4–14.1 against
+   12 ± 2.4. JSON t monotonic; the last frame's cumulative counts equal
+   the counter's; meta carries clip, size, params, calibration and the
+   version stamp. (Serialisers also round-trip under unit test.)
+4. Audit at 1440×900, line drawn, margin open, counts row showing:
+   nothing clipped, overlapping or off screen; min contrast 4.65. Picture
+   share 0.473, byte-equal to master's at the identical state (the truth
+   clip's caption rows; pre-existing). The counts row shows only while
+   boxes are tracked. One registration change, recorded: the key is **X**,
+   not L — L has been the J/K/L shuttle's "faster" since session 3, found
+   the moment the sheet claimed otherwise; the margin-link entry stands.
+5. No regression: `truth-mask` byte-identical, master against this branch.
+
+Harness note: the first synthetic click on a fresh page is swallowed
+(reproduced on master; the X-1 driver quirks' sibling). Scripts click
+until the state answers.

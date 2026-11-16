@@ -18,6 +18,7 @@ export const SHORTCUTS = [
   ['P', 'Parameters', 'panel'],
   ['I', 'Readings beside the picture (desktop)', 'readings'],
   ['C', 'Calibrate: mark a known length, read real units', 'calibrate'],
+  ['X', 'Count line: draw a line, count movers over it (clears when set)', 'countline'],
   ['N', 'Choose a source', 'source'],
   ['A', 'Auto-configure gap and threshold', 'auto'],
   ['R', 'Record / stop', 'record'],
@@ -29,7 +30,7 @@ export const SHORTCUTS = [
 ];
 
 const SINGLE = {
-  ' ': 'toggle', k: 'toggle', d: 'display', s: 'split', p: 'panel', n: 'source', a: 'auto', i: 'readings', c: 'calibrate',
+  ' ': 'toggle', k: 'toggle', d: 'display', s: 'split', p: 'panel', n: 'source', a: 'auto', i: 'readings', c: 'calibrate', x: 'countline',
   r: 'record', f: 'fullscreen', h: 'hide', t: 'theme', '?': 'keys', '/': 'keys', Escape: 'escape',
 };
 
