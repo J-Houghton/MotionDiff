@@ -189,8 +189,7 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
   straight edge or on flat surfaces; a moving camera makes everything flow.
 - Blind-judged in headless Chrome, with phone and tablet layouts under device
   emulation and Chrome's fake camera. Real phones and a real camera work (the
-  owner's testing; the deployed site). Not tested: Firefox, Safari, screen
-  capture, HLS.
+  owner's testing; the deployed site). Not tested: Firefox, Safari.
 - Motion history: a hatched patch at the tail of a flat, round object's trail, and
   hue that drifts across a trail wider than 56 px.
 - Background model: ragged edges while something is being absorbed; soft, blobby

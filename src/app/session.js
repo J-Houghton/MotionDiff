@@ -2,7 +2,7 @@
  * Session: everything the app does that is not interface.
  *
  * Owns the video element, the pipeline, the frame loop, sources (file, URL,
- * HLS, camera, screen), transport, export and the audio engine, and reports
+ * camera), transport, export and the audio engine, and reports
  * what changed through `on()`. The UI calls methods here and redraws from
  * the state it reads back; nothing in this file touches a control.
  */
@@ -375,20 +375,6 @@ export class Session {
     }
   }
 
-  async loadScreen() {
-    if (!navigator.mediaDevices?.getDisplayMedia) {
-      this.setStatus('Screen capture is not available in this browser', 'error');
-      return;
-    }
-    try {
-      this.setStatus('Requesting screen…', 'info');
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-      await this._loadStream(stream, 'screen');
-    } catch {
-      this.setStatus('Screen capture cancelled', 'error');
-    }
-  }
-
   /** Tear down whatever is loading or playing. */
   _beginLoad() {
     if (this.recorder.isRecording()) void this.toggleRecord();
@@ -526,7 +512,7 @@ export class Session {
       this.source = null;
       this._setPlaying(false);
       this._emit('source');
-      this.setStatus(kind === 'screen' ? 'Screen share ended' : 'Camera stopped', 'info');
+      this.setStatus('Camera stopped', 'info');
     });
 
     const rate = stream.getVideoTracks()[0]?.getSettings?.().frameRate;

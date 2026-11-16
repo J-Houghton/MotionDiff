@@ -594,12 +594,6 @@ describe('analyzeSample', () => {
 });
 
 describe('buildSourceProfile', () => {
-  test('screen → isStream true, frameCapture draw-image', () => {
-    const p = buildSourceProfile('screen', true);
-    expect(p.isStream).toBe(true);
-    expect(p.frameCapture).toBe('draw-image');
-  });
-
   test('camera → isStream true, frameCapture draw-image', () => {
     const p = buildSourceProfile('camera', true);
     expect(p.isStream).toBe(true);
@@ -623,8 +617,7 @@ describe('buildSourceProfile', () => {
 });
 
 describe('isStreamSource', () => {
-  test('screen and camera are stream sources', () => {
-    expect(isStreamSource('screen')).toBe(true);
+  test('the camera is a stream source', () => {
     expect(isStreamSource('camera')).toBe(true);
   });
 

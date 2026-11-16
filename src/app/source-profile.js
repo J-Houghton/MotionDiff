@@ -1,4 +1,4 @@
-const STREAM_SOURCES = new Set(['camera', 'screen']);
+const STREAM_SOURCES = new Set(['camera']);
 
 export function isStreamSource(kind) {
   return STREAM_SOURCES.has(kind);
