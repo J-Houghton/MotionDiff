@@ -529,7 +529,6 @@ export function initShell({ root, session }) {
         else applyLayout();
       })));
     }
-    if (navigator.mediaDevices?.getDisplayMedia && !phone.matches) row.append(button('Screen', run(() => session.loadScreen())));
 
     const url = document.createElement('form');
     url.className = 'sources-url';

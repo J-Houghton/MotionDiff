@@ -83,33 +83,6 @@
    }
   },
   {
-   "name": "plume-traces",
-   "clip": "plume",
-   "at": 3,
-   "frames": 6,
-   "every": 6,
-   "warmup": 99,
-   "display": "diff",
-   "readTarget": "schlieren:move:smoothed",
-   "params": {
-    "algorithm": "schlieren",
-    "schlierenShow": "traces",
-    "schlierenHold": false,
-    "schlierenRange": 25,
-    "schlierenWindow": 4,
-    "schlierenSmooth": 1,
-    "flowRange": 40,
-    "traceColour": "heading"
-   },
-   "switch": {
-    "at": 0.9,
-    "params": {
-     "schlierenHold": true
-    }
-   },
-   "readData": true
-  },
-  {
    "name": "weak-knife-held",
    "clip": "plume-weak",
    "at": 3,
@@ -304,30 +277,6 @@
    "warmup": 99
   },
   {
-   "name": "screen-traces",
-   "clip": "candle-screen",
-   "at": 4.2,
-   "frames": 6,
-   "every": 6,
-   "display": "diff",
-   "params": {
-    "algorithm": "schlieren",
-    "schlierenRange": 25,
-    "schlierenWindow": 4,
-    "schlierenSmooth": 1,
-    "schlierenShow": "traces",
-    "schlierenHold": false,
-    "flowRange": 40
-   },
-   "warmup": 99,
-   "switch": {
-    "at": 0.8,
-    "params": {
-     "schlierenHold": true
-    }
-   }
-  },
-  {
    "name": "dots-raw",
    "clip": "candle-dots",
    "at": 9,
@@ -379,25 +328,6 @@
     "schlierenHold": false
    },
    "warmup": 4
-  },
-  {
-   "name": "dots-traces",
-   "clip": "candle-dots",
-   "at": 9,
-   "frames": 6,
-   "every": 6,
-   "display": "diff",
-   "params": {
-    "algorithm": "schlieren",
-    "schlierenRange": 25,
-    "schlierenWindow": 4,
-    "schlierenSmooth": 1,
-    "schlierenShow": "traces",
-    "schlierenHold": false,
-    "flowRange": 40
-   },
-   "warmup": 4,
-   "readTarget": "schlieren:move:smoothed"
   },
   {
    "name": "dots-check",

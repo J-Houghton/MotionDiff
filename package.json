@@ -14,8 +14,6 @@
     "typecheck": "tsc -p jsconfig.json"
   },
   "_dependencyNotes": {
-    "hls.js": "HLS stream playback for .m3u8 URLs",
-    "tone": "Web Audio synth voices for motion sonification; loaded lazily inside app/audio.js",
     "tweakpane": "parameter panel, generated from each mode's schema (ui/panel.js)"
   },
   "devDependencies": {
@@ -24,8 +22,6 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
-    "hls.js": "^1.6.15",
-    "tone": "^15.1.22",
     "tweakpane": "^4.0.5"
   }
 }

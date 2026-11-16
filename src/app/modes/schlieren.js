@@ -15,19 +15,14 @@
  *       how much of the picture is measurable, the noise floor; from those
  *       the note on the status line
  *     → picture: knife edge (Posy space, 128 = no shift), strength,
- *       direction, the setup check, or particle traces; and the data field
- *
- * Traces follow how the PATTERN of shifts moves from one frame to the next
- * (flow of the schlieren picture itself): the travel of the eddies, not the
- * shift, which is not a velocity.
+ *       direction, or the setup check; and the data field
  *
  * Needs float render targets.
  */
 import { FLOW_NOISE, globalShift } from '../../core/flow.js';
 import { noiseFloor, referenceAlpha, setupProblem } from '../../core/schlieren.js';
-import { FLOW_PRELUDE, flowBetween, flowLuma, flowPass, flowSmooth, pingPong, readField } from '../flow.js';
-import { particleField, reduceField, renderParticles } from '../particles.js';
-import { FLOW_FLOOR, FLOW_PRESENT, FLOW_TRUSTED, SPEED_RANGE, TRACE_PARAMS, flowLevels } from './flow.js';
+import { FLOW_PRELUDE, flowBetween, flowLuma, flowPass, pingPong, readField } from '../flow.js';
+import { reduceField } from '../particles.js';
 import { asMs } from './params.js';
 
 /** Shifts are measured on a copy of the frame at most this wide: the full processing size up to 1280 px, so a fine background can be resolved by raising the processing width. */
@@ -36,12 +31,6 @@ export const SCHLIEREN_WIDTH = 1280;
 export const SCHLIEREN_TRUSTED = 20;
 /** The grid read back for the camera shift and the setup check is at most this wide. */
 const GRID_WIDTH = 64;
-/** The picture whose movement the traces follow is at most this wide. */
-const TRACK_WIDTH = 320;
-/** In that picture, a full-scale shift is this many levels. */
-const TRACK_LEVELS = 64;
-/** Time constant of the running average of the eddies' velocity, seconds. */
-const TRACK_SECONDS = 0.4;
 
 // Mirrors averageStep.
 const AVERAGE_FRAG = `${FLOW_PRELUDE}
@@ -111,26 +100,6 @@ void main() {
     colour = mix(mix(vec3(grey), vec3(0.85, 0.1, 0.1), 0.35 + 0.45 * hatch), vec3(grey), s.z);
   }
   fragColor = vec4(colour, 1.0);
-}`;
-
-// The schlieren picture as one signed number per pixel, for following its movement.
-const TRACK_FRAG = `${FLOW_PRELUDE}
-${SHIFT}
-uniform float uLevels;
-
-void main() {
-  vec3 s = shiftAt((vec2(here()) + 0.5) * vec2(textureSize(uFlow, 0)) / vec2(uSize) - 0.5);
-  fragColor = vec4((s.x + s.y) / uFull * uLevels * s.z, 0.0, 0.0, 1.0);
-}`;
-
-// Flow (pixels of the tracking picture per frame) → velocity (picture pixels per second).
-const VELOCITY_FRAG = `${FLOW_PRELUDE}
-uniform sampler2D uFlow;
-uniform float uScale;
-
-void main() {
-  vec3 flow = px(uFlow, here()).rgb;
-  fragColor = vec4(flow.rg * uScale, flow.b, 1.0);
 }`;
 
 const VIEWS = { knife: 0, strength: 1, direction: 2, check: 3 };
@@ -238,7 +207,6 @@ export default /** @type {import('./index.js').Mode} */ ({
     'Setup: prop the camera so it cannot move; put a detailed background a metre or so behind the hot air (print public/schlieren-pattern.svg, or use brick, gravel, foliage, a bookshelf); lock focus and exposure on the background. The Setup check view hatches in red whatever cannot be measured.',
     'Reference: by default it follows the scene, so only hot air that changes is shown and a steady plume fades out. Let it settle with nothing hot in view, switch on Hold reference, then light the candle: everything is shown.',
     'Knife edge is the classic look: light where the background is pushed one way, dark where it is pushed the other. It is always shown on its own, as a grey picture: even grey grain means it is measuring and there is no hot air in view; flat grey means nothing can be measured (a plain background, or a moving camera). Strength and Direction show the size and the heading of the shift, and follow the Display setting (over the video, or alone).',
-    'Traces (experimental) follow how the pattern of hot air travels from frame to frame: the movement of its eddies. That is slower than the air itself, there is nothing to follow where the flow is smooth, and a plume that crosses more than about a twentieth of the picture between two frames is too fast to follow: a candle filmed close up at 30 frames a second is.',
     'Nothing is drawn where the background is plain. Lamp flicker, auto-exposure and focus hunting all read as signal; video compression smooths away the smallest shifts.',
     'Sensitivity is the shift drawn at full strength. A larger window and more smoothing see weaker plumes, more coarsely and more slowly.',
   ],
@@ -247,7 +215,7 @@ export default /** @type {import('./index.js').Mode} */ ({
   worker: false,
   needsFloat: true,
   params: [
-    { key: 'schlierenShow', label: 'Show', type: 'select', default: 'knife', options: { 'Knife edge': 'knife', 'Strength': 'strength', 'Direction': 'direction', 'Traces (experimental)': 'traces', 'Setup check': 'check' } },
+    { key: 'schlierenShow', label: 'Show', type: 'select', default: 'knife', options: { 'Knife edge': 'knife', 'Strength': 'strength', 'Direction': 'direction', 'Setup check': 'check' } },
     { key: 'schlierenHold', label: 'Hold reference', type: 'toggle', default: false },
     { key: 'schlierenRange', label: 'Sensitivity', type: 'range', min: 2, max: 200, step: 1, default: 25, format: (v) => `${(v / 100).toFixed(2)} px` },
     { key: 'schlierenWindow', label: 'Window', type: 'range', min: 2, max: 7, step: 1, default: 4, format: (v) => `${2 * v + 1} px` },
@@ -255,11 +223,8 @@ export default /** @type {import('./index.js').Mode} */ ({
     { key: 'schlierenReference', label: 'Reference time', type: 'range', min: 15, max: 300, step: 15, default: 60, format: (v) => `${(v / 30).toFixed(1)} s`, when: (p) => !p.schlierenHold },
     { key: 'schlierenAxis', label: 'Knife shows', type: 'select', default: 'x', options: { 'Sideways shifts': 'x', 'Up-down shifts': 'y' }, when: (p) => p.schlierenShow === 'knife' },
     { key: 'schlierenSteady', label: 'Cancel camera shift', type: 'toggle', default: true },
-    { ...SPEED_RANGE, when: (p) => p.schlierenShow === 'traces' },
-    ...TRACE_PARAMS.map((param) => ({ ...param, when: (p) => p.schlierenShow === 'traces' })),
   ],
   lookback: () => [2, 2],
-  animates: (params) => params.schlierenShow === 'traces',
   summary(params) {
     const side = 2 * params.schlierenWindow + 1;
     const against = params.schlierenHold ? 'a held reference' : `the average of the last ${(params.schlierenReference / 30).toFixed(1)} s`;
@@ -270,15 +235,8 @@ export default /** @type {import('./index.js').Mode} */ ({
     const { width, height } = renderer;
     const { flow, factor, setup } = measure(frame);
     const full = params.schlierenRange / 100 / factor;
-    const traces = params.schlierenShow === 'traces';
     // Targets before binds.
     const data = renderer.dataFramebuffer(width, height);
-    const trackWidth = Math.min(flow.width, TRACK_WIDTH);
-    const trackHeight = Math.round((flow.height * trackWidth) / flow.width);
-    const tracks = traces
-      ? [renderer.target('schlieren:track0', trackWidth, trackHeight, { float: true }), renderer.target('schlieren:track1', trackWidth, trackHeight, { float: true })]
-      : null;
-    const velocity = traces ? renderer.target('schlieren:velocity', trackWidth, trackHeight, { float: true }) : null;
 
     const shift = (gl, u) => {
       gl.uniform2f(u.uCamera, setup.camera.dx, setup.camera.dy);
@@ -295,52 +253,13 @@ export default /** @type {import('./index.js').Mode} */ ({
     });
     show(data, 1);
 
-    if (!traces) {
-      show(renderer.pictureFramebuffer, 0);
-      const knife = params.schlierenShow === 'knife';
-      // The knife edge and the setup check are pictures of their own, never
-      // blended onto the frame: laid over the video, a scene with no hot air
-      // in it looks like the plain camera, as if the mode were doing nothing.
-      const own = knife || params.schlierenShow === 'check';
-      renderer.renderComposite(own ? 'diff' : frame.display, knife ? 'posy' : 'raw', false);
-      return true;
-    }
-
-    // Traces: follow the schlieren picture from the previous frame to this one.
-    const repeat = frame.step === 'repeat';
-    const track = pingPong(renderer, 'schlieren:track', tracks, repeat);
-    flowPass(renderer, 'schlieren:track', TRACK_FRAG, { uFlow: 0 }, track.to, [flow.tex], (gl, u) => {
-      shift(gl, u);
-      gl.uniform1f(u.uLevels, TRACK_LEVELS);
-    });
-    const seconds = frame.stepMs / 1000;
-    if (track.empty || !(seconds > 0)) {
-      renderer.renderBlank('raw', false);
-      // The data field was drawn: the frame does have a measurement.
-      renderer.dataFramebuffer(width, height);
-      return true;
-    }
-    const moved = flowBetween(renderer, 'schlieren:move', track.from, track.to, { levels: flowLevels(trackWidth), noise: 16 });
-    flowPass(renderer, 'flow:velocity', VELOCITY_FRAG, { uFlow: 0 }, velocity, [moved.tex], (gl, u) => gl.uniform1f(u.uScale, width / trackWidth / seconds));
-    const smoothed = flowSmooth(renderer, 'schlieren:move', velocity, {
-      alpha: 1 - Math.exp(-seconds / TRACK_SECONDS),
-      trusted: FLOW_TRUSTED,
-      floor: FLOW_PRESENT,
-      repeat,
-    });
-    const fullSpeed = (params.flowRange / 100) * width;
-    renderParticles(renderer, 'schlieren', particleField(renderer, 'schlieren', smoothed), {
-      dt: seconds,
-      repeat,
-      pausedDt: frame.pausedDt,
-      density: params.traceDensity,
-      seconds: params.traceLength / 30,
-      minSpeed: fullSpeed * FLOW_FLOOR,
-      fullSpeed,
-      gain: params.traceGain,
-      colour: params.traceColour,
-    });
-    renderer.renderComposite(frame.display, 'raw', false);
+    show(renderer.pictureFramebuffer, 0);
+    const knife = params.schlierenShow === 'knife';
+    // The knife edge and the setup check are pictures of their own, never
+    // blended onto the frame: laid over the video, a scene with no hot air
+    // in it looks like the plain camera, as if the mode were doing nothing.
+    const own = knife || params.schlierenShow === 'check';
+    renderer.renderComposite(own ? 'diff' : frame.display, knife ? 'posy' : 'raw', false);
     return true;
   },
 });

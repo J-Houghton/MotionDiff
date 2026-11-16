@@ -29,8 +29,10 @@ solve of `core/flow.js`. Per frame:
    shift**, which is subtracted everywhere; it also gives how much of the picture is
    measurable and the noise floor, which go to the status line.
 6. The picture: **Knife edge** (one component of the shift as grey around 128, the
-   look of a classic schlieren photograph), **Strength**, **Direction**, **Setup
-   check**, or **Traces** (experimental; see `particles.md`).
+   look of a classic schlieren photograph), **Strength**, **Direction**, or **Setup
+   check**. (An experimental Traces view that followed the eddies of the schlieren
+   picture was removed in the session-7 clean-up: it showed nothing on real 30 fps
+   candle footage. The space-time-slice idea on the roadmap is its successor.)
 
 Follow or hold, and what each shows:
 - **Reference follows** (default): only hot air that *changes* is shown. A steady,
@@ -64,7 +66,7 @@ time constant is in real seconds); the live-camera path and the phone layout; th
 registry (panel, help, key 8, data output follow from the registry entry).
 New: the reference with follow and hold; cancelling the camera's shift from a small
 readback; the setup judgement and its note on the status line (`frame.note`, new);
-tracking the schlieren picture for traces; synthetic plume scenes with a known field,
+synthetic plume scenes with a known field,
 and a check against it.
 
 ## How others do it, and what is different here
@@ -85,8 +87,8 @@ and a check against it.
 
 ## Will it hold the frame rate on a phone?
 Measured on this machine only (Intel integrated GPU), median per frame: **4.8 to 5.8 ms
-at 480 px (the phone default), 5.7 to 7.2 ms at 640 px, 12 to 15 ms at 1280 px**;
-with Traces 8 to 9, 9 to 10.5 and 17 to 19 ms. At the phone default that leaves about
+at 480 px (the phone default), 5.7 to 7.2 ms at 640 px, 12 to 15 ms at 1280 px**.
+At the phone default that leaves about
 six times headroom inside a 30 fps frame. **Not measured on a real phone.** If it is
 short, lower the width to 320 or the window size first.
 

@@ -102,8 +102,7 @@ For optical flow, `--flow 1` compares the velocity in the data output with the k
 motion of the `flow` scene (heading and speed per mover, and how much of the still
 background reads under 5 px/s). For schlieren, `--schlieren 1` compares the measured
 shift with the known field of a `plume` scene (correlation, size, and how quiet the
-picture is beside the plume); add `--target 1` to check the saved eddy velocity
-instead (heading and speed).
+picture is beside the plume).
 
 `node scripts/make-pattern.mjs` regenerates `public/schlieren-pattern.svg`, the
 printable background for schlieren.

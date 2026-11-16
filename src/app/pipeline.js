@@ -57,8 +57,8 @@ export class Pipeline {
     this._currentFrame = null;
     this._sourceProfile = buildSourceProfile('file', HAS_RVFC);
 
-    // ── Sonification energy grid (see core/energy.js) ──
-    // Size 0 means "nobody is listening" — neither path computes a grid.
+    // ── Pooled motion-magnitude grid (core/magnitude.js) ──
+    // Size 0 means "nobody is reading" — neither path computes a grid.
     this._energyCols = 0;
     this._energyRows = 0;
     this._energyGrid = null;
@@ -74,7 +74,6 @@ export class Pipeline {
     /** @type {HTMLCanvasElement|null} The output canvas element */
     this._outputCanvas = null;
 
-    this.hls = null;
 
     // Every mode's params with their defaults (see modes/index.js), plus two
     // that belong to no mode: the processing fps cap, and camera
@@ -172,7 +171,7 @@ export class Pipeline {
 
       // The motion magnitude grid comes with every kind of result. A result
       // without one means that frame had no measurement: don't keep
-      // sounding the previous frame's.
+      // reporting the previous frame's.
       if (msg.energyBuffer) {
         this._energyGrid = new Float32Array(msg.energyBuffer);
         this._energyGridCols = msg.energyCols;
@@ -250,17 +249,6 @@ export class Pipeline {
     if (this._worker) {
       this._worker.postMessage({ type: 'magReset' });
     }
-  }
-
-  setHlsInstance(hls) {
-    if (this.hls) {
-      this.hls.destroy();
-    }
-    this.hls = hls;
-  }
-
-  clearExternalResources() {
-    this.setHlsInstance(null);
   }
 
   setSourceProfile(profile) {

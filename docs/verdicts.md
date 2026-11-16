@@ -1487,3 +1487,35 @@ criteria met.
    what is amplified.
 3. Parity probe: band state within 0.002 px of the core, warp within the
    visual guard; the integrator's unit tests hold the band.
+
+## Session 7 (clean-up)
+
+### R-7. The clean-up changed nothing that stays — robustness
+The session-7 clean-up (owner's brief, 2026-11-15) removed what was never
+known to work: HLS (and hls.js), screen capture, schlieren's experimental
+Traces view, and the sonification engine (and Tone.js) — each archived
+locally with its index entry. Three things on the same list were verified
+instead of removed, as agreed:
+
+| Verified | How | Result |
+|---|---|---|
+| WebM recording (R) | Headless Chrome, bees.mp4 playing, the R-key path (session.toggleRecord) for ~3 s | A 272 KB `video/webm;codecs=vp9` blob; **kept** |
+| Canvas 2D fallback | `?renderer=canvas2d`, bees.mp4, all six algorithms | posy/raw/magnify render; mask, history and background report "needs WebGL2" correctly; **kept** |
+| No-float path | `?nofloat`, filmstrips of posy, raw and the mask | posy ghosts the trees, the mask cuts out `truth`'s movers; magnify/history/background report "needs float render targets"; **kept** |
+
+Proof the removals changed nothing that stays, before (master d792a1e)
+against after, same machine, same scene order:
+
+- One verdict-named filmstrip per effect — trees-latest (posy), truth-mask,
+  truth-age (history), flow-colour, kitten-mag-off (magnify),
+  plume-knife-held (schlieren): **all six byte-identical**.
+- Parity probes: **11 of 11 pass** on the cleaned branch (diff, trail,
+  energy grid, mask, history, background, magnify harness, flow, schlieren,
+  warp, motion-magnify).
+- 286 unit tests, typecheck and build pass.
+- Sizes: src+scripts 23,065 → 21,788 lines; dist 1.74 MB → 0.88 MB (the
+  main chunk 880 → 360 kB, gzip 258 → 98 kB: hls.js was in it, and the
+  340 kB lazy Tone chunk is gone); node_modules 157 → 108 MB.
+- Frame time (SwiftShader, indicative): interleaved renders of the six
+  proof scenes, two rounds each — before 53.3/53.1 s, after 52.0/53.0 s;
+  within noise.

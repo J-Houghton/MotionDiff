@@ -14,7 +14,7 @@
 const USES_HEADING = {
   flow: (p) => p.flowShow === 'colour' || p.flowShow === 'arrows' || (p.flowShow === 'particles' && p.traceColour === 'heading'),
   history: (p) => p.historyShow === 'direction' || p.historyShow === 'measured',
-  schlieren: (p) => p.schlierenShow === 'direction' || (p.schlierenShow === 'traces' && p.traceColour === 'heading'),
+  schlieren: (p) => p.schlierenShow === 'direction',
 };
 
 const STOPS = Array.from({ length: 13 }, (_, i) => `hsl(${i * 30} 100% 50%) ${i * 30}deg`).join(', ');

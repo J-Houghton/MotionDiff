@@ -2,13 +2,12 @@
  * Session: everything the app does that is not interface.
  *
  * Owns the video element, the pipeline, the frame loop, sources (file, URL,
- * HLS, camera, screen), transport, export and the audio engine, and reports
+ * camera), transport and export, and reports
  * what changed through `on()`. The UI calls methods here and redraws from
  * the state it reads back; nothing in this file touches a control.
  */
 import { Pipeline } from './pipeline.js';
-import { AudioEngine } from './audio.js';
-import { attachHlsSource, isDashUrl, isHlsUrl, isYouTubeUrl } from './loader.js';
+import { isDashUrl, isHlsUrl, isYouTubeUrl } from './loader.js';
 import { CanvasRecorder } from './exporter.js';
 import { render, renderBlank, renderMagnify } from './renderer.js';
 import { buildSourceProfile } from './source-profile.js';
@@ -81,7 +80,6 @@ export class Session {
     this.video = options.video;
     this.canvas = options.canvas;
     this.pipeline = new Pipeline();
-    this.audio = new AudioEngine();
     this.recorder = new CanvasRecorder(this.canvas);
 
     this.loaded = false;
@@ -148,7 +146,6 @@ export class Session {
     }
     video.addEventListener('ended', () => { if (!video.loop) this._setPlaying(false); });
     document.addEventListener('visibilitychange', () => this._onVisibility());
-    window.addEventListener('pagehide', () => this.audio.dispose());
   }
 
   // ── Events ──────────────────────────────────────────────────
@@ -375,20 +372,6 @@ export class Session {
     }
   }
 
-  async loadScreen() {
-    if (!navigator.mediaDevices?.getDisplayMedia) {
-      this.setStatus('Screen capture is not available in this browser', 'error');
-      return;
-    }
-    try {
-      this.setStatus('Requesting screen…', 'info');
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-      await this._loadStream(stream, 'screen');
-    } catch {
-      this.setStatus('Screen capture cancelled', 'error');
-    }
-  }
-
   /** Tear down whatever is loading or playing. */
   _beginLoad() {
     if (this.recorder.isRecording()) void this.toggleRecord();
@@ -397,7 +380,6 @@ export class Session {
     this.calibration = null; // a scale belongs to one camera setup
     this._setPlaying(false);
 
-    this.pipeline.clearExternalResources();
     const attached = this.video.srcObject instanceof MediaStream ? this.video.srcObject : null;
     for (const stream of new Set([attached, this._stream])) stream?.getTracks().forEach((track) => track.stop());
     this._stream = null;
@@ -461,18 +443,7 @@ export class Session {
     video.playsInline = true;
 
     if (!isLocal && isHlsUrl(src)) {
-      pipeline.setSourceProfile(buildSourceProfile('hls', HAS_RVFC));
-      video.crossOrigin = 'anonymous';
-      this._pendingSource.kind = 'hls';
-      try {
-        const ready = this._whenMetadata();
-        await attachHlsSource(src, video, pipeline);
-        await ready;
-        await this._ready();
-      } catch (error) {
-        pipeline.clearExternalResources();
-        this._fail(`Could not load the HLS stream${error.message && error.message !== 'load failed' ? `: ${error.message}` : ''}`);
-      }
+      this._fail('HLS streams are not supported: use a direct media URL');
       return;
     }
 
@@ -538,7 +509,7 @@ export class Session {
       this.source = null;
       this._setPlaying(false);
       this._emit('source');
-      this.setStatus(kind === 'screen' ? 'Screen share ended' : 'Camera stopped', 'info');
+      this.setStatus('Camera stopped', 'info');
     });
 
     const rate = stream.getVideoTracks()[0]?.getSettings?.().frameRate;
@@ -665,10 +636,6 @@ export class Session {
     // the last stamp; a tool feeding frames by hand brings its own.)
     if (this._stream && !this.manual && !this.video.paused) frameMeta = { mediaTime: performance.now() / 1000 };
     this.pipeline.process(this.video, frameMeta);
-    // One audio update per processed frame. The grid size is 0 unless the
-    // engine is running, and the pipeline skips the readback entirely at 0.
-    const grid = this.pipeline.getEnergyGrid(this.audio.gridCols, this.audio.gridRows);
-    if (grid) this.audio.update(grid);
   }
 
   _drawWorkerResult(result) {
@@ -804,15 +771,11 @@ export class Session {
     this._lastCallbackMs = 0;
     this._callbackRun = 0;
     this._fpsProbe = null;
-    // The AudioContext already has its gesture; this only un-pauses the voices.
-    if (this.audio.params.enabled) void this.audio.start();
     this._arm();
   }
 
   _stopLoop() {
     this._loopRunning = false;
-    // No frames means no energy updates: fade out instead of holding a drone.
-    this.audio.stop();
     if (this._rafId !== null) cancelAnimationFrame(this._rafId);
     if (this._rvfcId !== null && HAS_RVFC) this.video.cancelVideoFrameCallback(this._rvfcId);
     this._rafId = null;

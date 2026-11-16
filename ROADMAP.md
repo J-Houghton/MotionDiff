@@ -3,12 +3,14 @@
 Status of everything planned for MotionDiff. Updated at the end of every working
 session. Statuses: **done**, **in progress**, **planned**, **deferred**.
 
-Last updated: 2026-11-15 (session 6, the large tier: the shared-stage pipeline
-restructure proven invisible; the app reorganised around six effects with the
-instrument margin and the question strip (owner's pick from three mockups);
-camera compensation; grouping and tracking; calibration to real units;
-motion-guided magnification; the owner's fixes batch and a version footer.
-Acceptance under "Session 6" in docs/verdicts.md, X-1 and V-6C/T/K/M.)
+Last updated: 2026-11-15 (session 7, the clean-up: motion-guided magnification
+landed on master, which its stacked-base merge had missed; everything the app
+offers inventoried against its evidence; HLS, screen capture, schlieren's
+experimental Traces view and the sonification engine removed to a local archive
+at the owner's decision (hls.js and tone dependencies gone with them; main
+bundle 880 → 360 kB); WebM recording and both render fallbacks verified and
+kept; every remaining effect proven byte-identical before/after, 11/11 parity
+probes. Proof under "Session 7" in docs/verdicts.md.)
 
 The governing rule for every item: lightweight, and easy for a fresh agent to pick
 up — accurate docs, tests that explain intent, and nothing in the repo that isn't
@@ -30,12 +32,12 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 | Schlieren: hot air and gas made visible | **done**, session 4 | A candle plume appears where the video shows a still background (`candle-dots`, `plume`) | | `docs/schlieren.md`, verdict V7 |
 | Schlieren on a real phone, and on the owner's footage | **in progress** | The same, live from a phone camera; weak sources (a mug, a heater); natural backgrounds; a held reference | Small once footage exists | Waiting for the footage listed in `docs/schlieren.md` and for a deploy to test on a phone. Defaults (window, smoothing, sensitivity) may need tuning for phone noise and compression |
 | Schlieren: a step-by-step setup guide in the picture | **done**, session 5 (Session A) | First-time users reach a working setup without the help sheet: background, steady camera, settle, hold | | Verdict IA5. A checklist card with live state dots from `pipeline.readings`; the live wiring waits on Session B's readings landing in master |
-| Mirror: the front camera flipped like a mirror, fullscreen | **done**, session 5 (Session A) | An installation where viewers see their own motion | | Verdict IA4. Display-only flip; the legend flips with it. Needs the owner's phone |
-| Camera zoom by pinch (owner's request) | **done**, session 5 (Session A) | Two fingers zoom the camera where the driver allows it | | In IA4. iOS Safari exposes no zoom control; needs the owner's phone |
-| Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. Would replace the experimental traces view on real footage |
+| Mirror: the front camera flipped like a mirror, fullscreen | **done**, session 5 (Session A) | An installation where viewers see their own motion | | Verdict IA4. Display-only flip; the legend flips with it. Still unconfirmed on a real phone |
+| Camera zoom by pinch (owner's request) | **done**, session 5 (Session A) | Two fingers zoom the camera where the driver allows it | | In IA4. iOS Safari exposes no zoom control; still unconfirmed on a real phone |
+| Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. The experimental traces view this would have replaced was removed in the session-7 clean-up (archived) |
 | Camera compensation (global motion, then subtract it) | **done**, session 6 | On `handheld` the scenery cancels in Raw and in the mask with the crowd kept; `river`'s banks go dark under the zoom term; a still camera is byte-identical on and off | | `cameraComp` ("Steady camera"), docs/camera-compensation.md, V-6C. Three guards keep a still camera still |
 | Real-time stabiliser | planned, after compensation | `handheld` plays back steady | Medium | |
-| Sonification | done; **deferred** beyond keeping it working | | | Could be driven by flow speed and heading |
+| Sonification | **archived**, session-7 clean-up | | | Built sessions 1–2, never blind-judged; removed with Tone.js at the owner's decision (archive/sonification/). The pooled motion grid it read stays, feeding the readings panel |
 
 ## Visualisations
 | Item | Status | Expected visible effect, and on what footage | Effort | Notes |
@@ -107,7 +109,6 @@ Ranked by visible effect for the effort.
 | Per-vehicle separation inside a merged mask clump | Needs a measurement the mask does not make (a flow-direction split); tracking boxes congestion per clump today (V-6T) |
 | Compression motion vectors | |
 | YOLO proof of concept | Run on the original frame, not on diff output; combine with motion in data |
-| Audio engine improvements | Keep it working, do not extend it |
 | Phase-based / Riesz magnification | Large shader cost and a separate patent |
 
 ## Done
@@ -164,6 +165,8 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
 | Research write-up, design mockups | `3922a07` |
 
 ## Known gaps
+- Mirror mode and pinch zoom are still unconfirmed on a real phone (the app
+  itself runs there; these two controls specifically have not been tried).
 - Motion magnification turns fine repeated texture (fur) painterly: the field
   measures its real micro-shimmer; coherent large-scale motion suffers least
   (V-6M). A coherence gate is the next idea if it matters in use.
@@ -180,8 +183,6 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
   owner's phones (deployed site), but frame-rate figures are from one desktop
   GPU. Schlieren has been checked on synthetic scenes and
   two recordings from the web, not on phone footage, weak sources or natural backgrounds.
-- Schlieren traces show nothing on the real candle recording (too fast between frames
-  at 30 fps); the view is labelled experimental.
 - A fine regular pattern on a screen is a poor schlieren background, and unusable below
   a 1280 px processing width.
 - Plain (uncoloured) traces do not show which way they run in a still picture.
@@ -189,8 +190,7 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
   straight edge or on flat surfaces; a moving camera makes everything flow.
 - Blind-judged in headless Chrome, with phone and tablet layouts under device
   emulation and Chrome's fake camera. Real phones and a real camera work (the
-  owner's testing; the deployed site). Not tested: Firefox, Safari, screen
-  capture, HLS.
+  owner's testing; the deployed site). Not tested: Firefox, Safari.
 - Motion history: a hatched patch at the tail of a flat, round object's trail, and
   hue that drifts across a trail wider than 56 px.
 - Background model: ragged edges while something is being absorbed; soft, blobby

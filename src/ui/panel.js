@@ -2,14 +2,13 @@
  * The parameter panel: a Tweakpane built from the active mode's schema.
  *
  * Nothing here knows any mode by name. Controls come from `mode.params`
- * (app/modes/params.js); the folders after it (look, performance, sound,
+ * (app/modes/params.js); the folders after it (look, performance,
  * export) are the same for every mode. The pane is rebuilt when the mode
  * changes, which is simpler than diffing it.
  */
 import { Pane } from 'tweakpane';
 import { MODES } from '../app/modes/index.js';
 import { PARAMETER_PRESETS, PRESET_VERSION, migratePresetParams } from '../app/clips.js';
-import { DEFAULT_AUDIO_PARAMS, SCALE_NAMES } from '../app/audio.js';
 
 const PRESET_KEY = 'motiondiff:user-presets';
 const DISPLAYS = { Diff: 'diff', Overlay: 'overlay', Glow: 'glow', 'Data (what the mode measures)': 'data' };
@@ -81,7 +80,6 @@ export function initPanel({ container, session }) {
   // Tweakpane edits this object; changes are forwarded to the session.
   const values = {};
   const ui = { mode: '', display: '', preset: '', width: 640, fpsCap: 0, fps: 0, info: '' };
-  const audioValues = { ...DEFAULT_AUDIO_PARAMS };
 
   function syncValues() {
     Object.assign(values, session.params);
@@ -191,34 +189,6 @@ export function initPanel({ container, session }) {
     perf.addBinding(ui, 'width', { label: 'Width', options: WIDTHS }).on('change', (event) => session.setWidth(event.value));
     perf.addBinding(ui, 'fpsCap', { label: 'Frame cap', options: FPS_CAPS }).on('change', (event) => session.setParams({ fpsCap: event.value || null }));
     perf.addBinding(ui, 'info', { label: 'Renderer', readonly: true });
-
-    const sound = pane.addFolder({ title: 'Sound', expanded: false });
-    const enable = sound.addButton({ title: session.audio.isRunning() ? 'Disable audio' : 'Enable audio' });
-    // The click is the user gesture the AudioContext needs.
-    enable.on('click', async () => {
-      if (session.audio.params.enabled) {
-        session.audio.setParams({ enabled: false });
-        enable.title = 'Enable audio';
-      } else {
-        try {
-          await session.audio.start();
-          if (!session.playing) session.audio.stop();
-          enable.title = 'Disable audio';
-        } catch (error) {
-          session.setStatus(`Audio failed to start: ${error.message}`, 'error');
-        }
-      }
-    });
-    const audioParam = (key, options) => sound.addBinding(audioValues, key, options)
-      .on('change', (event) => session.audio.setParams({ [key]: event.value }));
-    audioParam('masterVolume', { label: 'Volume', min: -60, max: 0, step: 1, format: (v) => `${v} dB` });
-    audioParam('gate', { label: 'Gate', min: 0, max: 0.5, step: 0.005 });
-    audioParam('cols', { label: 'Columns', min: 1, max: 16, step: 1 });
-    audioParam('rows', { label: 'Rows', min: 1, max: 8, step: 1 });
-    audioParam('scale', { label: 'Scale', options: Object.fromEntries(SCALE_NAMES.map((name) => [name, name])) });
-    audioParam('baseMidi', { label: 'Base note', min: 24, max: 72, step: 1 });
-    audioParam('attackMs', { label: 'Attack', min: 5, max: 500, step: 5, format: (v) => `${v} ms` });
-    audioParam('releaseMs', { label: 'Release', min: 20, max: 2000, step: 10, format: (v) => `${v} ms` });
 
     const exportFolder = pane.addFolder({ title: 'Export', expanded: false });
     const record = exportFolder.addButton({ title: session.recording ? 'Stop recording (R)' : 'Record WebM (R)' });
