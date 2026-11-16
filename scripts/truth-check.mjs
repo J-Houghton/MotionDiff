@@ -28,8 +28,7 @@
 // scene it compares the shift with the known field of the synthetic plume:
 // how well they correlate and how their sizes compare where the plume is,
 // and how quiet the picture is beside it. Only meaningful with a reference
-// held from before the plume was lit. With --target 1 it reads the scene's
-// saved velocity target instead (traces): heading and speed of the eddies.
+// held from before the plume was lit.
 //   node scripts/truth-check.mjs --dir filmstrips --tag sch --scene plume-knife-held --schlieren 1
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -81,51 +80,6 @@ if (args.schlieren) {
   const W = 640;
   const H = 360;
   const truth = field.fieldAt(now.t, W, H);
-
-  if (args.target) {
-    const target = JSON.parse(fs.readFileSync(path.join(dir, `${tag}${args.scene}.target.json`), 'utf8'));
-    const sx = W / target.width;
-    const sy = H / target.height;
-    const inside = { n: 0, present: 0, sumX: 0, sumY: 0, speed: 0, within20: 0 };
-    const outside = { n: 0, moving: 0 };
-    for (let y = 0; y < target.height; y++) {
-      for (let x = 0; x < target.width; x++) {
-        const i = (y * target.width + x) * 4;
-        const vx = target.values[i];
-        const vy = target.values[i + 1];
-        const speed = Math.hypot(vx, vy);
-        const px = (x + 0.5) * sx;
-        const py = (y + 0.5) * sy;
-        // Where the eddies are: above the smooth column, inside the cone.
-        if (field.inPlume(px, py, -14) && field.source.y - py > field.columnHeight + 20 && field.source.y - py < field.span - 60) {
-          inside.n++;
-          if (speed > 5) {
-            inside.present++;
-            inside.sumX += vx; inside.sumY += vy; inside.speed += speed;
-            const error = Math.abs((((Math.atan2(vy, vx) * 180) / Math.PI - now.heading + 540) % 360) - 180);
-            if (error <= 20) inside.within20++;
-          }
-        } else if (!field.inPlume(px, py, 30)) {
-          outside.n++;
-          if (speed > 5) outside.moving++;
-        }
-      }
-    }
-    const heading = ((Math.atan2(inside.sumY, inside.sumX) * 180) / Math.PI + 360) % 360;
-    console.log(JSON.stringify({
-      scene: args.scene, t: now.t,
-      eddies: {
-        measuredShare: +((100 * inside.present) / inside.n).toFixed(1),
-        meanHeading: +heading.toFixed(1), knownHeading: now.heading,
-        headingError: +Math.abs(((heading - now.heading + 540) % 360) - 180).toFixed(1),
-        within20deg: +((100 * inside.within20) / Math.max(1, inside.present)).toFixed(1),
-        meanSpeed: +(inside.speed / Math.max(1, inside.present)).toFixed(1), knownSpeed: now.rise,
-        speedAlongHeading: +(Math.hypot(inside.sumX, inside.sumY) / Math.max(1, inside.present)).toFixed(1),
-      },
-      stillBackgroundMoving: +((100 * outside.moving) / outside.n).toFixed(2),
-    }, null, 1));
-    process.exit(0);
-  }
 
   const unit = 1 / scale;
   let sumMT = 0, sumMM = 0, sumTT = 0, n = 0, drawn = 0;

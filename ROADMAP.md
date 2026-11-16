@@ -32,7 +32,7 @@ reference clip (`scripts/README.md`); an item with none is deferred, not planned
 | Schlieren: a step-by-step setup guide in the picture | **done**, session 5 (Session A) | First-time users reach a working setup without the help sheet: background, steady camera, settle, hold | | Verdict IA5. A checklist card with live state dots from `pipeline.readings`; the live wiring waits on Session B's readings landing in master |
 | Mirror: the front camera flipped like a mirror, fullscreen | **done**, session 5 (Session A) | An installation where viewers see their own motion | | Verdict IA4. Display-only flip; the legend flips with it. Needs the owner's phone |
 | Camera zoom by pinch (owner's request) | **done**, session 5 (Session A) | Two fingers zoom the camera where the driver allows it | | In IA4. iOS Safari exposes no zoom control; needs the owner's phone |
-| Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. Would replace the experimental traces view on real footage |
+| Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. The experimental traces view this would have replaced was removed in the session-7 clean-up (archived) |
 | Camera compensation (global motion, then subtract it) | **done**, session 6 | On `handheld` the scenery cancels in Raw and in the mask with the crowd kept; `river`'s banks go dark under the zoom term; a still camera is byte-identical on and off | | `cameraComp` ("Steady camera"), docs/camera-compensation.md, V-6C. Three guards keep a still camera still |
 | Real-time stabiliser | planned, after compensation | `handheld` plays back steady | Medium | |
 | Sonification | done; **deferred** beyond keeping it working | | | Could be driven by flow speed and heading |
@@ -180,8 +180,6 @@ Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdic
   owner's phones (deployed site), but frame-rate figures are from one desktop
   GPU. Schlieren has been checked on synthetic scenes and
   two recordings from the web, not on phone footage, weak sources or natural backgrounds.
-- Schlieren traces show nothing on the real candle recording (too fast between frames
-  at 30 fps); the view is labelled experimental.
 - A fine regular pattern on a screen is a poor schlieren background, and unusable below
   a 1280 px processing width.
 - Plain (uncoloured) traces do not show which way they run in a still picture.
