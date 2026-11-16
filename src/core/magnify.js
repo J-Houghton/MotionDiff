@@ -343,3 +343,86 @@ export function addBand(base, width, height, fast, slow, factor, amp, chroma, ou
     }
   }
 }
+
+// ── Motion-guided magnification (docs/motion-magnify.md) ──────────────
+// The measured displacement itself is band-passed and exaggerated: the
+// velocity field is band-passed with the same two cut-offs as the
+// brightness EMAs, then leak-integrated into a bounded displacement.
+
+/**
+ * One step of the velocity band: per component, fast and slow EMAs of the
+ * velocity advance and the band is their difference.
+ *
+ * @param {Float32Array} fast - 2 per pixel (x, y), updated in place
+ * @param {Float32Array} slow - 2 per pixel, updated in place
+ * @param {Float32Array} velocity - 2 per pixel, the measured field
+ * @param {number} count - Pixels
+ * @param {number} alphaFast @param {number} alphaSlow - emaAlpha of the cut-offs
+ * @param {Float32Array} [band] - 2 per pixel, fast − slow
+ * @returns {Float32Array} band
+ */
+export function velocityBandStep(fast, slow, velocity, count, alphaFast, alphaSlow, band = new Float32Array(count * 2)) {
+  for (let i = 0; i < count * 2; i++) {
+    fast[i] += (velocity[i] - fast[i]) * alphaFast;
+    slow[i] += (velocity[i] - slow[i]) * alphaSlow;
+    band[i] = fast[i] - slow[i];
+  }
+  return band;
+}
+
+/**
+ * Leak-integrate the banded velocity into a bounded displacement:
+ * D = D·(1 − leak) + vBand·dt. A constant velocity leaves the band and the
+ * leak drains what is left; an in-band oscillation integrates into the
+ * travelling displacement the warp exaggerates.
+ *
+ * @param {Float32Array} displacement - 2 per pixel, updated in place
+ * @param {Float32Array} band - velocityBandStep's output
+ * @param {number} count
+ * @param {number} dtSeconds
+ * @param {number} leak - emaAlpha of the slow cut-off
+ */
+export function displacementStep(displacement, band, count, dtSeconds, leak) {
+  for (let i = 0; i < count * 2; i++) {
+    displacement[i] = displacement[i] * (1 - leak) + band[i] * dtSeconds;
+  }
+  return displacement;
+}
+
+/**
+ * Backward-warp a frame by an amplified displacement field: each output
+ * pixel samples the source at x − amp·d(x), bilinear, with the shift
+ * capped. The displacement field may be coarser than the frame.
+ *
+ * @param {Uint8ClampedArray} src - RGBA
+ * @param {number} width @param {number} height
+ * @param {Float32Array} displacement - 2 per field cell, source-frame px
+ * @param {number} fieldWidth @param {number} fieldHeight
+ * @param {number} amp
+ * @param {number} cap - Largest shift, px
+ * @param {Uint8ClampedArray} [out]
+ */
+export function warpByField(src, width, height, displacement, fieldWidth, fieldHeight, amp, cap, out = new Uint8ClampedArray(src.length)) {
+  const clampShift = (value) => Math.min(cap, Math.max(-cap, value));
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      // Nearest field cell (the field is far smoother than a pixel).
+      const fx = Math.min(fieldWidth - 1, Math.round((x / width) * fieldWidth));
+      const fy = Math.min(fieldHeight - 1, Math.round((y / height) * fieldHeight));
+      const at = (fy * fieldWidth + fx) * 2;
+      const sx = Math.min(width - 1, Math.max(0, x - clampShift(amp * displacement[at])));
+      const sy = Math.min(height - 1, Math.max(0, y - clampShift(amp * displacement[at + 1])));
+      const x0 = Math.floor(sx); const y0 = Math.floor(sy);
+      const x1 = Math.min(width - 1, x0 + 1); const y1 = Math.min(height - 1, y0 + 1);
+      const gx = sx - x0; const gy = sy - y0;
+      const o = (y * width + x) * 4;
+      for (let channel = 0; channel < 3; channel++) {
+        const top = src[(y0 * width + x0) * 4 + channel] * (1 - gx) + src[(y0 * width + x1) * 4 + channel] * gx;
+        const bottom = src[(y1 * width + x0) * 4 + channel] * (1 - gx) + src[(y1 * width + x1) * 4 + channel] * gx;
+        out[o + channel] = top * (1 - gy) + bottom * gy;
+      }
+      out[o + 3] = 255;
+    }
+  }
+  return out;
+}

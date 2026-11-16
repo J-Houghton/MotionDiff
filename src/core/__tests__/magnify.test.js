@@ -6,6 +6,7 @@ import {
   magnifyPixel,
   seedStates,
   magnifyFrame,
+  velocityBandStep, displacementStep, warpByField,
 } from '../magnify.js';
 
 /**
@@ -349,5 +350,54 @@ describe('magnifyFrame', () => {
     const band = (0.5 - 0.1) * (12 / 255);
     const expected = (128 / 255 + 10 * band) * 255;
     expect(out[0]).toBe(Math.round(expected));
+  });
+});
+
+describe('velocityBandStep + displacementStep (motion magnification)', () => {
+  const alphaF = emaAlpha(2.0, 1000 / 30);
+  const alphaS = emaAlpha(0.2, 1000 / 30);
+  const dt = 1 / 30;
+
+  const run = (velocityAt, frames) => {
+    const fast = new Float32Array(2);
+    const slow = new Float32Array(2);
+    const disp = new Float32Array(2);
+    const band = new Float32Array(2);
+    const history = [];
+    for (let k = 0; k < frames; k++) {
+      velocityBandStep(fast, slow, velocityAt(k), 1, alphaF, alphaS, band);
+      displacementStep(disp, band, 1, dt, alphaS);
+      history.push(disp[0]);
+    }
+    return history;
+  };
+
+  it('a constant velocity (a pan) decays out of the band', () => {
+    const history = run(() => Float32Array.from([30, 0]), 300);
+    const early = Math.max(...history.slice(10, 60).map(Math.abs));
+    const late = Math.max(...history.slice(-30).map(Math.abs));
+    expect(late).toBeLessThan(early * 0.2);
+  });
+
+  it('an in-band oscillation passes; one far above the band is attenuated', () => {
+    const osc = (freq) => run((k) => Float32Array.from([20 * Math.sin(2 * Math.PI * freq * (k / 30)), 0]), 300);
+    const inBand = Math.max(...osc(0.8).slice(-90).map(Math.abs));
+    const above = Math.max(...osc(10).slice(-90).map(Math.abs));
+    expect(inBand).toBeGreaterThan(above * 3);
+  });
+});
+
+describe('warpByField', () => {
+  it('shifts content against the field and caps the shift', () => {
+    const width = 16; const height = 8;
+    const src = new Uint8ClampedArray(width * height * 4);
+    for (let x = 0; x < width; x++) for (let y = 0; y < height; y++) src[(y * width + x) * 4] = x * 10;
+    const field = Float32Array.from([2, 0]); // one cell, 2 px right
+    const out = warpByField(src, width, height, field, 1, 1, 1, 8);
+    // Sampling at x − 2: interior pixels take the value from two to the left.
+    expect(out[(3 * width + 6) * 4]).toBe(src[(3 * width + 4) * 4]);
+    // Amp beyond the cap clamps at 8 px.
+    const capped = warpByField(src, width, height, field, 1, 1, 100, 8);
+    expect(capped[(3 * width + 12) * 4]).toBe(src[(3 * width + 4) * 4]);
   });
 });
