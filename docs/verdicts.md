@@ -1621,3 +1621,38 @@ diagnosed correction.** Numbers:
    on 5.5 s undisturbed.
 5. Audit at 1440×900 with named boxes and the margin up: nothing
    clipped, overlapping or off screen; min contrast 4.65.
+
+## Session 8
+
+### M-1. Naming by a detector, with the disagreement shown (docs/naming-poc.md)
+**Expected, written before building (2026-11-15).**
+1. **Light without it**: with naming never switched on, no request leaves
+   for the CDN or Hugging Face (page resource timing), the detector code
+   stays in its own lazy chunk, and the truth-mask filmstrip is
+   byte-identical to master's.
+2. **It names vehicles** (`traffic`, mask + boxes + names, ~12 s of normal
+   playback): among tracked boxes that lived ≥ 2 s and settled a label, at
+   least half carry a vehicle-or-person COCO class; the wrong names on the
+   rest are recorded, not hidden. (The bar N-1 met 4-of-7; a detector
+   should do at least as well.)
+3. **The disagreement is shown and honest**: on `truth` (synthetic shapes
+   the model was never taught), the tracked movers are motion-only; on
+   `traffic`, at least one model-only find appears during the run (the
+   model sees stopped or far vehicles that motion rightly ignores), drawn
+   as the model's own dashed estimate with its age, and at least half of
+   the settled ≥ 2 s tracks read "both".
+4. **Beside the pipeline**: one request in flight at a time, cadence
+   self-throttled to the model's answer; median frame time on `traffic`
+   with names on within 25% of names off (SwiftShader, indicative); the
+   picture keeps playing while the model loads.
+5. **Readings**: the margin names the active backend, the model's load
+   time, its inference time and its cadence, and one button copies them
+   as text for a report.
+6. **Interface**: audit clean with agreement-coloured boxes, a model-only
+   find and the readings margin up.
+
+Licences checked and recorded in the design note before building:
+Transformers.js Apache-2.0; RT-DETR v2 r18vd ONNX Apache-2.0 (upstream
+PekingU Apache-2.0); COCO names ride in the model config; YOLO stays
+rejected (AGPL-3.0). WebGPU is absent in this sandbox's headless Chrome:
+backend choice and GPU speed are owner-desktop checks, named below.

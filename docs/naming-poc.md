@@ -1,73 +1,75 @@
-# Naming what is tracked: a proof of concept (session 7 design note)
+# Naming what is tracked: a detector beside the pipeline (session 8 design note)
 
-Tracking draws boxes with numbers; this names them. A small image
-classifier looks at crops of the **original frame** under each tracked box,
-a few times a second, **beside the pipeline and not inside it** — nothing
-in the measurement or render path changes — and tracking carries the label
-between classification runs: a box keeps its name while its id lives.
-Loaded **only when asked**, so the app stays light without it.
+Tracking draws boxes with numbers; this names them — and now also answers a
+question the first take could not: **where do motion and a model disagree?**
+A small object detector looks at the **whole original frame** a few times a
+second, in a worker **beside the pipeline and never inside the frame loop**.
+Its boxes are matched to the tracker's boxes, so each track carries a label,
+and the picture shows three kinds of find: by motion and the model **both**,
+by **motion only**, and by the **model only**.
 
-## Licences, checked against this repo's MIT (2026-11-16)
+This supersedes the session-7 take (MobileNetV2 over box crops, verdict
+N-1): a crop classifier could only name what motion had already found. The
+first take is in git history under this same file name.
+
+## Licences, checked against this repo's MIT (2026-11-15)
 
 | Piece | Licence | Compatible |
 |---|---|---|
-| ONNX Runtime Web (the runtime, from the jsDelivr CDN, version pinned) | MIT | yes |
-| MobileNetV2 int8 (`onnxmodelzoo/mobilenetv2-12-int8` on Hugging Face — the ONNX Model Zoo's new home since its GitHub LFS downloads ended July 2025; 3.65 MB) | Apache-2.0 | yes — and it is fetched at runtime, not redistributed with this repo |
-| ImageNet-1k class names (the label list, a data file in this repo) | the synset words; recorded in the file header | yes |
-| Ultralytics YOLO (the obvious alternative) | AGPL-3.0 | **no — rejected**, as the deferred list long suspected; a detector is also unnecessary here, since tracking already supplies the boxes |
+| Transformers.js (`@huggingface/transformers`, jsDelivr CDN, version pinned) | Apache-2.0 | yes |
+| RT-DETR v2 r18vd (`onnx-community/rtdetr_v2_r18vd-ONNX` on Hugging Face; upstream weights PekingU/rtdetr_v2_r18vd, both Apache-2.0; 21 MB quantised, 41 MB fp16) | Apache-2.0 | yes — fetched at runtime, never redistributed with this repo |
+| COCO class names | carried inside the model's own config, nothing in this repo | yes |
+| Ultralytics YOLO (the obvious alternative) | AGPL-3.0 | **no — rejected**, as before |
 
 Neither runtime nor model enters the repository or the bundle: both are
-fetched when the option is first switched on. Offline, the switch fails
-with a plain sentence and turns itself back off.
+fetched when the option is first switched on, and the browser's cache keeps
+them. Offline, the switch fails with a plain sentence and turns itself
+back off.
 
 ## The method
 
-1. **Switch on**: *Name the movers* (`maskNames`), a toggle on the mask
-   mode beside *Box the movers*, shown only while boxes are on. The first
-   enable dynamically imports `app/naming.js`, which loads the runtime
-   from the CDN and the model from Hugging Face (~4 MB together, said in
-   the status line while it loads).
-2. **Classify**: every 400 ms, the largest few born boxes (up to 4) are
-   cropped from the video element at their picture coordinates — the
-   original frame, not the mode's output — letterboxed into 224×224,
-   normalised, and classified in one batch of single runs. Top-1 class
-   and score per crop.
-3. **Carry**: per track id, a small vote over the last five
-   classifications; the winning label (with its share) is the box's name.
-   The id's label survives between runs and through coasting; a dead id
-   forgets. Labels under a confidence floor show as nothing rather than
-   nonsense.
-4. **Show**: the boxes overlay appends the name to the id plate
-   (`7 · 93 px/s · tabby`). That is the whole surface: a PoC names boxes,
-   it does not export, filter or alert.
+1. **Switch on**: *Name the movers* (`maskNames`), the same toggle as
+   before, shown only while boxes are on. The first enable dynamically
+   imports `app/detect.js`, which starts a worker; the worker loads
+   Transformers.js from the CDN and the model from Hugging Face, picks
+   **WebGPU** where the browser has it and **wasm** otherwise, and says
+   which it picked. (`?detdtype=fp32` forces full precision for triage if
+   fp16 ever draws nonsense on some GPU.)
+2. **Look**: a few times a second — self-throttled, **one request in
+   flight at a time**, never faster than the model answers — the current
+   frame is snapshotted (scaled to ≤ 960 px wide) and sent to the worker
+   with the tracker's boxes *as they stood at that moment*. The result
+   arrives late by one inference; it is matched against that snapshot,
+   never against "the current frame".
+3. **Match**: greedy IoU (`core/boxmatch.js`, unit-tested) between the
+   model's boxes and the snapshot's track boxes. A matched pair votes the
+   model's label onto the track id (majority over the last five looks, as
+   before). Per id the last look's outcome is kept: **both** or **motion
+   only**. The model's unmatched boxes are kept as the **model-only**
+   finds of that look, with its time.
+4. **Show**: the id plate carries the settled name, marked as an estimate
+   (`7 · 93 px/s · ≈car`). Track boxes keep the accent colour when the
+   model agrees and turn dashed-amber when motion alone found them; the
+   model-only finds are drawn as grey dashed boxes with `≈label` and fade
+   as they age (they are where the model last looked, not where the thing
+   is now). The readings margin names the backend, the model's load and
+   inference times and its cadence, with a **Copy model readings** button
+   so the numbers can be pasted back into a report.
 
 ## What it will and will not do (help text)
 
-- ImageNet names things as one of 1,000 everyday classes: cars, animals,
-  household objects. A crowd, a synthetic square or rain gets a wrong or
-  absent name; the score says how sure it was.
-- The crop is the box: a mover the mask merges into a clump is named as
-  one thing, and a box around part of a mover names the part.
-- Names run a few times a second on the CPU, beside the pipeline: the
-  picture does not wait for them.
+- The detector names things as one of COCO's 80 everyday classes (vehicles,
+  people, animals, street furniture). A synthetic square or rain gets no
+  name; the score says how sure it was.
+- Everything from the model is an estimate and marked `≈`. Model-only boxes
+  are where the model saw something at its last look — up to a second or
+  two old — not a track.
+- A model-only find is not automatically a missed mover: it sees parked
+  cars motion rightly ignores. A motion-only box is not automatically a
+  model miss: the mask boxes clumps and part-boxes the model does not
+  recognise. The disagreement is the measurement.
+- Names run beside the pipeline: the picture never waits for them.
 
-## Acceptance (N-1, registered before building)
+## Acceptance (M-1, registered before building)
 
-1. **Light without it**: with naming never switched on, the production
-   bundle's startup chunks are unchanged from master, and a headless run
-   of the app makes no request to the CDN or Hugging Face (checked from
-   the page's own resource timing).
-2. **It names vehicles** (`traffic`, headless, mask + boxes + names, ~12 s
-   of normal playback): among boxes that lived ≥ 2 s and got a settled
-   label, at least half carry a vehicle-family ImageNet label (the
-   design's list: car/wagon/cab/minivan/van/truck/trailer/bus/moving van/
-   pickup/limousine/jeep/ambulance/racer/sports car/convertible/
-   streetcar/snowplow/tow truck). This is a PoC bar: wrong names on the
-   rest are recorded, not hidden.
-3. **Tracking carries the label**: a sampled id's label is present on
-   frames between classification ticks (ticks ≤ 3 Hz, label on every
-   sampled frame while the id lives).
-4. **Beside the pipeline**: median frame time on `traffic` with names on
-   is within 25% of names off on this machine (SwiftShader, indicative),
-   and the picture keeps playing while the model loads.
-5. **Interface**: audit stays clean with named boxes up.
+See docs/verdicts.md, Session 8.
