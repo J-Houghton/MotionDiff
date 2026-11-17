@@ -1,9 +1,14 @@
-# Shared measurement stages (session 6 design note)
+# Shared measurement stages: design note
 
-The restructure the large tier waits on (`combined-modes.md` §8): each
-measurement becomes a stage computed **once per frame** that any view can use.
-It must change nothing visible; the proof plan is at the end. Written before
-building, as the acceptance rules require.
+Status: **built** (`src/app/stages.js`); the proof is at the end of this note.
+How the stages sit in the app today:
+[How it is built](../../docs/technical/architecture.md).
+
+The restructure that camera compensation, tracking and the readings panel
+waited on ([combined-modes.md](combined-modes.md) §8): each measurement becomes
+a stage computed **once per frame** that any view can use. It must change
+nothing visible; the proof plan is at the end. Written before building, as the
+[acceptance rules](../acceptance.md) require.
 
 ## The problem
 
@@ -27,7 +32,7 @@ things are wrong with that shape, and both block the work that comes next:
 Camera compensation makes it urgent: subtracting the camera's motion means
 warping the older frame before *any* differencing and subtracting a shift from
 flow's own field — one change that today would have to be repeated in five
-mode modules (`combined-modes.md` §8).
+mode modules ([combined-modes.md](combined-modes.md) §8).
 
 ## Approaches considered
 
@@ -93,9 +98,14 @@ in the renderer. Each becomes a stage when a second consumer exists. Posy and
 Raw's diff passes live in the renderer's built-ins and stay there. The worker
 fallback path is untouched.
 
-**Where camera compensation will plug in** (next piece, not this one): a
-`camera()` stage (the flow field's global fit) and one warped-sampling switch
-inside `maskRaw`/`velocity` — one place instead of five mode modules.
+**Where camera compensation plugs in** (the next piece, built since:
+[camera-compensation.md](camera-compensation.md)): a `camera()` stage (the flow
+field's global fit) and one warped-sampling switch inside `maskRaw`/`velocity`
+— one place instead of five mode modules.
+
+**Stages added since this note:** `camera()` and `stabilised()` (camera
+compensation), `objects()` ([tracking.md](tracking.md)) and `depth()`
+([depth-stage.md](depth-stage.md)).
 
 **The mode contract** gains one line: `ModeFrame.stages`. A mode's render still
 draws its picture and data; it now asks `frame.stages` for measurements instead
@@ -125,4 +135,4 @@ of calling helpers (or other modes' helpers) directly.
 4. Frame times: `traffic` stepped through 14 mode/option combinations on
    both builds, two interleaved rounds each, 40 timed frames per run
    (median of process + a 1-px readback). Every combination within ±2% —
-   noise. Indicative only: software GL on this machine.
+   noise. Indicative only: measured under software GL.

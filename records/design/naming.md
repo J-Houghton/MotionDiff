@@ -1,4 +1,10 @@
-# Naming what is tracked: a detector beside the pipeline (session 8 design note)
+# Naming what is tracked, with a detector beside the pipeline: design note
+
+Status: **built, experimental and parked** (*Name the movers*, `maskNames`).
+Confirmed working in use in Chrome on a desktop GPU and on a phone (November
+2026). Verdicts M-1, F-1, C-1 and "M-1 again" in
+[verdicts.md](../verdicts.md); where it stands:
+[model-options.md](../model-options.md).
 
 Tracking draws boxes with numbers; this names them — and now also answers a
 question the first take could not: **where do motion and a model disagree?**
@@ -8,9 +14,10 @@ Its boxes are matched to the tracker's boxes, so each track carries a label,
 and the picture shows three kinds of find: by motion and the model **both**,
 by **motion only**, and by the **model only**.
 
-This supersedes the session-7 take (MobileNetV2 over box crops, verdict
-N-1): a crop classifier could only name what motion had already found. The
-first take is in git history under this same file name.
+This supersedes the first take (MobileNetV2 over box crops, verdict N-1):
+a crop classifier could only name what motion had already found. The first
+take is in git history: its note as `docs/naming-poc.md` at commit
+`4bf5d31`, its code added in `8e669d0` and replaced in `506cced`.
 
 ## Licences, checked against this repo's MIT (2026-11-15; runtime row 2026-11-16)
 
@@ -34,7 +41,7 @@ back off.
    imports `app/detect.js`, which starts a worker; the worker loads
    Transformers.js from the CDN and the model from Hugging Face, and
    works down a ladder — **WebGPU fp16, WebGPU fp32, wasm q8** — until
-   one **loads and proves a look** (docs/model-ladder.md), saying where
+   one **loads and proves a look** ([model-ladder.md](model-ladder.md)), saying where
    it landed and why on the status line and each rung's own failure in
    the console. **Each rung gets a fresh worker**: a crash out of the
    runtime (fp16 crashed outright on a real GPU the first time out)
@@ -81,9 +88,10 @@ back off.
    drawn. Where a look takes longer than about a second — the CPU rung —
    that means **no model-only finds are drawn at all**: they would be
    boxes in empty space. Age is media time, so a paused picture keeps
-   the finds that belong to it and a seek drops them. The readings margin names the backend, the model's load and
-   inference times and its cadence, with a **Copy model readings** button
-   so the numbers can be pasted back into a report.
+   the finds that belong to it and a seek drops them. The readings margin
+   names the backend, the model's load and inference times and its cadence,
+   with a **Copy model readings** button that puts the numbers on the
+   clipboard.
 
 ## What it will and will not do (help text)
 
@@ -102,4 +110,4 @@ back off.
 
 ## Acceptance (M-1, registered before building)
 
-See docs/verdicts.md, Session 8.
+See M-1 in [verdicts.md](../verdicts.md).

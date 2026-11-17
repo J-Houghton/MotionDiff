@@ -1,4 +1,7 @@
-# Data out (session 7 design note)
+# Data out: design note
+
+Status: **built** (verdict D-1 in [verdicts.md](../verdicts.md)). How to use
+it: [Counting and export](../../docs/guide/counting-and-export.md).
 
 Tracking and calibration exist, but the numbers stay on screen. This piece
 lets them leave: export what was measured, and count movers crossing a line
@@ -18,9 +21,9 @@ While it is on, every processed frame appends:
 Two export buttons write files the way the WebM exporter does (a Blob and a
 click): **tracks as CSV** (one row per box per frame) and **readings as
 JSON** (a meta header — clip size, params snapshot, calibration, app
-version — and the per-frame rows). Collection is capped at 100,000 track
-rows (about 10 minutes of a busy scene); the status line says when it is
-full. A new source clears the log.
+version — and the per-frame rows). Collection is capped at 100,000 rows,
+frames or tracks, whichever comes first (about 10 minutes of a busy scene);
+the status line says when it is full. A new source clears the log.
 
 **The count line.** Press **X** (or the margin link beside the counts) and
 click twice to draw a line across the picture, the same two-click
@@ -32,7 +35,8 @@ movers passing beyond the line's ends do not count). Each track id counts
 once per actual crossing; crossing back counts the other way. The two
 cumulative counts live in the readings margin as an instrument row
 (⟶ and ⟵ along the line's own normal), reset when the line is redrawn or
-cleared (X, then Escape), and ride along in both exports; the JSON also
+cleared (X again clears it; Escape cancels a line being drawn), and ride
+along in both exports; the JSON also
 carries the event list (`t, id, dir`).
 
 ## Where it lives

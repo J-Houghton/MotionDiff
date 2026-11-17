@@ -1,7 +1,10 @@
-# Motion-guided magnification (session 6 design note)
+# Motion-guided magnification: design note
 
-The hardest item of the brief, done last: amplify small motions along
-their **measured** direction. Today's Magnify is Eulerian — it amplifies a
+Status: **built** (`magMode: 'motion'`, *Amplify: measured motion*). Verdict
+V-6M in [verdicts.md](../verdicts.md).
+
+Amplify small motions along their **measured** direction. The first Magnify
+is Eulerian — it amplifies a
 temporal band of brightness per pixel, which also amplifies sensor noise
 and says nothing about direction. This adds a second way of magnifying:
 the measured displacement itself is band-passed and exaggerated, so a

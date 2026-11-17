@@ -1,13 +1,16 @@
-# Research: how others do it, and what we should change
+# Research: how others do it, and what MotionDiff takes from it
 
-Written 2026-11-13, before the mode registry and the new modes. Four areas were
+A dated record: written 2026-11-13, before the mode registry and the new modes,
+with §6 and §7 added when particles and schlieren were designed. Proposals
+marked "Roadmap" were not built unless a later note says so; the project is now
+paused ([ROADMAP.md](../ROADMAP.md)). Four areas were
 read up on: browser motion-extraction tools, OpenCV's background subtractors and
 motion templates, Eulerian magnification implementations, and GPU optical flow.
 
 How to read this:
 - Every source listed was opened and read during this pass. Claims that could not
   be checked against an opened page are marked **unverified**.
-- "Ours" means the code on branch `core-timebase-gpu-ring` at commit `a0d84f9`.
+- "MotionDiff" here means the code as it stood at commit `a0d84f9`.
 - Ideas are borrowed, not code. Where code could be borrowed the licence is noted;
   nothing has been copied.
 
@@ -16,7 +19,7 @@ How to read this:
 | # | Area | Proposal | Verdict |
 |---|------|----------|---------|
 | 1 | Posy / Raw diff | Keep the blend, the media-time frame selection and the GPU ring | No change. Nobody else found does time-based selection or keeps history in a texture array |
-| 2 | Posy / Raw diff | Add a luma-first option for the RGB time-shift | Adopt (already on the roadmap as "luma-only branch"). Without it source colour is mixed into the time-as-colour reading |
+| 2 | Posy / Raw diff | Add a luma-first option for the RGB time-shift | Proposed, then deferred before building as having no visible effect (the "luma-only branch" in the verdict log). Without it source colour is mixed into the time-as-colour reading |
 | 3 | Posy / Raw diff | Blur before the diff, not only after | Adopt in the motion mask mode. In Raw mode blurring after `abs` only averages noise; blurring before cancels it |
 | 4 | Posy / Raw diff | A frozen reference frame ("difference from this moment") | Roadmap. Three reimplementations have it; it costs one pinned ring layer |
 | 5 | Trails | Decaying feedback instead of a windowed max | Done in `a0d84f9`, with media-time decay. A signed leaky accumulator (one tool uses it) is rejected: opposite deviations cancel |
@@ -28,9 +31,9 @@ How to read this:
 | 11 | Magnify | Normalise band gain so "amplify" means the same at any band setting | Needs a decision: it changes what existing amp values look like |
 | 12 | Magnify | Presets for pulse (colour) vs motion; deeper pooling for pulse | Roadmap |
 | 13 | Magnify | Document the MIT patents | Adopt now. See the licensing note |
-| 14 | Optical flow | Dense pyramidal Lucas-Kanade at 320×180, not the widely copied single-pass shader | Built in session 4 |
-| 15 | Particles (session 4, §6) | Wind-map traces stepped on media time in JavaScript, re-seeded off unmeasured spots | Built. Reverses "no particles" in §4 |
-| 16 | Schlieren (session 4, §7) | Measure the background's shift live with Lucas-Kanade against an averaged reference; cancel the camera's shift; judge the setup | Built. Others subtract frames live and measure offline |
+| 14 | Optical flow | Dense pyramidal Lucas-Kanade at 320×180, not the widely copied single-pass shader | Built |
+| 15 | Particles (§6) | Wind-map traces stepped on media time in JavaScript, re-seeded off unmeasured spots | Built. Reverses "no particles" in §4 |
+| 16 | Schlieren (§7) | Measure the background's shift live with Lucas-Kanade against an averaged reference; cancel the camera's shift; judge the setup | Built. Others subtract frames live and measure offline |
 
 ## 1. Browser and creative-coding motion extraction
 
@@ -57,7 +60,7 @@ Unverified: Posy's own video (the page returned no description or transcript, so
 "Posy's technique" is known only through reimplementers); Shadertoy returned 403.
 
 ### What others do differently
-- **Blend.** The same as ours. One tool uses our exact `(cur + (255 − ref) + 1) >> 1`;
+- **Blend.** The same as MotionDiff's. One tool uses the exact `(cur + (255 − ref) + 1) >> 1`;
   the rest use a 50/50 weighted add or `|a − b|`.
 - **Comparison frame.** Almost all count frames (a deque, a 16-slot ring, an "offset
   frames" field); "seconds" options are `round(seconds × fps)`. Only the ffmpeg
@@ -76,8 +79,8 @@ Unverified: Posy's own video (the page returned no description or transcript, so
   grid of cell averages; MGT per-frame quantity, centroid and area of motion with
   millisecond timecodes, and warns that per-clip normalisation makes values incomparable.
 
-### Should our code change
-- **Diff, time base, ring: no.** We are ahead on frame selection and history.
+### Should the code change
+- **Diff, time base, ring: no.** MotionDiff is ahead on frame selection and history.
 - **Luma-first RGB time-shift: yes**, as an option. Today source colour and time are
   confounded in the fringes.
 - **Blur order: yes, in the new mask mode.** Posy's blend is linear so the order does
@@ -104,9 +107,9 @@ Unverified: Posy's own video (the page returned no description or transcript, so
 Not opened: the Manzanera & Richefeu originals, Kameda & Minoh 1996, the Zivkovic
 papers (the code was read instead), docs.opencv.org (403; the headers were read).
 
-### What others do differently, and what we take
+### What others do differently, and what is taken
 **Three-frame differencing (feature 1)**
-- VSAM uses our causal form: moving if `|I(n) − I(n−1)| > T` and `|I(n) − I(n−2)| > T`.
+- VSAM uses the same causal form: moving if `|I(n) − I(n−1)| > T` and `|I(n) − I(n−2)| > T`.
   `min(a, b) > T` is the same test with a shared threshold and keeps a magnitude, so
   `min` stays.
 - Collins' slides use the centred form, `D(−N) AND D(+N)`, which marks where the
@@ -131,10 +134,10 @@ papers (the code was read instead), docs.opencv.org (403; the headers were read)
   edges next to never-moved pixels, the lower rejects flat interiors. The sample
   uses duration 0.5 s, deltas 0.05 s and 0.25 s.
 - `calcGlobalOrientation`: a histogram peak refined by a recency-weighted mean.
-- **Where we differ on purpose:** we store time *since* last motion and advance it by
+- **A deliberate difference:** MotionDiff stores time *since* last motion and advances it by
   the media-time step each frame, instead of absolute time. Absolute media time needs
   a 32-bit float target to resolve milliseconds an hour into a video; half floats,
-  the fallback we must support, cannot. Age-since-motion fits half floats, resets
+  the fallback that must be supported, cannot. Age-since-motion fits half floats, resets
   cleanly on a seek, and is the same quantity the trail already keeps.
 
 **Background model (feature 3)**
@@ -147,7 +150,7 @@ papers (the code was read instead), docs.opencv.org (403; the headers were read)
 - **Gating.** ViBe warns that updating only where the model itself says "background"
   gives deadlocks and everlasting ghosts, while a blind update absorbs slow targets.
   VSAM gates on the frame-difference mask instead: a stopped object or a ghost shows
-  no frame difference, so it is absorbed. We adopt that.
+  no frame difference, so it is absorbed. Adopted.
 - For variable frame intervals, `α = 1 − exp(−dt/τ)`. MOG2's default history
   corresponds to about 17 s at 30 fps.
 - Shadow test (MOG2/KNN), for later: brightness ratio between 0.5 and 1 with a small
@@ -187,29 +190,29 @@ implementation found runs on the CPU.
 ### What others do differently
 - **Spatial decomposition.** The paper uses a full Laplacian pyramid for motion, and
   heavy low-pass plus downsampling for pulse. Ports use 3–5 levels and zero the
-  finest level. Our single 1–4× box pool is the main gap.
+  finest level. The single 1–4× box pool here is the main gap.
 - **Temporal filter.** The paper's real-time app uses the same "two first-order
-  low-pass IIR filters" we do. One port uses raw per-frame coefficients (frame-rate
-  dependent); another uses our mapping with a nominal fps. Our real-interval version
-  is the most robust found.
-- **Colour space.** YIQ, YCbCr or Lab, used only to attenuate chroma, as our Rec.709
-  split does.
+  low-pass IIR filters" as MotionDiff. One port uses raw per-frame coefficients
+  (frame-rate dependent); another uses the same mapping with a nominal fps. The
+  real-interval version here is the most robust found.
+- **Colour space.** YIQ, YCbCr or Lab, used only to attenuate chroma, as the Rec.709
+  split here does.
 - **Amplification limit.** The paper bounds `(1 + α)·δ < λ/8` and reduces α below a
-  cutoff wavelength λc. Ports implement it per pyramid level. We have none, so fine
+  cutoff wavelength λc. Ports implement it per pyramid level. MotionDiff has none, so fine
   detail and noise are amplified as much as the signal.
 - **Defaults.** Pulse: α 100, band 0.83–1 Hz. Motion: α 10–20, band 0.4–3 Hz.
   Ports default to α 20 at 1–5 Hz for motion and α 100 at 0.84–1.43 Hz for colour.
 - **Practical reports.** Noise is amplified in proportion to α; the subject must hold
   still; turn auto-exposure off; lamp flicker interferes; "tuning parameters is hell".
 
-### Should our code change
+### Should the code change
 1. **Per-level amplification (roadmap, largest gain).** The EMAs are linear and
    per-pixel, so the current state textures can stay: mipmap the band texture and
    composite `Σ α_l · (level l − level l+1)` over 3–4 levels, zero the finest, apply
    the λc rule. This is a derivation, not something seen implemented, and float
    mipmaps in WebGL2 need a feature check. **Unverified.**
 2. **Band-gain normalisation (decision needed).** A difference of two one-pole
-   low-passes peaks at `(fH − fL)/(fH + fL)`: 0.48 at our defaults, so "amplify 15"
+   low-passes peaks at `(fH − fL)/(fH + fL)`: 0.48 at the default band, so "amplify 15"
    is effectively about 7. Dividing by that factor would make the number mean the
    same at any band setting, but it roughly doubles the effect of every existing value.
 3. **Pulse and motion presets, deeper pooling for pulse (roadmap).**
@@ -221,7 +224,7 @@ implementation found runs on the CPU.
 
 ### Licensing and patents
 This is a factual note, not legal advice.
-- We use no MIT code. The MIT reference code is licensed for non-commercial research only.
+- MotionDiff uses no MIT code. The MIT reference code is licensed for non-commercial research only.
 - The *method* is patented: MIT lists US 9,811,901, 10,007,986 and 10,217,218 as
   available for non-exclusive licensing. Google Patents shows 9,811,901 as active
   with an adjusted expiry in January 2033. The claims were not read.
@@ -252,9 +255,9 @@ This is a factual note, not legal advice.
 - https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices — asynchronous readback, float targets.
 
 Unverified: Shadertoy shaders (403), the TouchDesigner algorithm, any integrated-GPU
-performance figure. No source gave timings for our target hardware.
+performance figure. No source gave timings for the target hardware.
 
-### Comparison for our constraints
+### Comparison for these constraints
 | Approach | Passes | Notes | Fit |
 |---|---|---|---|
 | Single-pass normalised gradient (the widely copied shader) | 1 | Brightness difference steered along the gradient. Not pixel displacement; the aperture problem is unsolved | Trivial, but cannot give velocity or global motion |
@@ -275,7 +278,7 @@ performance figure. No source gave timings for our target hardware.
   velocity in px/s. A longer gap lifts slow motion above the noise; the shortest gap
   keeps fast motion inside the pyramid's range.
 - Show as a hue wheel (direction) with value = magnitude × confidence, and a coarse
-  arrow grid. No particles. (Reversed in session 4 by the owner: see §6.)
+  arrow grid. No particles. (Reversed later: see §6.)
 - Global motion: pool confidence-weighted flow to an 8×8 grid in a shader, read it
   back asynchronously, take the per-axis median on the CPU (optionally fit a
   4-parameter similarity). This is the same estimate camera compensation and a
@@ -305,9 +308,9 @@ gives slider tracks `role="slider"` with min, max and current value, and a style
 restores a visible focus ring. Keyboard shortcuts cover the common adjustments
 without entering the pane.
 
-## 6. Wind-map particles (session 4)
+## 6. Wind-map particles
 
-Read before designing the particle display (`particles.md`). The source code of the three
+Read before designing the particle display ([design/particles.md](design/particles.md)). The source code of the three
 main implementations was downloaded and read; numbers below are from code unless marked.
 
 ### Sources
@@ -336,13 +339,13 @@ Not opened: blog.mapbox.com directly (403), the original Esri repository (404), 
 - From video: ofxFlowTools gives particles birth only where there is flow, with fixed homes on a grid; PixelFlow treats flow as a force on a persistent crowd. **Nothing was found that draws short-lived, re-seeded wind-map traces through optical flow from video.**
 - Terminology: a trace through a frozen field is a streamline; through a field that changes every frame it is a pathline. Density of traces is a seeding choice in all of them and encodes nothing.
 
-### What we took, and what we did differently
+### What was taken, and what is different
 - Took: line segments, bilinear field lookup, random first ages (earth), the rounded-down fade (Mapbox), no seeding on still spots (hint.fm).
 - Different: stepped on media time; the field is measured live and mostly undefined, so particles on unmeasured spots are re-seeded within about 0.12 s; lengths are true to the measured movement at 1x; the step stays in JavaScript (thousands, not a million) so there is one implementation and nothing packed into textures.
 
-## 7. Schlieren (session 4)
+## 7. Schlieren
 
-Read before designing the schlieren mode (`schlieren.md`).
+Read before designing the schlieren mode ([design/schlieren.md](design/schlieren.md)).
 
 ### Sources
 - Rabha, Kumar, Kumar, Saini, Kumar (IIT Delhi), "Pocket Schlieren": https://arxiv.org/abs/2404.16060 (read in full, with supplement); project page https://web.iitd.ac.in/~kmanish/pocketschlieren; data https://zenodo.org/records/10949272 (CC BY-NC; an APK and raw photo pairs, no source code).
@@ -360,7 +363,7 @@ Not opened or secondhand: Jonassen 2006 and Hargather 2011 (schlieren velocimetr
 ### What others do
 - **Pocket Schlieren, live mode:** subtracts consecutive frames at 45–50 fps (720p). The authors: it does "not provide a quantitative relation with density gradients" and smooth flow "is hard to visualize". **Accurate mode:** Farnebäck optical flow on two photos picked from a burst; 2 s (1080p) to about 12 s per pair on a Snapdragon 712. The arrows in its figures are background shifts, not air velocity.
 - **What is measured** (Raffel): the first spatial derivative of density, integrated along the path of light. Shift on the sensor = (distance background to hot air) × magnification × deflection angle: a far background and a near camera give the largest shift. The lens focuses on the background.
-- **Size of the shift:** "only sub-pixel" in a raw pair (Settles and Liberzon); under 0.5 px is still measurable (Raffel). Our own estimate for a 640 px picture, not from a source: 0.04 to 0.35 px.
+- **Size of the shift:** "only sub-pixel" in a raw pair (Settles and Liberzon); under 0.5 px is still measurable (Raffel). An estimate made for a 640 px picture, not from a source: 0.04 to 0.35 px.
 - **Backgrounds:** random dots or squares 2 to 5 pixels across in the image; binary random squares scored best in Pocket Schlieren (25.9 dB against 12.5 for grey squares); fine natural texture works; nothing shows where texture stops. A regular pattern at a whole-pixel period gives moiré (Taberlet).
 - **Algorithms** (Atcheson): gradient methods beat block matching; Lucas–Kanade with a 3×3 to 7×7 window is the robust one; Horn–Schunck is slightly more accurate and needs tuning; under 0.1 px error in the best case.
 - **Live systems:** NASA's does FFT cross-correlation on a desktop GPU and re-registers each frame against a quiet region (the only global-shift correction found). Hobby tools subtract a stored reference; subtraction needs shifts from about a pixel up.
@@ -368,7 +371,7 @@ Not opened or secondhand: Jonassen 2006 and Hargather 2011 (schlieren velocimetr
 - **Filming:** tripod or stand everywhere; fixed references are "vulnerable to motion"; steady light; short exposure.
 - **No browser or WebGL implementation was found.**
 
-### What we took, and what we did differently
+### What was taken, and what is different
 - Took: Lucas–Kanade with a small window (Atcheson); the global-shift correction (NASA); random binary squares as the printable background (Pocket Schlieren); a reference that can follow or be fixed.
-- Different: the shift is **measured live** rather than approximated by subtraction; the reference is a multi-frame average (finer than 8 bits); the app judges the setup and says what is wrong; traces, where shown, follow the eddies and are labelled for what they are.
-- Confirmed by our own tests: a fine regular pattern on a screen is a poor background (the monitor recording), and a close-up candle at 30 fps is too fast for frame-to-frame eddy tracking. The kymograph route is the roadmap item for that.
+- Different: the shift is **measured live** rather than approximated by subtraction; the reference is a multi-frame average (finer than 8 bits); the app judges the setup and says what is wrong; traces, where shown, followed the eddies and were labelled for what they were (that view has since been removed).
+- Confirmed by tests on recordings: a fine regular pattern on a screen is a poor background (the monitor recording), and a close-up candle at 30 fps is too fast for frame-to-frame eddy tracking. Reading the speed from a space-time slice (a kymograph) is the idea for that; it is not built.

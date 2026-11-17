@@ -1,10 +1,14 @@
-# Grouping and tracking (session 6 design note)
+# Grouping and tracking: design note
 
-The object picture the owner asked for: the background model (or the mask)
-finds a mover, grouping turns its pixels into a shape, tracking gives the
-shape an identity — a box with an ID, its measured numbers, and an arrow
-ahead of it. Start on the traffic clip. Expected effects are registered in
-`verdicts.md` (V-6T) before building.
+Status: **built** (`maskTrack`, *Movers: boxed & numbered*), with calibration
+to real units. Verdicts V-6T and V-6K in [verdicts.md](../verdicts.md). How to
+use it: [Counting and export](../../docs/guide/counting-and-export.md).
+
+The object picture: the background model (or the mask) finds a mover, grouping
+turns its pixels into a shape, tracking gives the shape an identity — a box
+with an ID, its measured numbers, and an arrow ahead of it. Developed on the
+traffic clip. Expected effects were registered in the verdict log (V-6T)
+before building.
 
 ## What is measured
 
@@ -29,8 +33,8 @@ ahead of it. Start on the traffic clip. Expected effects are registered in
 
 ## What is drawn — and by whom
 
-The measurement publishes; the interface draws (the Session A/B seam,
-kept). `ui/boxes.js` lays a DOM overlay over the stage — like the legend
+The measurement publishes; the interface draws (the seam between
+measurement and display, kept). `ui/boxes.js` lays a DOM overlay over the stage — like the legend
 and the guide — and redraws from `pipeline.readings.objects` every frame:
 a thin box per track, its ID in a small plate at the box's shoulder, the
 speed under it, and an arrow from the box's leading edge along the
@@ -90,5 +94,5 @@ picture — two clicks and a distance in metres — and speeds read in m/s.
    then 0.1 m/px); the square's box reads 12 ± 2.4 m/s (120 px/s scaled,
    same 20% bar as V-6T).
 2. The interface audit stays clean with the marking overlay up.
-3. A fresh agent, plain words ("how fast is that car in real units?"),
-   finds the flow: calibrate, then read m/s off the box.
+3. A first-time tester, given plain words ("how fast is that car in real
+   units?"), finds the flow: calibrate, then read m/s off the box.

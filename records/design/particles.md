@@ -1,11 +1,13 @@
 # Particle traces: design note
 
-Status: **built** (session 4). A wind-map display for a velocity field: a few thousand
-particles carried along by the measured flow, each drawing the path it took. Used by the
-Optical flow mode and, experimentally, by Schlieren. Research in `research.md` §6;
-results in `verdicts.md` V6.
+Status: **built**. A wind-map display for a velocity field: a few thousand
+particles carried along by the measured flow, each drawing the path it took. Used by
+the Optical flow mode. Research in [research.md](../research.md) §6; results in
+[verdicts.md](../verdicts.md) V6, VA1 and VA3. The reader's version of "what the
+picture means" is in [Map speed & direction](../../docs/concepts/speed.md).
 
-This reverses a decision in `optical-flow.md`, which had ruled particles out.
+This reverses a decision in [optical-flow.md](optical-flow.md), which had ruled
+particles out.
 
 ## What the picture means
 Stated here so that the help text, the code comments and the picture agree.
@@ -29,7 +31,8 @@ frozen field; the two are the same thing only when the field is steady.
   of media time, measured between two frames a gap apart (`core/flow.js`), averaged over
   a fraction of a second, and only where the measurement is trusted. A trace on a car is
   the path of that patch of the car.
-- **Schlieren mode:** *not* the shift that schlieren measures. That shift says where the
+- **Schlieren mode (an experimental Traces view, since removed in commit `cc501ae`):**
+  *not* the shift that schlieren measures. That shift says where the
   air is unevenly hot; it is not a velocity, and traces along it would be a picture of
   nothing real. The traces follow how the **pattern** of shifts moves from one frame to
   the next: the travel of the eddies of hot air ("schlieren velocimetry" in the
@@ -38,7 +41,7 @@ frozen field; the two are the same thing only when the field is steady.
   where the flow is smooth. On the synthetic plume it reads 93% of the true speed and is
   within half a degree of the true heading. **On the one real candle recording tried it
   shows nothing**: filmed close up at 30 frames a second, the plume moves too far
-  between frames to be followed. The view is labelled experimental for that reason.
+  between frames to be followed. The view was removed for that reason.
 
 Nothing in either mode is simulated: no buoyancy, no made-up drift.
 
@@ -69,19 +72,21 @@ playback speed, which no wind map found does):
 Builds on: the mode registry and its shared controls, the frame ring (the older frame is
 found by media time), float render targets, the feedback-state pattern, the
 diff/overlay/glow compositing (traces can be shown over the video), the data output.
-New: the flow solver (see `optical-flow.md`), the particle core, line drawing.
+New: the flow solver (see [optical-flow.md](optical-flow.md)), the particle core, line drawing.
 
 ## How others build it, and what is different here
 From reading the code of the hint.fm wind map, `cambecc/earth` and `mapbox/webgl-wind`
-(`research.md` §6):
-- All three step **per displayed frame** with no time base. Ours steps on media time.
-- All three draw a **steady, precomputed field** that is defined everywhere. Ours is
+([research.md](../research.md) §6):
+- All three step **per displayed frame** with no time base. MotionDiff steps on media
+  time.
+- All three draw a **steady, precomputed field** that is defined everywhere. This one is
   measured live, changes every frame, and is undefined over most of the picture; hence
   the re-seeding rule and the confidence that travels with every vector.
 - hint.fm and earth step particles in JavaScript on a 2D canvas (5,000 and about 7 per
   pixel of width); Mapbox moved the step to the GPU for a million particles, at the cost
   of packing positions into 8-bit textures, which is where its reported phone bugs come
-  from. We need thousands, not a million, so the JavaScript step is the lighter choice.
+  from. This display needs thousands, not a million, so the JavaScript step is the
+  lighter choice.
 - Borrowed ideas: random first ages so the crowd does not die together (earth), rounding
   the fade down so 8-bit trails reach black (Mapbox), never seeding on a still spot
   (hint.fm).
@@ -89,22 +94,23 @@ From reading the code of the hint.fm wind map, `cambecc/earth` and `mapbox/webgl
   optical flow measured from video.
 
 ## Will it hold the frame rate on a phone?
-Measured on this machine only (Intel integrated GPU, headless Chrome), median per frame
+Measured on one laptop only (Intel integrated GPU, headless Chrome), median per frame
 including the flow passes: **5.2 to 5.6 ms at 480 px, 5.8 to 7.2 ms at 640 px**, against
 3 to 4 ms for Raw. The particle step itself is 0.3 ms (3,240 particles) to 0.5 ms
 (5,760). That leaves a wide margin inside the 33 ms of a 30 fps frame, and a phone GPU
 several times slower would still fit. **Not measured on a real phone**: the one thing
 that could behave differently there is the per-frame readback of the field (at most
 160×90 values), which stalls some mobile GPUs. If it does, the fix is an asynchronous
-read one frame late (a roadmap item).
+read one frame late (not built).
 
 ## Known limits
 - In a still picture, plain (uncoloured) traces show the line of travel but not which
   way along it. A blind judge could not tell, with or without a tinted tail (tried and
   removed). Heading colours, the default, do show it.
-- Traces are drawn at the processing size and scaled up with the picture, so they are
-  soft on a large display.
-- A paused video keeps its traces flowing (session 5, Session A): the measured field of
+- Traces were first drawn at the processing size and were soft on a large display.
+  They are now drawn at display resolution ([display-layer.md](display-layer.md),
+  verdict VA3).
+- A paused video keeps its traces flowing (verdict VA1): the measured field of
   the paused instant is frozen, and the particles keep being stepped through it on the
   wall clock. What is drawn while paused is therefore the **streamlines** of that one
   moment — the wind-map reading — where a playing video draws pathlines through a

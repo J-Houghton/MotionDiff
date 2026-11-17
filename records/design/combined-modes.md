@@ -1,9 +1,12 @@
-# Combined modes, and hard footage (Session B design note)
+# Combined modes, and hard footage: design note
 
-The design asked for by the medium tier: combinations of existing measurements,
-and the four changes that make real footage measurable. Written before building,
-as the acceptance rules require; each item's expected effect is registered in
-[verdicts.md](verdicts.md) when it is built.
+Status: **built**, all eight items. Verdicts V-B4 to V-B9 and V-6C in
+[verdicts.md](../verdicts.md).
+
+Combinations of existing measurements, and the four changes that make real
+footage measurable. Written before building, as the
+[acceptance rules](../acceptance.md) require; each item's expected effect was
+registered in the verdict log when it was built.
 
 ## Where a combination lives: an option, not a new mode
 
@@ -11,8 +14,9 @@ A combination could be a new registry mode (`flow-foreground`) or an option on
 an existing mode (`flowOnly: 'foreground'`). Options win on every rule this
 project has:
 
-- The registry stays at eight modes, inside the 1–9 key map; the help sheet
-  and panel stay one per idea rather than one per pairing.
+- The registry stays at eight modes (when this was written, keys 1–9 chose
+  modes; keys 1–6 now choose the six effects); the help sheet and panel stay
+  one per idea rather than one per pairing.
 - Each mode keeps one meaning: Optical flow still answers "how fast and which
   way", with or without a gate in front of it; the gate is a setting, like Blur.
 - The parts are already exported functions that take and return textures
@@ -20,7 +24,7 @@ project has:
   `renderHistory`), and mode modules already import each other that way
   (history and background import `maskDifference` from mask).
 - Presets and samples carry options for free; a new mode id would touch
-  presets, keys, help and Session A's mode-aware UI.
+  presets, keys, help and the mode-aware interface.
 
 Cost: the mode modules gain a little branching. Kept small by putting each
 gate behind one helper with one uniform.
@@ -93,8 +97,8 @@ feed), so every cut-out benefits.
 The model's variance is a per-pixel noise estimate the user cannot set by
 hand. A difference of two noisy values has variance 2σ², so the decision
 becomes |difference| > k·σ√2 with the global threshold as a floor
-(roadmap item 2; the background mode already decides this way — this brings
-the same rule to the three-frame mask as `maskThreshold: 'auto'`).
+(the background mode already decides this way — this brings the same rule
+to the three-frame mask; built as the `maskAuto` toggle, *Auto threshold*).
 **Expected on `truth-noisy` and `night`:** a clean mask at the default
 threshold, where today the threshold must be raised by hand.
 
@@ -104,8 +108,7 @@ lighting change shifts brightness but barely changes spatial gradients, so
 the whole-frame lighting flash disappears while edges of movers remain.
 One extra pass per compared frame (central-difference gradient magnitude,
 as flow's products pass already computes), then the existing differencing
-on that image; `lightingNormalise` toggle on the mask (and so history and
-background feeds). **Expected on `sunset`:** the timelapse's exposure drift
+on that image; a toggle on the mask (and so history and background feeds). **Expected on `sunset`:** the timelapse's exposure drift
 no longer lights the whole frame; cloud motion remains.
 
 ### 8. Camera compensation (global motion, then subtract)
@@ -116,9 +119,10 @@ Doing this per mode duplicates a warp in five places — exactly the shape the
 Large pipeline restructure (shared measurement stages) is for. Decision:
 **camera compensation is designed and built with the restructure**, not
 before it; the readout ships now, the subtraction follows the stage design
-that Session A must also see. (`river`'s forward motion additionally needs a
-zoom term — a 4-parameter similarity fit over the flow field instead of the
-median; same stage, richer fit.)
+([pipeline-stages.md](pipeline-stages.md), then
+[camera-compensation.md](camera-compensation.md)). (`river`'s forward motion
+additionally needs a zoom term — a 4-parameter similarity fit over the flow
+field instead of the median; same stage, richer fit.)
 
 ## Order of building (visible effect for the effort)
 1. History trails in measured colours (1)
@@ -127,4 +131,5 @@ median; same stage, richer fit.)
 4. Per-pixel noise threshold (6)
 5. Lighting normalisation (7)
 6. Magnify band gate (4)
-7. Camera compensation (8) — deferred into the pipeline restructure design
+7. Camera compensation (8) — deferred into the pipeline restructure design,
+   and built there

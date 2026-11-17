@@ -1,23 +1,47 @@
 # Verdicts
 
-The log the acceptance rules in [development.md](development.md#how-changes-are-accepted) ask for. Every change is tagged
-**visual**, **performance** or **robustness**. For a visual change the expectation
-is written here *before* it is built; the result is filled in after a blind judge
-(a reviewer that has not seen the work, here a fresh AI agent, given two unlabeled
-filmstrips in random order) has looked.
+The log the acceptance rules in [acceptance.md](acceptance.md) ask for.
+Every change is tagged **visual**, **performance** or **robustness**. For a
+visual change the expectation is written here *before* it is built; the
+result is filled in after a blind judge (a reviewer that has not seen the
+work, given two unlabeled filmstrips in random order) has looked.
 
 Filmstrips are rendered with `npm run filmstrip` on the reference clips
-(`scripts/README.md`) and kept in `filmstrips/` (not tracked in git).
+(`../scripts/README.md`) and kept in `filmstrips/` (not tracked in git).
+
+**Where the numbers were measured.** Unless an entry says otherwise:
+headless Chrome on a laptop with an Intel Xe-LPG integrated GPU, called
+"the test machine" below. Entries that say "software rendering" ran in
+headless Chrome without a GPU (SwiftShader; no WebGPU). A desktop GPU and
+a phone were used by hand for the checks the closing entry lists.
+
+Design notes are in [design/](design/). Roadmap item numbers refer to the
+roadmap of the time, which is in git history; the reference clips named in
+backticks (`truth`, `traffic`) are listed in `../scripts/README.md`.
+
+## Contents
+
+1. [New modes: mask, history, background model (13 November 2026)](#new-modes-mask-history-background-model-13-november-2026): V1–V4, I1
+2. [Optical flow, particle traces, schlieren (13 November 2026)](#optical-flow-particle-traces-schlieren-13-november-2026): V5–V7, I2, I3
+3. [Display: split, legend, paused traces, arrows, ruler, mirror, setup guide (14 November 2026)](#display-split-legend-paused-traces-arrows-ruler-mirror-setup-guide-14-november-2026): IA1–IA6, VA1, VA2
+4. [Measurement: readouts, combined options, hard footage, readings panel (14 November 2026)](#measurement-readouts-combined-options-hard-footage-readings-panel-14-november-2026): V-B1–V-B9, IA7, VA3, VA4, IA8, IA8a
+5. [The app reorganised around effects (15 November 2026)](#the-app-reorganised-around-effects-15-november-2026): X-1
+6. [Camera compensation, tracking, calibration, motion magnification (15 November 2026)](#camera-compensation-tracking-calibration-motion-magnification-15-november-2026): V-6C, V-6T, V-6K, V-6M
+7. [Clean-up (15 November 2026)](#clean-up-15-november-2026): R-7
+8. [Data out, and naming's first proof (15 November 2026)](#data-out-and-namings-first-proof-15-november-2026): D-1, N-1
+9. [Naming by a detector, and depth as a stage (15 November 2026)](#naming-by-a-detector-and-depth-as-a-stage-15-november-2026): M-1, E-1
+10. [The backend ladder, naming reworked, model options parked (16 November 2026)](#the-backend-ladder-naming-reworked-model-options-parked-16-november-2026): L-1, F-1, C-1, M-1 again
+11. [Confirmed in use (November 2026)](#confirmed-in-use-november-2026)
 
 ---
 
-## Session 3
+## New modes: mask, history, background model (13 November 2026)
 
 ### V1. Colour-by-age: a "mixed" look from the feedback buffer — visual
 **Background.** Replacing the 20-frame trail ring with one feedback buffer
 (`a0d84f9`) changed colour-by-age: a pixel that keeps moving stayed the "new"
-colour, where the ring mixed new and old channels into purple. The owner wants
-both looks, selectable, with the old one rebuilt from the feedback buffer if possible.
+colour, where the ring mixed new and old channels into purple. Both looks are
+wanted, selectable, with the old one rebuilt from the feedback buffer if possible.
 
 **Why the ring looked mixed.** It took, per colour channel, the maximum over the
 window of `colour(age) × strength`. With the default red-to-blue gradient the red
@@ -70,8 +94,8 @@ paused briefly and moved again goes back to orange; here it keeps some blue and
 reads pink. Closing that gap needs either a third per-pixel value (when the current
 unbroken run began) with gap detection, or a budgeted ring of past diff frames
 (about 22 MB at 640x360 for 24 frames, and one more shader). Neither was built: the
-judge calls it the same look, and the owner's instruction was to use a ring only if
-the judge says it does not match.
+judge calls it the same look, and the rule set beforehand was to use a ring only
+if the judge says it does not match.
 
 Filmstrips: `filmstrips/ring-*-mixed.png` (the old ring look, from `0c5f36c`),
 `filmstrips/age-*-mixed.png`, `filmstrips/age-*-latest.png`.
@@ -255,7 +279,7 @@ edges and faint patches on the road beside the cars (their shadows and reflectio
 are not background either).
 
 ### I1. Interface — judged from screenshots
-Rules from [development.md](development.md#how-changes-are-accepted). Measured by `scripts/page/audit.js` on 23 states (desktop
+Rules from [acceptance.md](acceptance.md). Measured by `scripts/page/audit.js` on 23 states (desktop
 1440×900 and 1280×720, light and dark, every mode family, split, empty, keys sheet;
 fullscreen, awake and idle; phone 390×844 with a clip, with the fake camera, with
 the parameter sheet, the source sheet, empty and idle; tablet 820×1180), then by a
@@ -301,23 +325,23 @@ after each frame to make the GPU finish; median of about 75 frames; one machine
 | Background model | 4.5 ms | 12.8 ms | 30 |
 
 Every mode keeps the source's frame rate at both sizes. No before/after here: the new
-modes have no earlier version, and the session's other changes were not made for
-speed. The comparison against master is in the session 2 report (1080p: about 53 ms
-to 12.5 ms a frame; JS heap 851 MB to 6 MB).
+modes have no earlier version, and the other changes made with them were not made
+for speed. The earlier comparison against master, made before these modes, read:
+1080p from about 53 ms to 12.5 ms a frame; JS heap from 851 MB to 6 MB.
 
 ### Deferred for having no visible effect
-Nothing built this session was dropped by the "no visible effect" rule: every visual
-change was told apart by its judge. Deferred before building, for the same reason
-(see `ROADMAP.md`): the luma-only branch.
+Nothing built with these modes was dropped by the "no visible effect" rule: every visual
+change was told apart by its judge. Deferred before building, for the same reason:
+the luma-only branch.
 
 ---
 
-## Session 4
+## Optical flow, particle traces, schlieren (13 November 2026)
 
-Two ideas from the owner: wind-map particles as a display for motion, and schlieren
+Two additions: wind-map particles as a display for motion, and schlieren
 (making hot air visible). Both stand on dense optical flow, so that is built first.
-Research in `research.md` §6 and §7; designs in `optical-flow.md`, `particles.md`
-and `schlieren.md`.
+Research in `research.md` §6 and §7; designs in `design/optical-flow.md`, `design/particles.md`
+and `design/schlieren.md`.
 
 ### V5. Optical flow mode — visual (new mode)
 **What it is.** Between two frames one gap apart, how far and which way each small
@@ -326,7 +350,7 @@ confidence beside every vector. Shown as colour (hue = heading, brightness = spe
 or as particle traces (V6).
 
 **Expected effect, written before building** (the numbers are those set in advance
-in `optical-flow.md`, checked on a new synthetic scene `flow` with textured movers,
+in `design/optical-flow.md`, checked on a new synthetic scene `flow` with textured movers,
 because the flat objects of `truth` carry flow only at their rims):
 - *Heading, on `flow`:* within 10° of the truth, as the mean over each mover: a
   band sliding right (0°), a block sliding down-left (135°), and around a turning
@@ -423,9 +447,10 @@ are re-seeded at once, so traces gather on whatever moves.
   exaggerated; traces are drawn at the processing size, so they are soft when shown
   large.
 - **Performance** (its own tag): the flow passes, the readback of the field and the
-  particle step measured per frame on this machine, on both a desktop and a throttled
-  phone profile; the target is 30 frames a second at the phone's 480 px processing
-  width. A real phone cannot be measured here and will be reported as such.
+  particle step measured per frame on the test machine, on both a desktop and a
+  throttled phone profile; the target is 30 frames a second at the phone's 480 px
+  processing width. A real phone was not available for this measurement and is
+  reported as such.
 
 **Result: accepted, with one part that failed and is logged as such.**
 
@@ -443,7 +468,7 @@ Built as `core/particles.js` (11 unit tests; no shader copy) and `app/particles.
 | `river` | The expansion pattern of V5; the judge also found the traces "heavily obscure the picture" in the glow display |
 | Still background | 99.35% of it has no flow to carry a trace (V5); judges saw at most "a few faint isolated specks just outside the region borders" |
 
-**Performance**, this machine (Intel integrated GPU, headless Chrome), median per frame
+**Performance**, the test machine (Intel integrated GPU, headless Chrome), median per frame
 with one pixel read back, two interleaved rounds, `river` at 25 fps:
 
 | | 480 px | 640 px | 1280 px |
@@ -473,7 +498,7 @@ movement of the *pattern* of hot air from frame to frame: a measurement of how t
 eddies travel, which is slower than the air itself and absent where the flow is
 smooth. Nothing in the mode is simulated.
 
-**Expected effect, written before building.** Real flames cannot be filmed here, so
+**Expected effect, written before building.** No real flame was filmed for this, so
 these are set on a new synthetic scene, `plume`: a printed-style random background
 warped by a known field (a smooth column over a source plus eddies rising at
 150 px/s; peak shift 0.3 px), with sensor noise. `plume-weak` has a peak of 0.08 px,
@@ -507,13 +532,13 @@ creeps by 0.4 px and trembles.
   well behind the hot air; shows nothing where the background is plain; a shift is
   not a speed; lamp flicker, auto-exposure and focus hunting all read as signal;
   video compression smooths away the smallest shifts.
-- **Not verifiable here, and said so in the result:** a real plume, a real phone
+- **Not verifiable on the test machine, and said so in the result:** a real plume, a real phone
   camera's noise and compression, and the frame rate on a real phone.
 - **Performance** (its own tag): measured per frame at the phone's 480 px processing
   width and at 640 px.
 
 **Result: accepted on the synthetic scenes and on one real recording; traces accepted
-on the synthetic scene only; several things not verifiable here, listed at the end.**
+on the synthetic scene only; several things not verified, listed at the end.**
 
 Built as `core/schlieren.js` (10 unit tests) and `app/modes/schlieren.js`. Parity
 `__motionDiffSchlierenParity()`: the mode's shift against the core's, largest
@@ -558,7 +583,7 @@ rates) is on the roadmap.
 Real footage, second recording (`candle-screen`, a candle in front of a monitor
 showing a fine checkerboard): at 640 px **nothing is measured**, because the pattern
 blurs to flat grey; the status line says the background is too plain. At 1280 px and
-at 1920 px the plume from the flame is plain to see (my own reading, not a judge's),
+at 1920 px the plume from the flame is plain to see (the builder's own reading, not a judge's),
 over a mottled, noisy background: a fine regular pattern on a screen is a poor
 background. The working size limit was raised from 640 to 1280 px because of it.
 
@@ -601,18 +626,18 @@ added, so no fresh critique against the brief was run.
 |---|---|---|
 | A long status line | With schlieren's first, long note the page's single column grew wider than the window: the panel left the screen and the seek bar was off-screen in three audited states | `#app` declares its column as `minmax(0, 1fr)`; the same three states pass; the notes were shortened as well |
 
-### Deferred for having no visible effect (session 4)
+### Deferred for having no visible effect (flow, particles, schlieren)
 - **A head and tail of different colours on plain traces.** Built, judged, not visible
   as a direction: removed.
 
 ### I3. Samples that open in a mode — interface, and a check of each clip
 Eight samples were added to the source picker, one or more for every mode except
-Magnify (the face clip was tried and taken out at the owner's request; a replacement
-that is not a face has not been found yet); each names its mode
+Magnify (the face clip was tried and taken out, commit `14eeeff`; a replacement
+that is not a face came later, V-B3); each names its mode
 on the button and selects it with fitting settings when loaded. The three older samples
 keep whatever mode is current, as before.
 
-| Sample | Mode | What its filmstrip showed (my own reading; no blind judge was run for these) |
+| Sample | Mode | What its filmstrip showed (the builder's own reading; no blind judge was run for these) |
 |---|---|---|
 | Flower Opening | Posy | Fine outlines of leaves and stems on grey, colour fringes on the opening flower |
 | Bees at the Hive | Motion mask | Each bee cut out in its own colours on black; a few specks of wall beside the fliers |
@@ -624,7 +649,7 @@ keep whatever mode is current, as before.
 | Candle Plume | Schlieren | The plume of V7 |
 
 All eleven samples (and the face clip, before it was removed) were loaded from their hosts in headless Chrome the way the picker
-does it: each came up in its mode with a picture (first frame after 0.2 to 1.0 s here;
+does it: each came up in its mode with a picture (first frame after 0.2 to 1.0 s;
 the 49 MB candle clip after 1.0 to 1.4 s). The picker passes the interface audit at
 desktop and phone sizes. Rejected after rendering: the intersection in Optical flow
 (dim, the vehicles move too far per frame). Not checked: loading on a phone or a slow
@@ -632,10 +657,10 @@ connection, and browsers other than Chrome (the candle clip is a QuickTime file)
 
 ---
 
-## Session A (Display)
+## Display: split, legend, paused traces, arrows, ruler, mirror, setup guide (14 November 2026)
 
-Session 5, display work: `src/ui/` and how results are drawn. Branch
-`session-a-display`.
+Display work: `src/ui/` and how results are drawn. Entries are numbered
+IA… (interface) and VA… (visual).
 
 ### IA1. On-screen button for split compare — interface
 Split compare (the S key) gets a visible control: a Split button in the transport
@@ -645,7 +670,7 @@ and the accent fill; the split handle widened to 44 px on phones.
 
 **Result:** audit passes with split on at desktop (1440×700: no overlap, no
 clipping, min contrast 5.6) and phone (390×844, touch targets all ≥ 44 px,
-min contrast 11.5). Screenshots in the tier's critique round.
+min contrast 11.5). Screenshots in the critique round (IA6).
 
 ### IA2. Direction legend — interface
 A hue wheel in the picture's corner, shown while the current view colours by
@@ -662,7 +687,7 @@ colour on the Plate (min contrast 5.97, nothing clipped, overlapping or off
 screen), history direction on the phone (11.46, touch targets unaffected —
 the legend is not interactive). In the Viewfinder it sits under the meta
 plate, clear of the brackets and the bottom bar, and yields to the open
-panel. Screenshots in the tier's critique round.
+panel. Screenshots in the critique round (IA6).
 
 ### VA1. Traces keep flowing while the video is paused — visual
 **What it is.** A paused frame holds the measured velocity field of that
@@ -717,9 +742,9 @@ re-render matched master exactly. Live behaviour is unchanged by the switch.
 **What it is.** A third display for the optical flow mode: a sparse regular
 grid of arrows over the picture, each showing the measured heading, with
 length proportional to speed (at the set speed range), hidden where confidence
-is low or nothing is measured. Reverses the roadmap's deferral at the owner's
-decision: arrows give a reading a still frame can carry unambiguously, which
-plain traces were judged not to (session 4).
+is low or nothing is measured. Reverses the roadmap's earlier deferral:
+arrows give a reading a still frame can carry unambiguously, which plain
+traces were judged not to (V6).
 
 **Expected effect, written before building:**
 - *On `flow` (known truth):* arrows in the band point right, on the block
@@ -776,8 +801,8 @@ show "TRAIL". Markers were restructured as transparent hit boxes with the
 the audit's touch-target rule passes (it measures the element, which the old
 ±9 px pseudo grab area failed). Viewfinder shows the ruler between scrub and
 transport at 72 px. Audited on the phone in motion history: min contrast
-5.63, no overlap, no clipping, no small targets. Screenshots in the tier's
-critique round.
+5.63, no overlap, no clipping, no small targets. Screenshots in the
+critique round (IA6).
 
 
 ### IA4. Mirror mode, and camera zoom by pinch — interface
@@ -787,7 +812,7 @@ motion. The flip is display-only (CSS on the video and canvas): nothing
 measured changes, and the direction legend flips with the picture so its
 arrows and hues keep telling the truth about what is on screen. The mirror
 stands only while the front camera is the source (flipping to the back
-camera or loading a clip removes it). And, at the owner's request: two
+camera or loading a clip removes it). Also: two
 fingers on the picture drive the camera's own zoom where the driver exposes
 one (`track.getCapabilities().zoom`), with a status readout; a camera
 without a zoom control says so once (iOS Safari exposes none).
@@ -797,20 +822,22 @@ loads the user-facing camera into the fullscreen viewfinder with the canvas
 flipped (`matrix(-1, 0, 0, 1, 0, 0)`; the fake camera's burnt-in timestamp
 reads backwards); the fake camera has no zoom capability, so the graceful
 path ran (`cameraZoom()` null, `setCameraZoom` false, the status message).
-**Needs the owner's eyes on a real phone:** the real front camera in Mirror
-(including a heading-coloured mode, to see the flipped legend read
+**Not verifiable without a real phone at the time:** the real front camera
+in Mirror (including a heading-coloured mode, to see the flipped legend read
 correctly), pinch zoom on the back camera (range, smoothness, whether the
 driver animates it), and that fullscreen sticks on the phone browser.
+Mirror mode and pinch zoom have since been confirmed on a phone: see
+[Confirmed in use](#confirmed-in-use-november-2026).
 
 
 ### IA5. Schlieren: a step-by-step setup guide in the picture — interface
 **What it is.** A checklist card on the stage for the schlieren mode:
 textured background, camera still, let it settle, hold then light — each
 step with a live state dot and reading from the mode's own judgement of the
-setup, published as `pipeline.readings` (Session B's contract: mode
+setup, published as `pipeline.readings` (the measurement side's contract: mode
 'schlieren', setup {problem, usable, camera, noise, seen, held}). Opens by
 itself the first time schlieren meets a live camera; a Setup-guide chip
-reopens it; without readings (Session B's branch not yet merged, a mode
+reopens it; without readings (the measurement branch not yet merged, a mode
 reporting none, the Canvas 2D fallback) the steps show no live state, which
 is still the checklist.
 
@@ -819,11 +846,12 @@ states: all-good (green dots, "72% measurable", "held — light the candle"),
 plain background (step 1 red with "12% measurable"), settling (step 3
 waiting). No overlap, nothing clipped, touch targets pass after the close
 button grew to 44 px, min contrast 10.7 on the phone. The live wiring runs
-against the stub exactly as it will against Session B's readings; checking
-it against the real field needs their branch merged, and the camera flow
-end-to-end needs the owner's phone.
+against the stub exactly as it will against the real readings; checking
+it against the real field needs that branch merged, and the camera flow
+end-to-end needs a real phone (schlieren on a live camera is still
+unconfirmed: see [Confirmed in use](#confirmed-in-use-november-2026)).
 
-### IA6. The tier's critique round — interface
+### IA6. The critique round — interface
 A fresh critic (who had not seen the work) reviewed nine screenshots of the
 new chrome against the brief. Verdict: "the two languages are real and
 distinct — nothing here reads as a generic component library", with three
@@ -848,10 +876,12 @@ label; the legend says direction only (brightness-means-speed stays in the
 help); the phone clock drops the total duration for space, as before this
 tier. Re-audited after the fixes: phone split and desktop flow states show
 nothing clipped, overlapping, off screen or under 44 px.
-## Session B
 
-Verdicts from the measurement session (branch `session-b-measure`) are numbered V-B1,
-V-B2… so they cannot collide with Session A's numbering.
+## Measurement: readouts, combined options, hard footage, readings panel (14 November 2026)
+
+Measurement work, done alongside the display work above. Its entries are
+numbered V-B1, V-B2… so they cannot collide with the display entries'
+numbering.
 
 ### V-B1. Live readouts from the flow field, and a too-fast warning — robustness
 **What is built.** The Optical flow mode reads a small copy of its velocity field back
@@ -935,7 +965,7 @@ render pictures with `?renderer=canvas2d`), and the build and all 296 tests pass
 ginger kitten curled asleep indoors on a locked-off camera, flank and belly
 visible. Sample params: band 0.15–1.0 Hz, amplify 20×, pool 2×.
 
-As with I3, my own reading, no blind judge: in the magnified filmstrip the
+As with I3, the builder's own reading, no blind judge: in the magnified filmstrip the
 breathing shows as the flank edge swelling and sinking between frames; the
 band strength averaged over the frame oscillates with about a 1.5 s period
 (≈40 breaths/min, normal for a sleeping kitten) over four cycles before the
@@ -953,7 +983,7 @@ Not checked: loading on a phone or a slow connection.
 mode's; its colour is the flow field's measurement from the moment each pixel
 was passed — hue = measured heading (flow's wheel), brightness = measured
 speed against the speed range — instead of a hue read off the ribbon's shape.
-Design: docs/combined-modes.md §1.
+Design: design/combined-modes.md §1.
 
 **Expectations, written before building:**
 - *Measured vs direction, on `gulls`:* told apart. Each ribbon holds one
@@ -998,7 +1028,7 @@ ribbons brighter than the far one at the same speed range — speed is what the
 direction view cannot show at all.
 
 ### IA7. One preset list: the samples' looks join the Preset select — interface
-At the owner's request: the per-sample default settings and the panel's
+The per-sample default settings and the panel's
 preset list were two separately maintained sets. Now `PARAMETER_PRESETS` is
 the one source of truth — the samples' looks are entries in it, named after
 their sample, and a `TEST_CLIPS` entry carries only `preset: '<name>'`.
@@ -1011,6 +1041,56 @@ from the preset path switches any footage to motion history with its
 settings, and the select offers all 14 looks. 296 unit tests and the
 typecheck pass. No pixels change: the same settings apply as before, from
 one list instead of two.
+### VA3. Crisp drawing layer at display resolution — visual
+Design: [design/display-layer.md](design/display-layer.md) (the canvas
+backing grows to display resolution; traces and arrows draw last, after the
+composite, from the same geometry; measurement untouched at processing size).
+This entry and VA4 were dropped from the log by a merge (`ab0d7e5`) and are
+restored from the merge before it (`a7bf1a1`).
+
+**Expected effect, written before building:**
+- *On `traffic`, flow traces and arrows at a 2048-wide canvas:* a blind judge
+  shown before/after strips names the after as the sharper (hairlines instead
+  of smeared lines) and finds the same geometry: same streams, same arrow
+  directions and lengths.
+- *The video and the mode pictures are unchanged* (bilinear upscale moves from
+  the compositor into the composite pass): numeric guard at equal canvas size.
+- *Glow display keeps glowing* (`clouds` preset look judged before/after).
+- *At or below processing size nothing changes:* backing equal to processing
+  gives byte-identical pixels.
+- *Recording carries the crisp lines*; split, Mirror, fullscreen unchanged.
+- *A real phone's frame rate* was not measured (software GL at the time).
+
+**Result: accepted.**
+
+| Check | Result |
+|---|---|
+| Blind judge, before/after full-window traffic traces, unlabeled random names | Told apart "easily"; the after named the higher-resolution render at 95% confidence ("~1 px lines, smooth, continuous… individual streamlines separable" against "classic upscaled-low-res signs"); geometry "the same in both… no region with a genuine geometry difference" |
+| Glow keeps glowing (`clouds` preset, second blind judge) | After "reads as glowing: bright core + soft halo… clearly the better rendering"; before "flat marks… opaque marker scribbles". Caveats kept: streaks wash out over the brightest sky (a visibility trade-off), and a faint pre-existing top-left speck, much reduced in the after |
+| Numeric guard at the pinned size | All six strips (flow colour, both particle colourings, traffic particles, plume and dots traces) byte-identical to master: 0% changed, maxDiff 0 — which is also the at-or-below-processing-size invariant |
+| Arrows | Hairline shafts and clean heads at the display size (read from the full-window still by the builder, not a blind judge; geometry unchanged by construction) |
+| Facts | Backing 878×494 follows a 1900-px window (processing 640×360); `displayScale` pin returns it to exactly 640×360 (`scripts/page/render.js` uses it, so every strip baseline stays valid); split clips the one canvas; a record start/stop ran through the display-res canvas |
+| Not measured | Frame rate on a phone with canvas-sized trail buffers (cap 1280 there), and that recordings look right on a hardware GPU |
+
+### VA4. Motion-over-time strip — visual (not built)
+A strip under the scrub bar from the pooled magnitude grid: brightness = motion
+of that moment, vertical profile = where in the picture; empty means not
+measured; click to seek.
+
+**Expected effect, written before building:**
+- *On `truth` after one playthrough:* bright at both ends, visibly dimmer
+  between 3.5 s and 8.5 s; a blind judge told only "this shows motion over
+  time" points at the quiet spell within about a second.
+- *On `traffic`* continuously bright; *on `sunset`* faint but not empty.
+- *Vertical profile on `truth`:* the square's band and the discs' read as
+  separate bright rows before 3.5 s.
+- *Interface:* audit passes at both sizes; the strip seeks on click/drag with
+  44 px touch targets.
+
+**Result: not built.** The strip was absorbed into the readings panel (IA8):
+its measurement is the panel's moving-share pen line, defined in
+[design/readings-panel.md](design/readings-panel.md).
+
 ### V-B5. Filling holes in mask cut-outs (morphological close) — visual
 `maskFill` (Off / 1 px / 2 px) on the Motion mask and Background model modes:
 after the 3×3 vote has removed speckle, the decision is dilated then eroded by
@@ -1018,7 +1098,7 @@ the chosen radius, so holes up to twice the radius across are filled and
 ragged rims are smoothed, without growing the cut-out (a close returns solid
 shapes to their own outline). Core `dilate`/`erode` in core/mask.js are the
 source of truth; the shader mirrors them. Off keeps today's path untouched.
-Design: docs/combined-modes.md §5.
+Design: design/combined-modes.md §5.
 
 **Expectations, written before building:**
 - *On `traffic`, mask cut-out, fill 2 px vs off:* vehicle cut-outs lose their
@@ -1065,7 +1145,7 @@ slow drifter keeps its flow and a stopper's fades out as it is absorbed. The
 gate is downsampled to the working size by maximum and dilated by the solve
 window, so a mover's rim keeps its vectors; the gate multiplies confidence
 BEFORE smoothing, so gated places decay below the presence floor rather than
-blinking off. Design: docs/combined-modes.md §2–3.
+blinking off. Design: design/combined-modes.md §2–3.
 
 **Expectations, written before building:**
 - *On `traffic`, colour view, mask gate vs everything:* colour confined to the
@@ -1121,7 +1201,7 @@ because a frame-to-frame difference carries two frames' noise where the model
 comparison carries one — and the global threshold becomes a floor under it,
 exactly the rule the background mode already decides by. The model and its
 variance are maintained the same way the flow gate maintains them
-(learnMask + updateBackground). Design: docs/combined-modes.md §6; roadmap
+(learnMask + updateBackground). Design: design/combined-modes.md §6; roadmap
 motion-extraction item 2.
 
 **Expectations, written before building:**
@@ -1172,7 +1252,7 @@ are reduced to their edge strength (Sobel magnitude of luma — the gradient of
 a smoothed image, so it replaces the pre-blur) before differencing. A global
 brightness or exposure change adds a constant the gradient does not see, so
 it stops lighting the whole frame; what moves still changes its edges.
-Design: docs/combined-modes.md §7; roadmap motion-extraction item 5.
+Design: design/combined-modes.md §7; roadmap motion-extraction item 5.
 
 **Expectations, written before building:**
 - *On `sunset` (timelapse exposure drift; measured: 27% of the frame marked
@@ -1214,7 +1294,7 @@ breathing flank) the band stays. This mutes amplified sensor noise on walls
 and bedding without knowing where the subject is. The picture adds
 `keep·amp·band`, so gate off is arithmetically identical to today; the band
 magnitude (data, sonification) is gated the same way. WebGL only, as the
-model is. Design: docs/combined-modes.md §4, including the pre-registered
+model is. Design: design/combined-modes.md §4, including the pre-registered
 risk that a rhythm fainter than the noise floor is muted with the noise.
 
 **Expectations, written before building:**
@@ -1251,14 +1331,14 @@ strip's own artefact ("embossed… cut-out" folds). The help sheet says so. The
 registered "background drops by at least half" held for the flicker measure
 and the static clip, not for the kitten's mean band strength, whose remainder
 is real signal.
-### IA8. Readings panel — interface (owner's commission)
-Design and research in `docs/readings-panel.md` (observatory plate
+### IA8. Readings panel — interface
+Design and research in `design/readings-panel.md` (observatory plate
 marginalia; strip-chart pen line). Desktop Plate only; the I key and a mast
 button; the readings and the parameters share the plate's margin, so on
 windows under 1800 px opening one closes the other — the picture never
 shrinks below the size rule for the panel's sake.
 
-**Built in the owner's two steps.** The raw list first; watching it on the
+**Built in two steps.** The raw list first; watching it on the
 clips changed the design twice: the raw camera row showed 86 px/s on the
 synthetic scene's still camera (the median only speaks for the camera when
 at least half the frame is measured — the row now says so instead of
@@ -1280,11 +1360,10 @@ down/down-right with an opposed up-stream the mean hides).
 | Audit, panel open | Nothing clipped, overlapping, off screen; min contrast 5.97; picture share equal to the parameters-open baseline at the same window |
 | New measurement | One commit touching only reportReadings: rose and speeds bins over the field it already reads |
 
-Needs nothing from the owner's phone (desktop only). Screenshots for the
-tier's critique round.
+Needs no phone check (desktop only). Screenshots in the critique round.
 
-### IA8a. Readings panel layout rework — interface (owner's report)
-The owner found the raw list unreadable in use (dark Plate, schlieren): the
+### IA8a. Readings panel layout rework — interface (from a report of use)
+The raw list proved unreadable in use (dark Plate, schlieren): the
 two-column grid let a wide value crush the name column to a word a line and
 push values out of the margin, and the flow-only instruments sat as dimmed
 empty boxes in modes that measure no flow.
@@ -1296,17 +1375,17 @@ current mode are hidden, not dimmed: schlieren shows the pen line and the
 note, no dash-boxes. The margin-sharing rule now also holds through window
 resizes. Audited clean (flow with the panel open: nothing clipped,
 overlapping or off screen; min contrast 5.97). A white picture in the
-owner's screenshot was schlieren settling its reference (2 s), reproduced
+reported screenshot was schlieren settling its reference (2 s), reproduced
 on old master identically — not a panel effect.
 
-## Session 6
+## The app reorganised around effects (15 November 2026)
 
-### X-1. The app reorganised around effects (owner's pick from three mockups)
-**Expected, written before the after-test ran.** The owner picked, from
-docs/design/effects/: the atlas structure and landing (A), the instrument
-margin as the data display (B), the question strip in the Viewfinder (C).
-Success is measured the way the brief asked — a fresh agent that has never
-seen the app gets a goal in plain words and must reach the right picture,
+### X-1. The app reorganised around effects (chosen from three mockups)
+**Expected, written before the after-test ran.** Chosen from three mockups
+(not kept in the repository): the atlas structure and landing (A), the
+instrument margin as the data display (B), the question strip in the
+Viewfinder (C). Success is measured by a first-use test: a tester that has
+never seen the app gets a goal in plain words and must reach the right picture,
 same four goals and 12-action cap as the baseline of 2026-11-15:
 
 1. "Show which way the traffic is moving" — stays a one-step success.
@@ -1323,7 +1402,7 @@ margin open (picture share, contrast, overlaps, 44 px targets), and a fresh
 critique finds the result distinct and of one piece with the Plate, not a
 generic dashboard.
 
-**Result (same protocol, fresh agents, 2026-11-15).** All four goals reached:
+**Result (same protocol, new first-time testers, 2026-11-15).** All four goals reached:
 
 | Goal | Before | After |
 |---|---|---|
@@ -1353,9 +1432,9 @@ trails' measured view.
 Found and fixed along the way: picking an effect with nothing loaded now
 scrolls the atlas to that effect's row (two testers got lost exactly there).
 
-## Session 6 (measurement)
+## Camera compensation, tracking, calibration, motion magnification (15 November 2026)
 
-### V-6C. Camera compensation (`cameraComp`, docs/camera-compensation.md)
+### V-6C. Camera compensation (`cameraComp`, design/camera-compensation.md)
 **Expected, written before the strips were rendered.**
 1. `handheld` + Raw diff: with compensation on, the wobbling scenery (building,
    street) largely cancels — visibly darker static ground — while the marching
@@ -1368,7 +1447,7 @@ scrolls the atlas to that effect's row (two testers got lost exactly there).
 4. `truth` (still camera) + mask: compensation on changes nothing a judge can
    see (the fit reads ~zero); the numeric guard stays under its bar.
 
-Judged blind: unlabeled off/on strips in random order, a fresh agent names
+Judged blind: unlabeled off/on strips in random order, the judge names
 which shows less scenery response and whether real movers survive.
 
 **Result (blind judge, unlabeled off/on pairs in random order, 2026-11-15).**
@@ -1397,10 +1476,10 @@ which shows less scenery response and whether real movers survive.
 
 Tooling note, found on the way: a synthetic scene rendered after a real-clip
 scene in the same filmstrip run can differ slightly from the same scene
-rendered alone (reproduced on master, before any of this session's
+rendered alone (reproduced on master, before any of this work's
 branches): compare strips rendered by runs with the same scene order.
 
-### V-6T. Grouping and tracking (`maskTrack`, docs/tracking.md)
+### V-6T. Grouping and tracking (`maskTrack`, design/tracking.md)
 **Expected, written before building.**
 1. `traffic`: each vehicle carries a box with an ID that stays the same
    across a strip's frames; an arrow ahead of each box points along its
@@ -1437,28 +1516,28 @@ clump needs a measurement the mask does not make (a flow-direction split);
 logged on the roadmap. Verdict: **pass on the registered truth criteria;
 partial on dense traffic, with the limit named.**
 
-### V-6K. Calibration to real units (docs/tracking.md §Calibration)
+### V-6K. Calibration to real units (design/tracking.md §Calibration)
 **Expected, written before building.** Marking a known 100-px stretch of
 `truth` as 10 m makes the square's box read 12 ± 2.4 m/s; the audit stays
-clean with the marking overlay up; a fresh agent asked "how fast is that
-in real units?" finds the flow unaided.
+clean with the marking overlay up; a first-time tester asked "how fast is
+that in real units?" finds the flow unaided.
 
-**Result (2026-11-15; effort capped by the owner).** Numeric: marking a
+**Result (2026-11-15; one round only).** Numeric: marking a
 100-px stretch of `truth` as 10 m set the scale to exactly 0.1 m/px, and
 the moving square's box read 11–14 m/s across runs — inside the 12 ± 2.4
 bar. The question is asked by a small in-place form, not a browser popup.
 Audit: clean with the marking overlay up (the audit now recognises an SVG
 text's backing rect as its plate — the rule's intent, extended to SVG
-overlays). The fresh-agent round **failed on discoverability**: the agent
+overlays). The first-use round **failed on discoverability**: the tester
 reached a px/s reading in two clicks and even derived ~12–13 m/s by hand —
 validating the number — but never found the calibration flow: the C key
 gives only a status-line sentence as feedback, the instrument-margin link
 the design called for had not been built (it has now), and the Keys sheet
 can sit taller than a short window with no keyboard scroll (pre-existing;
-logged for the fixes branch). No further rounds per the owner's cap; the
-branch carries the feature and the owner decides the merge.
+logged for the fixes branch). No further rounds were run; the feature
+was merged with the margin link in place.
 
-### V-6M. Motion-guided magnification (`magMode: 'motion'`, docs/motion-magnify.md)
+### V-6M. Motion-guided magnification (`magMode: 'motion'`, design/motion-magnify.md)
 **Expected, written before building.**
 1. `kitten`: the breathing flank's edge visibly travels further than in the
    unamplified clip; a blind judge tells the strips apart and names the
@@ -1488,14 +1567,14 @@ criteria met.
 3. Parity probe: band state within 0.002 px of the core, warp within the
    visual guard; the integrator's unit tests hold the band.
 
-## Session 7 (clean-up)
+## Clean-up (15 November 2026)
 
 ### R-7. The clean-up changed nothing that stays — robustness
-The session-7 clean-up (owner's brief, 2026-11-15) removed what was never
-known to work: HLS (and hls.js), screen capture, schlieren's experimental
-Traces view, and the sonification engine (and Tone.js) — each archived
-locally with its index entry. Three things on the same list were verified
-instead of removed, as agreed:
+The clean-up of 2026-11-15 removed what was never known to work: HLS (and
+hls.js), screen capture, schlieren's experimental Traces view, and the
+sonification engine (and Tone.js). Each remains in git history; the commits
+are listed in [README.md](README.md#removed-features). Three things on the
+same list were verified instead of removed:
 
 | Verified | How | Result |
 |---|---|---|
@@ -1520,9 +1599,9 @@ against after, same machine, same scene order:
   proof scenes, two rounds each — before 53.3/53.1 s, after 52.0/53.0 s;
   within noise.
 
-## Session 7 (additions)
+## Data out, and naming's first proof (15 November 2026)
 
-### D-1. Data out: exports and the count line (docs/data-out.md)
+### D-1. Data out: exports and the count line (design/data-out.md)
 **Expected, written before building.**
 1. Unit tests hold the crossing geometry: a step across the drawn segment
    counts once with the right direction; beyond the segment's ends, or on
@@ -1566,7 +1645,7 @@ against after, same machine, same scene order:
    share 0.473, byte-equal to master's at the identical state (the truth
    clip's caption rows; pre-existing). The counts row shows only while
    boxes are tracked. One registration change, recorded: the key is **X**,
-   not L — L has been the J/K/L shuttle's "faster" since session 3, found
+   not L — L was already the J/K/L shuttle's "faster", found
    the moment the sheet claimed otherwise; the margin-link entry stands.
 5. No regression: `truth-mask` byte-identical, master against this branch.
 
@@ -1574,7 +1653,7 @@ Harness note: the first synthetic click on a fresh page is swallowed
 (reproduced on master; the X-1 driver quirks' sibling). Scripts click
 until the state answers.
 
-### N-1. Naming what is tracked — proof of concept (docs/naming-poc.md)
+### N-1. Naming what is tracked — proof of concept (design/naming.md)
 **Expected, written before building.**
 1. Light without it: startup chunks unchanged from master; a headless run
    that never switches naming on makes no request to the CDN or Hugging
@@ -1616,15 +1695,15 @@ diagnosed correction.** Numbers:
 3. Tracking carries the label: classification at 400 ms rounds; every
    settled id's label present on 100% of sampled frames after settling.
 4. Beside the pipeline: 51 frames processed in 4 s with names on against
-   59 off (86%, inside the registered 25%; SwiftShader shares one CPU
-   with the wasm here). The model loaded in 1.4 s while the clip played
+   59 off (86%, inside the registered 25%; under software rendering
+   SwiftShader shares one CPU with the wasm). The model loaded in 1.4 s while the clip played
    on 5.5 s undisturbed.
 5. Audit at 1440×900 with named boxes and the margin up: nothing
    clipped, overlapping or off screen; min contrast 4.65.
 
-## Session 8
+## Naming by a detector, and depth as a stage (15 November 2026)
 
-### M-1. Naming by a detector, with the disagreement shown (docs/naming-poc.md)
+### M-1. Naming by a detector, with the disagreement shown (design/naming.md)
 **Expected, written before building (2026-11-15).**
 1. **Light without it**: with naming never switched on, no request leaves
    for the CDN or Hugging Face (page resource timing), the detector code
@@ -1654,12 +1733,12 @@ diagnosed correction.** Numbers:
 Licences checked and recorded in the design note before building:
 Transformers.js Apache-2.0; RT-DETR v2 r18vd ONNX Apache-2.0 (upstream
 PekingU Apache-2.0); COCO names ride in the model config; YOLO stays
-rejected (AGPL-3.0). WebGPU is absent in this sandbox's headless Chrome:
-backend choice and GPU speed are owner-desktop checks, named below.
+rejected (AGPL-3.0). WebGPU is absent under software rendering: backend
+choice and GPU speed are checks for a hardware GPU, named below.
 
-**Result (2026-11-15): all six registered checks hold in the sandbox; the
-WebGPU backend itself is an owner-desktop check.** Numbers (wasm/q8,
-SwiftShader-era CPU, indicative):
+**Result (2026-11-15): all six registered checks hold under software
+rendering; the WebGPU backend itself is left for a hardware GPU.** Numbers
+(wasm/q8, software rendering, indicative):
 1. Light without it: a 6 s run with boxes on and naming never asked for
    makes zero requests to jsDelivr or Hugging Face and loads no detect
    chunk; the build keeps the detector in its own lazy chunks (worker
@@ -1678,7 +1757,7 @@ SwiftShader-era CPU, indicative):
    parked and the far), drawn dashed blue with their age; of settled
    tracks 13 of 15 read "both".
 4. Beside the pipeline: one look in flight at a time, ~1.1 s per look on
-   wasm here (≈1 look/s); fps 15 with names on and off alike (within the
+   wasm (≈1 look/s); fps 15 with names on and off alike (within the
    registered 25%); media time advanced undisturbed (3.35 → 5.03 s) while
    the model loaded in 2.0 s mid-playback.
 5. Readings: "naming model" row (backend/dtype · ms per look · looks/s)
@@ -1688,18 +1767,32 @@ SwiftShader-era CPU, indicative):
    4.65; model-find labels got plates when the first audit flagged bare
    text on the picture.
 
-Not verifiable here, named for the owner's desktop: WebGPU selection and
-fp16 correctness (`?detdtype=fp32` is the fallback switch), real look
-rates and frame cost on a hardware GPU, and the phone's wasm behaviour.
+Not verifiable under software rendering, left for a hardware GPU: WebGPU
+selection and fp16 correctness (`?detdtype=fp32` is the fallback switch),
+real look rates and frame cost, and a phone's wasm behaviour. (WebGPU was
+checked on the test machine in "M-1 again" below; naming is confirmed in
+use: see [Confirmed in use](#confirmed-in-use-november-2026).)
 
-### E-1. Depth as a stage, and speeds comparable across depth (docs/depth-stage.md)
+**Blind judge (the labelled frames only), M-1 addendum:** of the plated
+names it could judge, none clearly wrong on a visible vehicle; verdicts
+were "right" on the clear cars, "can't tell" on broken clumps and one far
+"≈truck" ("leaning wrong — nothing visibly truck-like"). Unprompted, it
+read the dashed blue boxes as "weaker/unconfirmed, distant" against the
+solid near movers — the intended contrast carries from style alone, the
+exact meaning (model's own finds) needs the help sheet. Limits it found,
+recorded: some grey model-find plates sit on the white mask cut-out and go
+partly unreadable (the audit measures text against its plate, not the
+plate against the scene); several tracks at one moment were still unnamed
+at this backend's 1 look/s.
+
+### E-1. Depth as a stage, and speeds comparable across depth (design/depth-stage.md)
 **Expected, written before building (2026-11-15).**
 1. **Light without it**: with depth never switched on, no request leaves
    for the CDN or Hugging Face, the depth code stays in its own lazy
    chunks, and the truth-mask filmstrip is byte-identical to master's.
 2. **A stage that knows its age**: on `traffic` with depth on, the stage
    publishes a map stamped with the frame it saw; its reported age stays
-   bounded (under 4 s on this machine's wasm) across a 12 s run, and the
+   bounded (under 4 s on wasm under software rendering) across a 12 s run, and the
    readings margin shows backend, time per look and the map's age.
 3. **It sees depth**: on `traffic`, the map reads the near road nearer
    than the far road: mean inverse depth over the picture's lower third
@@ -1718,12 +1811,12 @@ rates and frame cost on a hardware GPU, and the phone's wasm behaviour.
 
 Licences checked and recorded in the design note before building:
 Transformers.js Apache-2.0; Depth Anything V2 Small Apache-2.0 (Base and
-Large are CC-BY-NC and are never fetched). WebGPU is absent in this
-sandbox: backend choice and GPU speed are owner-desktop checks.
+Large are CC-BY-NC and are never fetched). WebGPU is absent under
+software rendering: backend choice and GPU speed are left for a hardware GPU.
 
-**Result (2026-11-15): all six registered checks hold in the sandbox, the
-fourth after a diagnosed correction; the WebGPU backend is an
-owner-desktop check.** Numbers (wasm/q8, SwiftShader-era CPU, indicative):
+**Result (2026-11-15): all six registered checks hold under software
+rendering, the fourth after a diagnosed correction; the WebGPU backend is
+left for a hardware GPU.** Numbers (wasm/q8, software rendering, indicative):
 1. Light without it: a 5 s run with boxes on and depth never asked for
    makes zero requests to jsDelivr or Hugging Face; the worker, runtime
    and model are in lazy chunks loaded only when asked (about 3 kB of
@@ -1746,7 +1839,7 @@ owner-desktop check.** Numbers (wasm/q8, SwiftShader-era CPU, indicative):
    the third 12.64→13.63 worse), factors never left the clamp
    (0.35–3.05). The margin is thin at this backend's ~1 look/s — a map
    two seconds stale against a fast mover is the diagnosed residual —
-   and should widen where looks are fast; named for the desktop check.
+   and should widen where looks are fast; left for a hardware GPU.
 5. Beside the pipeline: fps 15 with depth on and off alike; media time
    advanced undisturbed (3.4 → 5.1 s) while the model loaded in 2.1 s
    mid-playback.
@@ -1754,7 +1847,7 @@ owner-desktop check.** Numbers (wasm/q8, SwiftShader-era CPU, indicative):
    its age chip, ≈ speeds on the plates and the margin up: nothing
    clipped, overlapping or off screen; min contrast 4.65.
 
-**Blind judge (fresh agent, the overlay frame, eyes only), E-1 addendum:**
+**Blind judge (the overlay frame only), E-1 addendum:**
 unprompted, it read the wash as "near = warm, far = cool, a vertical
 near-to-far gradient", read the chip as "an approximate depth estimate,
 just updated", and read the ≈ speeds as estimates — the display
@@ -1766,14 +1859,14 @@ a rendering fault; the help's "an estimate, not a measurement" covers
 it, and the factor's per-id smoothing and clamp bound what it can do to
 a speed.
 
-## Session 9
+## The backend ladder, naming reworked, model options parked (16 November 2026)
 
-### L-1. The backend ladder proves a look (docs/model-ladder.md) — robustness
+### L-1. The backend ladder proves a look (design/model-ladder.md) — robustness
 **Expected, written before building (2026-11-16).**
 
-The case that broke, recorded on master (74f2d08) in this machine's
-headless Chrome — which, unlike the session-8 sandbox, has a real WebGPU
-adapter (Intel Xe-LPG): `traffic`, mask + boxes + names. The ladder
+The case that broke, first reported from a desktop GPU and recorded on
+master (74f2d08) in the test machine's headless Chrome, which has a real
+WebGPU adapter (Intel Xe-LPG): `traffic`, mask + boxes + names. The ladder
 logged `webgpu/fp16: 94952944` (a crash at load), landed on webgpu/fp32,
 said `Naming is on (webgpu/fp32)`, and then put `The detector failed a
 look: using ceil() in shape computation is not yet supported for
@@ -1809,9 +1902,9 @@ in 4.3 s, median look 390–650 ms, 1.6–2.2 looks/s, map 0.4–0.8 s behind.
    typecheck` and `npm run build` pass; the ladder code stays in the lazy
    model chunks.
 
-Not verifiable here, named for the owner's desktop: that their GPU takes
-the same path (fp16 may load there where it crashes here), and the CPU
-look rate on their machine.
+Not verifiable on the test machine: that a desktop GPU takes the same
+path (fp16 may load there where it crashes on the Intel adapter), and the
+CPU look rate on other machines.
 
 **Result (2026-11-16): all seven registered checks hold, on a real WebGPU
 adapter.** Same machine and headless Chrome as the recording above
@@ -1865,19 +1958,19 @@ fp16 rung crashes at load with a bare number (`94952944`) on the pinned
 runtime; depth's fp16 rung loads and runs. The ladder absorbs it either
 way.
 
-Left for the owner's desktop: the same switch on the deployed build
+Left for a desktop GPU: the same switch on the deployed build
 should now read "running on the CPU … because the GPU backend can't run
 this model" (or "would not load it", if every GPU rung there fails
 before a look), with names appearing at the CPU's rate; and depth should
 read exactly as it did.
 
-### F-1, C-1 and M-1 again: naming made visibly better (docs/naming-poc.md)
+### F-1, C-1 and M-1 again: naming made visibly better (design/naming.md)
 **Expected, written before building (2026-11-16).** Three steps, one
 commit each, registered together so the order is on record.
 
-What the owner sees (laptop, integrated GPU, naming on the CPU rung):
-dashed model boxes sitting in empty space, and names that do not follow
-the motion boxes, many of which stay unnamed. Measured here on the same
+What was reported from a second laptop (integrated GPU, naming on the CPU
+rung): dashed model boxes sitting in empty space, and names that do not follow
+the motion boxes, many of which stay unnamed. Measured on the test machine on the same
 rung (`traffic`, mask + boxes + names, `?modelfault=webgpu:load`, 30 s
 sampled five times a second; looks take about 1.9 s):
 - Every model-only find drawn was stale: 1021 of 1021 find-samples older
@@ -1904,7 +1997,7 @@ sampled five times a second; looks take about 1.9 s):
    strength while young, fades to **nothing**, and is dropped at a bound
    of a few look periods, capped at an absolute age; a find that arrives
    already past its prime is never drawn.
-2. On the CPU rung here (the run above repeated): no find-sample older
+2. On the CPU rung (the run above repeated): no find-sample older
    than the bound, against 1021; no opacity floor. With looks slower
    than the cap this means **no model-only finds are drawn at all** on
    that rung — that is the rule working, and is named as a limit.
@@ -1931,9 +2024,9 @@ sampled five times a second; looks take about 1.9 s):
    stages are not in the diff.
 
 **M-1 again, on Transformers.js 4.3.2 (the detector worker only) —
-robustness.** The six M-1 checks as registered in Session 8, re-run on
-this machine's real WebGPU adapter, plus:
-7. The ladder lands on a GPU rung here (`Naming is on (webgpu/…)`), and
+robustness.** The six M-1 checks as first registered, re-run on
+the test machine's real WebGPU adapter, plus:
+7. The ladder lands on a GPU rung (`Naming is on (webgpu/…)`), and
    looks come at least twice a second, against 0.6.
 8. With the GPU rungs made to fail (`?modelfault=webgpu:load`), it still
    lands on the CPU on the new runtime, says why, and names.
@@ -1942,8 +2035,9 @@ this machine's real WebGPU adapter, plus:
 10. With fast looks the model-only finds drawn are fresh (none older
     than F-1's bound) and fade out rather than sit.
 
-Not verifiable here: the owner's laptop GPU (whether the new runtime's
-GPU rungs load where the old one's would not), and its CPU look rate.
+Not verifiable on the test machine: the second laptop's GPU (whether the
+new runtime's GPU rungs load where the old one's would not), and its CPU
+look rate.
 
 **F-1 result (2026-11-16): the four checks hold; one bug found by the
 third and fixed before this was written.**
@@ -2008,7 +2102,7 @@ Also recorded: one `traffic` track was named "train" in each run (a bus
 or lorry the model misread at the 0.45 score floor).
 
 **M-1 again, result (2026-11-16): the detector's worker on Transformers.js
-4.3.2 — nine of the ten checks hold on this machine's real WebGPU adapter;
+4.3.2 — nine of the ten checks hold on the test machine's real WebGPU adapter;
 the fourth holds only just, and the third has a recorded exception.**
 Headless Chrome, Intel Xe-LPG, fresh browser profile each run (so every
 load includes the downloads).
@@ -2026,7 +2120,7 @@ load includes the downloads).
    the second run). Of all tracks that lived two seconds, labelled or
    not, 8 of 21 read "both" and 13 motion-only — the far field the
    model does not see. `truth`: 6 of 7 settled tracks motion-only, **but
-   two were named "toilet"** (the white disc again, as in Session 8),
+   two were named "toilet"** (the white disc again, as in the first M-1),
    and a stray model-only find was drawn in 41 of 187 samples. Looks
    four times as fast show the model's misreads of synthetic shapes
    four times as often; the help text's "synthetic shapes get no name or
@@ -2043,7 +2137,7 @@ load includes the downloads).
    2.2/s`, and *Copy model readings* is shown.
 6. Audit at 1440×900 with named boxes, dashed model-only finds and the
    margin up, light theme: nothing clipped, overlapping or off screen;
-   min contrast 4.65, as in Session 8. In the dark theme the audit
+   min contrast 4.65, as in the first M-1. In the dark theme the audit
    reports 3.38:1 for every box plate, named or not: it reads the SVG
    text's CSS `color` where the overlay paints with `fill`. The styles
    are not in this branch's diff; recorded as a fault of the measuring
@@ -2068,7 +2162,7 @@ load includes the downloads).
 
 **What the three steps did to the picture together** (`traffic`, share of
 drawn box-samples carrying a name; plate-sized boxes in brackets):
-- 3.8.1, CPU rung, old matcher (what the owner saw): 2.2% (1.9%).
+- 3.8.1, CPU rung, old matcher (the reported picture): 2.2% (1.9%).
 - 4.3.2 on the GPU, old matcher: 20.1%, 20.0% (31.6%, 34.4%).
 - 4.3.2 on the GPU, new matcher: 22.7%, 25.2%, 26.6% (35.5%, 35.9%,
   37.0%); settled two-second tracks named 49 of 70.
@@ -2080,10 +2174,11 @@ rung the stale-finds rule removes them altogether. About three quarters
 of drawn boxes still carry no name: more than half of all motion boxes
 touch nothing the model detected (236 of 429 on the recorded looks).
 
-Not verified here: any GPU but this one; the owner's laptop, where the
-old runtime's GPU rungs "would not load" — whether the new runtime's do
-is the first thing to read off its status line; Firefox and Safari; and
-a phone.
+Not verified on the test machine: any GPU but its own; the second laptop,
+where the old runtime's GPU rungs "would not load" — whether the new
+runtime's do is the first thing to read off its status line; Firefox and
+Safari; and a phone. Naming has since been confirmed in use on a desktop
+GPU and a phone: see [Confirmed in use](#confirmed-in-use-november-2026).
 
 ### Parked: both model options marked experimental — interface
 Registered with the step (2026-11-16): the two toggles say "experimental"
@@ -2096,4 +2191,17 @@ longest word into the checkbox and was dropped. At 1440×900 the word
 "experimental" is 5 px wider than the 94 px label column and stays clear
 of the checkbox; at 390×844 it fits. Audit with the panel open, light
 theme: nothing clipped, overlapping or off screen, min contrast 4.65.
-Where the options stand is docs/ml-status.md.
+Where the options stand is [model-options.md](model-options.md).
+
+## Confirmed in use (November 2026)
+
+Recorded at the close of the project, from use rather than from a
+registered test: no numbers were taken.
+
+- **Naming** (*Name the movers*), **mirror mode** and **pinch zoom** work
+  in Chrome on a desktop GPU and on a phone. This closes the open checks
+  under IA4, M-1 and "M-1 again".
+- **Reveal heat & air** (schlieren) is confirmed on recorded clips only.
+  It has not been confirmed on a live camera; the open checks under V7
+  and IA5 stand.
+- Firefox and Safari are untested.

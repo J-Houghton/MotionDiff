@@ -1,7 +1,11 @@
-# Depth as a stage (session 8 design note)
+# Depth as a stage: design note
+
+Status: **built, experimental and parked** (*Depth the scene*, `maskDepth`).
+Verdict E-1 in [verdicts.md](../verdicts.md); where it stands:
+[model-options.md](../model-options.md).
 
 A depth model's picture becomes a shared measurement stage like the others
-(docs/pipeline-stages.md): any consumer asks `frame.stages.depth()` and
+([pipeline-stages.md](pipeline-stages.md)): any consumer asks `frame.stages.depth()` and
 gets the **latest** estimate with **how old it is** — the model runs in a
 worker beside the pipeline, never inside the frame loop, so its answer is
 always one to a few looks behind the picture and says so. Everything from
@@ -25,7 +29,7 @@ switch fails with a plain sentence and turns itself back off.
    movers* on the tracking modes. First enable dynamically imports
    `app/depthstage.js`, whose worker loads the runtime and model down a
    ladder — WebGPU fp16, WebGPU fp32, wasm q8 — until one loads and
-   proves a look (docs/model-ladder.md), saying where it landed and why
+   proves a look ([model-ladder.md](model-ladder.md)), saying where it landed and why
    (the status line) and each rung's own failure (the console).
 2. **Look**: a few times a second, one request in flight, the frame
    (scaled to ≤ 518 px wide — the model's own working size) goes to the
@@ -75,4 +79,4 @@ the theory, whether it helps.
 
 ## Acceptance (E-1, registered before building)
 
-See docs/verdicts.md, Session 8.
+See E-1 in [verdicts.md](../verdicts.md).

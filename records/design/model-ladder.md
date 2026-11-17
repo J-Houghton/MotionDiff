@@ -1,12 +1,16 @@
-# The backend ladder proves a look (session 9 design note)
+# The backend ladder proves a look: design note
 
-The two model workers (naming, docs/naming-poc.md; depth,
-docs/depth-stage.md) each walk a ladder of backends — **WebGPU fp16,
-WebGPU fp32, wasm q8** — and use the first that works. Until now "works"
+Status: **built** (verdict L-1 in [verdicts.md](../verdicts.md)). Both model
+options that use it are experimental and parked:
+[model-options.md](../model-options.md).
+
+The two model workers (naming, [naming.md](naming.md); depth,
+[depth-stage.md](depth-stage.md)) each walk a ladder of backends — **WebGPU fp16,
+WebGPU fp32, wasm q8** — and use the first that works. At first "works"
 meant "loads". This note changes it to **"loads and answers one look"**,
 and says what happens when a look fails later.
 
-## What broke (the owner's desktop, 2026-11-16; reproduced here)
+## What broke (a desktop GPU, 2026-11-16; reproduced on a laptop)
 
 *Name the movers* loaded, said `Naming is on (webgpu/fp32)`, and then
 every look failed with
@@ -22,9 +26,9 @@ stopped on the GPU, reported ready, and had no way down. The same model
 runs on wasm. Depth shares runtime, ladder and machine and works: the
 fault is the detector's graph on that backend, not the ladder's order.
 
-Reproduced on current master in this machine's headless Chrome, which has
-a real WebGPU adapter (Intel Xe): in 30 s of `traffic` the status line
-took that error 52 times and no look ever completed.
+Reproduced on master (`74f2d08`) in headless Chrome on a laptop with a real
+WebGPU adapter (Intel Xe): in 30 s of `traffic` the status line took that
+error 52 times and no look ever completed.
 
 ## The rule
 
@@ -69,7 +73,7 @@ took that error 52 times and no look ever completed.
 branch above can be seen on a machine whose backends all work. `<rung>`
 is `all`, a device (`webgpu`, `wasm`) or one rung (`webgpu/fp16`);
 `<stage>` is `load`, `prove` or `look` (every real look after `ready`).
-`?modelfault=webgpu:prove` is the owner's fault in miniature. Inert
+`?modelfault=webgpu:prove` reproduces the fault above in miniature. Inert
 without the parameter. `?detdtype=` still pins the detector's GPU rung.
 
 ## What it costs, and what it does not cover
@@ -81,10 +85,10 @@ without the parameter. `?detdtype=` still pins the detector's GPU rung.
   detected; only the load-and-prove phase has a timeout.
 - This did not give naming its GPU back: it made the failure honest and
   landed on the CPU. The GPU came back afterwards by moving the
-  detector's worker alone to Transformers.js 4.3.2 (docs/naming-poc.md,
+  detector's worker alone to Transformers.js 4.3.2 ([naming.md](naming.md),
   "M-1 again" in the verdicts); the ladder is unchanged by that and
   still lands on the CPU where the GPU rungs fail.
 
 ## Acceptance (L-1, registered before building)
 
-See docs/verdicts.md, Session 9.
+See L-1 in [verdicts.md](../verdicts.md).

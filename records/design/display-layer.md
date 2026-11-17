@@ -1,9 +1,9 @@
 # Crisp drawing layer at display resolution: design note
 
-Status: **built** (session 5, Session A; verdict VA3 in docs/verdicts.md).
-Roadmap: "Traces drawn at display resolution — crisp hair-lines on a large
-screen instead of soft ones", and the owner's instruction to move the arrows
-onto the same layer. This note is the design it was built from.
+Status: **built** (verdict VA3 in [verdicts.md](../verdicts.md)). It
+answers the roadmap item of the time, "Traces drawn at display resolution —
+crisp hair-lines on a large screen instead of soft ones", and moves the
+arrows onto the same layer. This note is the design it was built from.
 
 ## The problem
 The canvas backing store is the processing size (`setSize` makes canvas.width the
@@ -39,7 +39,7 @@ Two architectures were considered:
   (ResizeObserver → `pipeline.setCanvasSize`); below or equal to the processing size
   nothing changes, so the fallback and tiny windows cost nothing.
 - **Modes are untouched.** `pictureFramebuffer`, `target(name, w, h)` and every
-  measurement stay at processing size (Session B's contract). `renderComposite` only
+  measurement stay at processing size (the measurement contract). `renderComposite` only
   changes its final viewport.
 - **The overlay pass.** `renderParticles` and `renderArrows` stop drawing into the
   picture target. Instead they keep their geometry (unchanged, picture coordinates)
@@ -60,8 +60,8 @@ Two architectures were considered:
 Two RGBA8 trail targets at canvas size are the main memory: about 30 MB at 2048×1152,
 about 9 MB at the phone cap. Fill rate: the composite quad and the fade pass run at
 canvas size instead of processing size; at 1080p that is the cost the old CSS upscale
-paid in the compositor instead. Measured before/after on this machine is meaningless
-(software GL); the frame-rate check on a real phone goes to the owner's list.
+paid in the compositor instead. A before/after measurement under software GL
+is meaningless; the frame rate on a real phone was not measured.
 
 ## Acceptance (verdicts VA3, expectation before building)
 - On a 2048-wide canvas, flow traces and arrows on `traffic` are hairlines: a blind

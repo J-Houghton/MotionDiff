@@ -1,17 +1,19 @@
 # The two model options: where they stand (parked 2026-11-16)
 
 MotionDiff has two options that run a neural network beside the pipeline.
-Both are marked **experimental** in the panel and both are parked here:
-this page is everything needed to pick them up again without the history.
+Both are marked **experimental** in the panel and both are parked: this
+page is everything needed to pick them up again without the history. The
+reader's version is [Experimental model options](../docs/guide/experimental-models.md).
 
 | Option | What it does | Design note | Verdicts |
 |---|---|---|---|
-| *Name the movers* (`maskNames`) | An object detector looks at the whole frame a few times a second; tracked boxes take its labels, and the picture shows where motion and the model disagree | [naming-poc.md](naming-poc.md) | M-1, F-1, C-1, "M-1 again" |
-| *Depth the scene* (`maskDepth`) | A depth model's latest map rides the frame as a stage; tracked speeds are made comparable across depth | [depth-stage.md](depth-stage.md) | E-1 |
+| *Name the movers* (`maskNames`) | An object detector looks at the whole frame a few times a second; tracked boxes take its labels, and the picture shows where motion and the model disagree | [design/naming.md](design/naming.md) | M-1, F-1, C-1, "M-1 again" |
+| *Depth the scene* (`maskDepth`) | A depth model's latest map rides the frame as a stage; tracked speeds are made comparable across depth | [design/depth-stage.md](design/depth-stage.md) | E-1 |
 
-Both sit on the same backend ladder ([model-ladder.md](model-ladder.md),
-verdict L-1). All verdicts are in [verdicts.md](verdicts.md), sessions 8
-and 9. Neither model nor runtime is in the repository or the bundle: they
+Both sit on the same backend ladder
+([design/model-ladder.md](design/model-ladder.md), verdict L-1). All
+verdicts are in [verdicts.md](verdicts.md), in the two sections dated 15
+and 16 November 2026 that cover naming, depth and the ladder. Neither model nor runtime is in the repository or the bundle: they
 are fetched when an option is first switched on.
 
 ## The parts
@@ -35,18 +37,21 @@ src/ui/readings.js        the "naming model" / "depth model" rows and the copy b
 
 | Machine | Naming | Depth |
 |---|---|---|
-| The development laptop: Windows 11, Intel Xe-LPG integrated GPU, headless Chrome 157, real WebGPU adapter with `shader-f16`. **Verified here, this build.** | `Naming is on (webgpu/fp16)`, 0.43 s a look, 2.2 looks/s; about a quarter of drawn boxes named on `traffic`; 24 fps against 30 with it off | `Depth is on (webgpu/fp16)`, 0.39 s a look, 2.4 looks/s; its frame-rate cost on this GPU was not measured |
-| The same machine with the GPU rungs made to fail (`?modelfault=webgpu:load`) | `Naming is running on the CPU (wasm/q8) because the GPU backend would not load it`, 1.5–1.8 s a look; about 2% of boxes named; no model-only finds drawn | not re-measured this session (wasm/q8, about 1.2–2 s a look in E-1 and L-1) |
+| The test machine: a laptop, Windows 11, Intel Xe-LPG integrated GPU, headless Chrome 157, real WebGPU adapter with `shader-f16`. **Measured on the parked build.** | `Naming is on (webgpu/fp16)`, 0.43 s a look, 2.2 looks/s; about a quarter of drawn boxes named on `traffic`; 24 fps against 30 with it off | `Depth is on (webgpu/fp16)`, 0.39 s a look, 2.4 looks/s; its frame-rate cost on this GPU was not measured |
+| The same machine with the GPU rungs made to fail (`?modelfault=webgpu:load`) | `Naming is running on the CPU (wasm/q8) because the GPU backend would not load it`, 1.5–1.8 s a look; about 2% of boxes named; no model-only finds drawn | not re-measured on the parked build (wasm/q8, about 1.2–2 s a look in E-1 and L-1) |
 | The same machine with no WebGPU at all (`navigator.gpu` hidden) | wasm/q8 with the plain sentence | wasm/q8 with the plain sentence |
-| **The owner's desktop** (a GPU; the deployed build before the ladder fix) | Failed every look: `using ceil() in shape computation is not yet supported for AveragePool`. **Not re-tested since.** | Loads and works (owner's report, 2026-11-16). **Not re-tested on this build**; its worker is unchanged |
-| **The owner's laptop** (integrated GPU; the build with the ladder fix, before the rest) | Landed on the CPU: "the GPU backend would not load it"; dashed boxes in empty space, few names — the report that prompted F-1 and C-1. **Not re-tested since.** | not reported |
-| Phones, Firefox, Safari | never run | never run |
+| **Chrome on a desktop GPU** | Before the ladder fix it failed every look: `using ceil() in shape computation is not yet supported for AveragePool`. **On the parked build naming is confirmed working in use** (November 2026); the rung it lands on and its look rate were not recorded | Loads and works (reported 2026-11-16, before the parked build; its worker is unchanged since) |
+| **A second laptop** (integrated GPU; the build with the ladder fix, before F-1, C-1 and the runtime move) | Landed on the CPU: "the GPU backend would not load it"; dashed boxes in empty space, few names — the report that prompted F-1 and C-1. **Not re-tested since.** | not reported |
+| **Chrome on a phone** | **Confirmed working in use** (November 2026); backend and look rate not recorded | not run |
+| Firefox, Safari | never run | never run |
 
 ## Not verified
 
-- Any GPU other than the one Intel integrated adapter above. In particular
-  whether Transformers.js 4.3.2's WebGPU rungs load on the owner's laptop,
-  where 3.8.1's would not. The status line answers it in one look.
+- Numbers on any GPU other than the one Intel integrated adapter above.
+  Naming is confirmed working on a desktop GPU and a phone, but without
+  readings. In particular it is not known whether Transformers.js 4.3.2's
+  WebGPU rungs load on the second laptop, where 3.8.1's would not. The
+  status line answers it in one look.
 - The frame-rate cost of naming on a discrete GPU (measured only on an
   integrated one, where the detector shares the GPU with the picture).
 - Naming's first load on a slow connection: the 4.x runtime is a separate
@@ -55,8 +60,8 @@ src/ui/readings.js        the "naming model" / "depth model" rows and the copy b
 - E-1's fourth check (the depth speed correction) on a GPU, where looks
   are fast and its margin was expected to widen.
 - No blind judge has looked at the reworked naming picture; steps F-1 and
-  C-1 were accepted on numbers and tests, and on screenshots read by the
-  agent that built them.
+  C-1 were accepted on numbers and tests, and on screenshots read by
+  their builder.
 
 ## Known limits
 
@@ -91,9 +96,10 @@ src/ui/readings.js        the "naming model" / "depth model" rows and the copy b
    4.3.2 for naming and 3.8.1 for depth, each with its own onnxruntime
    build. They run side by side (verified, both on webgpu/fp16 at about
    two looks a second each) at the cost of a second download.
-3. On this GPU the detector's fp16 rung crashed at load on 3.8.1 with a
-   bare number (`94952944`). Undiagnosed; moot for naming since 4.3.2,
-   where fp16 loads and runs. Depth's fp16 on 3.8.1 is fine here.
+3. On the test machine's GPU the detector's fp16 rung crashed at load on
+   3.8.1 with a bare number (`94952944`). Undiagnosed; moot for naming
+   since 4.3.2, where fp16 loads and runs. Depth's fp16 on 3.8.1 is fine
+   on the same GPU.
 4. After a seek while paused no look is taken until playback resumes, so
    the new frame has no names or finds (the stale ones are dropped).
 5. `scripts/page/audit.js` reports 3.38:1 for every box plate in the dark
@@ -127,13 +133,13 @@ the readings margin's *Copy model readings* / *Copy depth readings*
   in the repository or the bundle", and stays on the dead backend;
   (c) another detector — none of D-FINE, RF-DETR runs on 3.x WebGPU
   either, so it needed (a) anyway.
-- **Depth stays on 3.8.1.** It is the configuration the owner verified;
-  nothing here needed it to move.
+- **Depth stays on 3.8.1.** It is the configuration verified on a desktop
+  GPU; nothing needed it to move.
 - **Licences** (checked 2026-11-15/16): Transformers.js Apache-2.0;
   onnxruntime-web MIT; RT-DETR v2 r18vd weights Apache-2.0; Depth
   Anything V2 **Small** Apache-2.0. **Never fetch** Depth Anything V2
   Base or Large (CC-BY-NC). **Ultralytics YOLO stays rejected**
-  (AGPL-3.0). From this session's research, not re-checked: for RF-DETR
+  (AGPL-3.0). From reading done at the time, not re-checked: for RF-DETR
   only Nano to Large are Apache-2.0, and for D-FINE the COCO-only
   checkpoints are the safe ones.
 - **Matching is containment as well as IoU, many boxes to one detection**
@@ -145,16 +151,16 @@ the readings margin's *Copy model readings* / *Copy depth readings*
 
 ## Next steps, in order
 
-1. **Read the owner's machines.** Desktop and laptop on this build: the
-   status line for each option, the copied readings, any console
-   warning. Everything below depends on whether 4.3.2's GPU rungs load
-   there.
+1. **Take readings on other machines.** A desktop GPU, the second
+   laptop and a phone on the parked build: the status line for each
+   option, the copied readings, any console warning. Everything below
+   depends on whether 4.3.2's GPU rungs load there.
 2. **A watchdog for a hung look** (open issue 1): a per-look timeout in
    `app/modelladder.js` that feeds `stepLadder` a failed look. Small; the
    decision logic and its tests already exist.
 3. **One runtime** (open issue 2): move the depth worker to 4.3.2 too.
    Needs depth re-verified first — same map and timing on both versions —
-   because depth is the owner's verified baseline. (Researched: 4.x
+   because 3.8.1 is depth's verified baseline. (Researched: 4.x
    returns an array from depth-estimation only when given an array; the
    worker passes one image.)
 4. **Frame-rate cost on integrated GPUs**, if it matters in use: a longer
@@ -169,11 +175,11 @@ the readings margin's *Copy model readings* / *Copy depth readings*
    sees in the same place look after look is not stale however slow the
    looks. Would bring parked cars back on a CPU rung honestly.
 7. **A smaller detector**: `onnx-community/dfine_s_coco-ONNX` (Apache-2.0,
-   21 MB fp16, 11 MB quantised, COCO AP 48.5 against 48.1). In this
-   session's research it ran on 4.3.2's WebGPU on the development laptop
-   in a probe page, not in the app; M-1 would have to be re-run.
+   21 MB fp16, 11 MB quantised, COCO AP 48.5 against 48.1). It ran on
+   4.3.2's WebGPU on the test machine in a probe page, not in the app;
+   M-1 would have to be re-run.
 8. Fix the audit tool's reading of SVG text (open issue 5).
-9. Phones, Firefox, Safari.
+9. Depth on a phone; both options in Firefox and Safari.
 
 ## Re-running the checks
 
@@ -191,6 +197,6 @@ node scripts/filmstrip.mjs eval --run scripts/page/naming-looks.js --args '{"cli
 node scripts/naming-replay.mjs looks.json
 ```
 
-Headless Chrome on the development laptop has a real WebGPU adapter, so
-the GPU rungs are exercised for real there. Check with
+Headless Chrome on the test machine has a real WebGPU adapter, so the GPU
+rungs are exercised for real there. On another machine, check with
 `navigator.gpu.requestAdapter()` before assuming either way.

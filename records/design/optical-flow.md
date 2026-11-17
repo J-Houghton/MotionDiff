@@ -1,13 +1,15 @@
 # Optical flow: design note
 
-Status: **built in session 4** as `core/flow.js`, `app/flow.js` and the Optical flow
-mode (`app/modes/flow.js`); results in `verdicts.md` V5. The global-motion estimate,
-camera compensation and the stabiliser are still to do. What follows is the design as
-written beforehand; **"As built" at the end lists where the code differs.**
+Status: **built** as `core/flow.js`, `app/flow.js` and the Optical flow mode
+(`app/modes/flow.js`); results in [verdicts.md](../verdicts.md) V5. The arrow
+grid (VA2) and camera compensation (V-6C,
+[camera-compensation.md](camera-compensation.md)) were built later; the
+stabiliser was not. What follows is the design as written beforehand;
+**"As built" at the end lists where the code differs.**
 
-Feature 4 of the session 3 plan. The method
-was chosen in `docs/research.md` §4; this note turns it into a build plan against the
-code as it stands after the motion mask, motion history and background model modes.
+The method was chosen in [research.md](../research.md) §4; this note turns it
+into a build plan against the code as it stood after the motion mask, motion
+history and background model modes.
 
 ## What it adds
 Motion history already shows a heading, but it reads it from the shape of a trail:
@@ -116,7 +118,7 @@ is worse than none.
 
 ## Left out, on purpose
 Farnebäck, DIS, Horn-Schunck, sparse corner tracking, homographies, rolling-shutter
-correction, particles, and the Canvas2D path. Reasons in `docs/research.md` §4.
+correction, particles, and the Canvas2D path. Reasons in [research.md](../research.md) §4.
 
 ## Order of work
 1. `core/flow.js` and its tests (one level, then the pyramid).
@@ -126,7 +128,7 @@ correction, particles, and the Canvas2D path. Reasons in `docs/research.md` §4.
 5. Only then, and as separate roadmap items: camera compensation as a pre-pass for
    the other modes, and the stabiliser.
 
-## As built (session 4)
+## As built
 - **Separable window.** Each size is solved in passes: warp the older frame by the
   guess, write the tensor terms and the mismatch terms to two targets, average each
   over the window by rows and then columns, solve. A 7×7 window costs 14 reads that
@@ -147,9 +149,13 @@ correction, particles, and the Canvas2D path. Reasons in `docs/research.md` §4.
 - **Smoothing is unbiased**: a running sum of confidence-weighted vectors and a running
   sum of the weights, divided at the end. A first version weighted the vectors alone
   and read speeds 8% to 14% low.
-- **Particles** are in, by the owner's decision (`particles.md`). The arrow grid was
-  not built.
+- **Particles** are in, reversing "Left out" above ([particles.md](particles.md)).
+  The arrow grid was not built at first; it was added later (`app/arrows.js`,
+  verdict VA2).
 - **The probe** `__motionDiffFlowParity()` passes at 0.033 px largest difference,
   no trusted vector more than 0.05 px apart.
-- **Not built yet:** `globalMotion` for a moving camera (a `globalShift` median
-  exists and schlieren uses it), camera compensation, the stabiliser.
+- **Built later:** the camera's motion, as a similarity fit over the flow field
+  (`fitSimilarity` in `core/flow.js`, the `camera()` stage) rather than the
+  planned per-axis median, and camera compensation on top of it. A `globalShift`
+  median also exists; the readings and schlieren use it.
+- **Not built:** the stabiliser.

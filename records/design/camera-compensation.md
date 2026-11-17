@@ -1,10 +1,14 @@
-# Camera compensation (session 6 design note)
+# Camera compensation: design note
 
-The roadmap item that waited for the shared stages: estimate the camera's own
-motion each frame and subtract it, so that on footage from a moving camera
-the scenery stops reading as motion and only real movers remain. Expected
-effects are registered in `verdicts.md` (V-6C1..V-6C4) before building, as
-the acceptance rules require.
+Status: **built** (`cameraComp`, *Steady camera* in the panel's Look folder).
+Verdict V-6C in [verdicts.md](../verdicts.md).
+
+Estimate the camera's own motion each frame and subtract it, so that on
+footage from a moving camera the scenery stops reading as motion and only
+real movers remain. It waited for the shared stages
+([pipeline-stages.md](pipeline-stages.md)). Expected effects were registered
+in the verdict log (V-6C1..V-6C4) before building, as the
+[acceptance rules](../acceptance.md) require.
 
 ## What is estimated
 
@@ -30,8 +34,8 @@ jitter (`handheld`, `highway`); the scale term covers a camera moving forward
 
 ## Where it is applied — one place per kind of consumer
 
-`cameraComp` is one global toggle (off by default; the effects redesign
-decides how it is surfaced). All wiring lives in the stage layer:
+`cameraComp` is one global toggle, off by default, surfaced as *Steady
+camera* in the panel. All wiring lives in the stage layer:
 
 - **Differencing (Posy, Raw, mask, and so history and the background feed).**
   A `stabilised(layer, stamp)` stage renders the ring layer into a 2D
@@ -58,8 +62,8 @@ decides how it is surfaced). All wiring lives in the stage layer:
   not a ring frame; under sustained camera motion the model itself drifts.
   Compensation reaches the background mode only through its learning feed
   in this pass; warping the model is a later piece.
-- **The stabiliser** (playback that holds still) is the roadmap's next item,
-  not this one.
+- **The stabiliser** (playback that holds still) is a separate idea and
+  is not built.
 
 ## The guards the still-camera check forced
 

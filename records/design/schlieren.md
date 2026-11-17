@@ -1,12 +1,14 @@
 # Schlieren: design note
 
-Status: **built** (session 4), checked on synthetic scenes with a known answer and on
-two real recordings found online. **Not yet checked on a phone or on the owner's own
-footage.** Research in `research.md` §7; results in `verdicts.md` V7.
+Status: **built**, checked on synthetic scenes with a known answer and on two real
+recordings found online. **Confirmed in use on recorded clips only; not yet confirmed
+on a live camera or with footage filmed for it.** Research in
+[research.md](../research.md) §7; results in [verdicts.md](../verdicts.md) V7. How to
+film for it, for readers: [Reveal heat & air](../../docs/concepts/heat.md).
 
 ## What it is
 Hot air (or a different gas) bends light. Seen through it, a detailed background
-appears shifted, by hundredths to tenths of a pixel at our picture size. Measure that
+appears shifted, by hundredths to tenths of a pixel at the app's picture size. Measure that
 shift for every small patch and draw it, and the plume appears. This is
 background-oriented schlieren (BOS).
 
@@ -31,8 +33,9 @@ solve of `core/flow.js`. Per frame:
 6. The picture: **Knife edge** (one component of the shift as grey around 128, the
    look of a classic schlieren photograph), **Strength**, **Direction**, or **Setup
    check**. (An experimental Traces view that followed the eddies of the schlieren
-   picture was removed in the session-7 clean-up: it showed nothing on real 30 fps
-   candle footage. The space-time-slice idea on the roadmap is its successor.)
+   picture was removed in commit `cc501ae`: it showed nothing on real 30 fps candle
+   footage. Reading the plume's speed from a space-time slice is the idea that would
+   replace it; it is not built.)
 
 Follow or hold, and what each shows:
 - **Reference follows** (default): only hot air that *changes* is shown. A steady,
@@ -63,7 +66,8 @@ Builds on: the flow solver and its GPU passes; the running-average pattern of th
 background model and Magnify; the feedback-state rules; Posy space (128 = nothing) for
 the knife-edge picture, so diff/overlay/glow work unchanged; the media-time base (every
 time constant is in real seconds); the live-camera path and the phone layout; the mode
-registry (panel, help, key 8, data output follow from the registry entry).
+registry (panel, help and data output follow from the registry entry; the effect
+*Reveal heat & air* is on key 6).
 New: the reference with follow and hold; cancelling the camera's shift from a small
 readback; the setup judgement and its note on the status line (`frame.note`, new);
 synthetic plume scenes with a known field,
@@ -79,14 +83,14 @@ and a check against it.
 - Research tools measure the shift (cross-correlation or optical flow) offline; NASA's
   real-time system does it on a desktop GPU. Atcheson's comparison found small-window
   Lucas–Kanade the robust choice.
-- **Ours measures the shift live**: Lucas–Kanade against an averaged reference, in the
+- **MotionDiff measures the shift live**: Lucas–Kanade against an averaged reference, in the
   browser. On the synthetic plume it resolves a noise floor of about 0.01 px, where
   Raw differencing shows faint speckle. It also cancels camera shift (only NASA's
   system was found doing that), tells the person what is wrong with the setup, and
   says what each view does and does not mean. No browser implementation was found.
 
 ## Will it hold the frame rate on a phone?
-Measured on this machine only (Intel integrated GPU), median per frame: **4.8 to 5.8 ms
+Measured on one laptop only (Intel integrated GPU), median per frame: **4.8 to 5.8 ms
 at 480 px (the phone default), 5.7 to 7.2 ms at 640 px, 12 to 15 ms at 1280 px**.
 At the phone default that leaves about
 six times headroom inside a 30 fps frame. **Not measured on a real phone.** If it is
@@ -103,13 +107,13 @@ original; a candle against a monitor checkerboard needs 1280 px or more and stay
 Not checked: a phone camera's own noise and compression, live use on a phone, weak
 sources (a mug, a heater), natural backgrounds in real footage, the "held" workflow on
 real footage (neither real clip has a usable flow-free start at 640 px). The footage
-listed below covers these.
+listed below would cover these.
 
-## Footage still wanted
-Phone on a stand, rear camera, 1080p at 30 fps, focus and exposure locked on the
+## Footage that would close the open checks
+None of it has been recorded. Phone on a stand, rear camera, 1080p at 30 fps, focus and exposure locked on the
 background, daylight or a steady LED lamp; the printed pattern about 1 m away and
 filling most of the frame, the heat source roughly half way. 25 to 30 seconds each,
-into `ref-clips/`:
+kept in `ref-clips/` under these names:
 1. `candle-pattern`: candle **unlit** for 5 s (the reference), then lit, 20 s more.
 2. `candle-wall`: the same against a natural textured background 2 m or more behind.
 3. `weak-source`: a mug of boiling water, a heater, or a hair dryer, against the pattern.

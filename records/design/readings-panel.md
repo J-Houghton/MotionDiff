@@ -1,8 +1,9 @@
 # Readings panel: design note
 
-Status: **designed** (session 5, Session A); owner's commission. Absorbs the
-roadmap's "motion-over-time strip" (its design note, `docs/motion-strip.md`,
-survives as the seismograph line's definition). Desktop Plate only.
+Status: **built** (verdicts IA8 and IA8a in [verdicts.md](../verdicts.md)).
+Desktop Plate only. It absorbs a planned "motion-over-time strip" (verdict
+VA4, not built): the strip's measurement survives as the pen line, defined
+at the end of this note.
 
 ## Research
 Two traditions fit the Plate's language, and both are the real ancestors of
@@ -52,20 +53,41 @@ publish no readings show the pooled-grid line and the cheap facts, with one
 plain sentence for what is not measured — no empty boxes.
 
 ## Where the numbers come from
-- `pipeline.readings` (flow, schlieren/setup) — Session B's contract.
-- One small addition inside `reportReadings` only (the owner's allowance):
+- `pipeline.readings` (flow, schlieren/setup): the measurement contract.
+- One small addition inside `reportReadings` only:
   `rose` (8 heading bins, share of moving cells) and `speeds` (3 bins against
   the speed range), from the same reduced field the function already reads.
 - `pipeline.getEnergyGrid(cols, rows)` for the every-mode line, the centre of
   motion and the quiet timer — the sonification's existing readback, small.
 - Session/pipeline facts (fps, sizes, ring) read directly.
 
-## Acceptance (verdict IA8 + VA4-as-absorbed)
+## Acceptance (verdict IA8, with VA4's expectation for the pen line)
 - Interface audit at desktop sizes with the panel open and closed; picture
-  share stays within the rule; a fresh look in the tier's critique round.
+  share stays within the rule; a fresh look in a critique round.
 - On the synthetic `flow` scene the panel shows the known truth: peak speed
   within 20% of 90 px/s, the rose's longest sector East, measurable high.
 - The pen line: on `truth`, after a playthrough, visibly low between 3.5 and
   8.5 s (the strip expectation, kept).
 - In a mode without readings (posy): the line still draws; the flow-only
   instruments say they are not measured; nothing empty.
+
+## The pen line (what was kept of the motion-over-time strip)
+The strip was designed as a band under the scrub bar showing how much motion
+the picture carried at each moment, so the seek bar would show where the
+action is. It was never built. Its design note is in git history as
+`docs/motion-strip.md` (added in `48bc6dc`). The part that was built is the
+panel's moving-share pen line, and this is its definition:
+
+- **What is drawn.** In the Optical flow mode, the mode's own moving share.
+  In every other mode, the mean of the pooled magnitude grid every mode
+  publishes (`core/magnitude.js`, read back as
+  `pipeline.getEnergyGrid(8, 5)`), 0..1 against the active mode's own scale.
+  So the line works in every mode and adds no new measurement.
+- **When.** Sampled four times a second, the last 60 seconds kept, newest at
+  the right.
+- **Gaps.** A paused video, or a moment with nothing to read, leaves a gap
+  in the line rather than a zero or an interpolated value: empty means "not
+  measured", as elsewhere in the project.
+- **Not carried over from the strip:** the vertical profile (where in the
+  picture the motion was), a time axis tied to the clip's length, clicking
+  to seek, and a phone version.
