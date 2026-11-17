@@ -13,6 +13,10 @@ such as V-6T point into the [verdict log](verdicts.md).
   boxes named) and model-only finds are not drawn at all. On a GPU rung
   about a quarter of boxes are named; more than half of all motion boxes
   touch nothing the model detects.
+- Each effect in `src/app/effects.js` lists `controls` to show beside its
+  choices, and `effectControls()` resolves them, but the interface never
+  calls it: those settings are reached from the time ruler and the
+  parameter panel only.
 - Naming on an integrated GPU costs frame rate: 24 fps against 30 on the test machine.
 - A look that hangs after a model is ready (no answer, no error) is not
   detected for either model; with naming and depth both on, two versions

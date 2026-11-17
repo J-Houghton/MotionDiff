@@ -1,224 +1,76 @@
 # Roadmap
 
-Status of everything planned for MotionDiff. Updated at the end of every working
-session. Statuses: **done**, **in progress**, **planned**, **deferred**.
+**MotionDiff is paused at version 1.0.** Nothing is in progress. This page
+says what exists, what is known not to work well, and what would be worth
+doing if work resumes.
 
-Last updated: 2026-11-16 (session 9: the model workers' backend ladder now
-proves a look before it says ready, after naming failed every look on the
-owner's desktop GPU; then naming made visibly better — stale model-only
-finds are no longer drawn, motion boxes take names by containment, and the
-detector's worker alone moved to Transformers.js 4.3.2, which gives it its
-GPU back here. Depth, verified on the owner's desktop, is unchanged and
-stays on 3.8.1. Both options are now labelled experimental and parked:
-docs/ml-status.md. Proof under "Session 9" in docs/verdicts.md. Stale rows
-corrected in the same pass: the schlieren guide's live wiring, two item
-numbers that pointed at the wrong rows, and the depth row's status.)
+## What exists
 
-The governing rule for every item: lightweight, and easy for a fresh agent to pick
-up — accurate docs, tests that explain intent, and nothing in the repo that isn't
-known to work.
-Visual work is accepted under the rules in `docs/development.md`; results are logged in
-`docs/verdicts.md`.
+- **Six effects** built from eight modes: Highlight motion, Cut out the
+  movers, Leave trails, Map speed & direction, Magnify the invisible, Reveal
+  heat & air. Each is described in the [documentation](docs/index.md).
+- **Sources**: a file, a video address, the camera, a mirror mode, and
+  twelve samples. Two layouts (desktop and phone), light and dark.
+- **Measurement**: a readings column, boxes that follow each mover,
+  calibration to metres, a count line, export of tracks (CSV) and readings
+  (JSON), and recording to WebM.
+- **Camera compensation** ("Steady camera") for a shaking or drifting camera.
+- **Two experimental options** that load a neural network: naming the
+  movers and estimating depth. Their status is in
+  [records/model-options.md](records/model-options.md).
+- **Tooling**: unit tests for the pure maths, shader parity probes, and
+  filmstrip rendering through headless Chrome ([scripts/](scripts/README.md)).
 
-**The two model options (naming, depth) are parked as experimental**: where
-they stand, what is unverified and what comes next is in
-[docs/ml-status.md](docs/ml-status.md).
+Tested in Chrome on a desktop GPU and on a phone. Firefox and Safari are
+untested. Naming, mirror mode and pinch zoom are confirmed working. Reveal
+heat & air is confirmed on recorded clips only, not on a live camera.
 
-The project is no longer only motion differencing. Work is listed under three heads:
-- **Motion extraction**: measuring what moved (differencing, masks, models, flow).
-- **Visualisations**: ways of showing a measured field.
-- **Applications**: a measurement put to a particular use.
+## Known limits
 
-"Expected visible effect" is what a blind judge should be able to see, and on which
-reference clip (`scripts/README.md`); an item with none is deferred, not planned.
+- **Counting miscounts packed traffic.** On the *Motorway* sample a line
+  across the near carriageway gave 18 crossings one way and 2 the other in
+  nine seconds, on a road where nothing travels the other way. Boxes over
+  touching vehicles merge and split, and their centres jump across the line.
+  Counts are right when movers stay apart.
+- **Counting has no way in on a phone.** The count line is started with the
+  X key or a link in the readings column, and the phone layout has neither.
+- **Reveal heat & air on a live phone camera** has given a flat grey picture
+  (nothing measurable). Not diagnosed.
+- **Naming on a processor** (no usable graphics card) names about 2% of
+  boxes; on a graphics card about a quarter.
+- **Frame rates on phones have not been measured.**
+- Per-effect limits are listed on each effect's documentation page.
 
-## Applications
-| Item | Status | Expected visible effect, and on what footage | Effort | Notes |
-|---|---|---|---|---|
-| Schlieren: hot air and gas made visible | **done**, session 4 | A candle plume appears where the video shows a still background (`candle-dots`, `plume`) | | `docs/schlieren.md`, verdict V7 |
-| Schlieren on a real phone, and on the owner's footage | **in progress** | The same, live from a phone camera; weak sources (a mug, a heater); natural backgrounds; a held reference | Small once footage exists | Waiting for the footage listed in `docs/schlieren.md` and for a deploy to test on a phone. Defaults (window, smoothing, sensitivity) may need tuning for phone noise and compression |
-| Schlieren: a step-by-step setup guide in the picture | **done**, session 5 (Session A) | First-time users reach a working setup without the help sheet: background, steady camera, settle, hold | | Verdict IA5. A checklist card with live state dots from `pipeline.readings.setup` (wired: `ui/guide.js`). Not yet tried live on a phone, where schlieren's live camera was the reported problem |
-| Mirror: the front camera flipped like a mirror, fullscreen | **done**, session 5 (Session A) | An installation where viewers see their own motion | | Verdict IA4. Display-only flip; the legend flips with it. Still unconfirmed on a real phone |
-| Camera zoom by pinch (owner's request) | **done**, session 5 (Session A) | Two fingers zoom the camera where the driver allows it | | In IA4. iOS Safari exposes no zoom control; still unconfirmed on a real phone |
-| Schlieren: speed of the plume from a space-time slice | planned | On `candle-dots`, where frame-to-frame tracking shows nothing, a number or a slope for how fast the plume rises | Medium | The literature finds this better than frame matching at 30 fps. The experimental traces view this would have replaced was removed in the session-7 clean-up (archived) |
-| Data out: export tracks and readings; count movers over a drawn line | **done**, session 7 | On `truth`, counts equal the scene's known crossings (2 one way, 1 the other, each within 0.4 s); the exported CSV reads the square's known speed | | docs/data-out.md, verdict D-1. Collect/export in the panel's Export folder; the count line behind X and the margin link |
-| Naming what is tracked (proof of concept) | **experimental, parked** (docs/ml-status.md). Rebuilt session 8 (#36 merged); matching and model-only finds reworked, session 9 — awaits the owner's machines | On `traffic`, settled labels vehicle-family and the motion/model disagreement drawn: solid found-by-both, dashed motion-only, dashed blue model-only — the last only while fresh | | docs/naming-poc.md, verdicts M-1, F-1, C-1 and "M-1 again" (take 1: MobileNetV2 crops, N-1, archived). RT-DETR v2 whole-frame in a worker, matched to tracks by containment; YOLO stays rejected (AGPL-3.0). About a quarter of drawn boxes carry a name at GPU look rates, about 2% on a CPU rung |
-| The model workers' backend ladder proves a look | **done**, session 9 — awaits the owner's desktop | On a GPU machine a backend that cannot run the model is stepped past and the status line says where naming landed and why; depth reads as before | | docs/model-ladder.md, verdict L-1. A rung is ready only after one throwaway inference; a look that fails later steps down once; `core/ladder.js` holds the order and the decision; `?modelfault=` shows each branch on a healthy machine |
-| WebGPU back for naming | **done**, session 9 (route a) — awaits the owner's machines | On a GPU machine the status line reads `Naming is on (webgpu/fp16)` and looks come twice a second or more instead of one every two seconds | | "M-1 again" in the verdicts. The detector's worker alone runs Transformers.js 4.3.2 (0.43 s a look here against 1.9 s on the CPU, same detections); depth stays on 3.8.1. Routes (b) patched weights and (c) another detector were researched and not taken. Costs 6 of 30 fps on an integrated GPU |
-| Depth as a stage; speeds comparable across depth (proof of concept) | **experimental, parked** (docs/ml-status.md). Built session 8 (#37 merged); loads and works on the owner's desktop (2026-11-16) | On `traffic`, the far carriageway's ≈ speeds stop reading slower than the near lane; with the switch off, byte-identical to master | | docs/depth-stage.md, verdict E-1. Depth Anything V2 Small (Apache-2.0; Base/Large are CC-BY-NC, never fetched) in a worker; `stages.depth()` reports the map's age. E-1's fourth check (the speed correction's margin widening where looks are fast) has not been re-measured on a GPU |
-| Camera compensation (global motion, then subtract it) | **done**, session 6 | On `handheld` the scenery cancels in Raw and in the mask with the crowd kept; `river`'s banks go dark under the zoom term; a still camera is byte-identical on and off | | `cameraComp` ("Steady camera"), docs/camera-compensation.md, V-6C. Three guards keep a still camera still |
-| Real-time stabiliser | planned, after compensation | `handheld` plays back steady | Medium | |
-| Sonification | **archived**, session-7 clean-up | | | Built sessions 1–2, never blind-judged; removed with Tone.js at the owner's decision (archive/sonification/). The pooled motion grid it read stays, feeding the readings panel |
+## Ideas, if work resumes
 
-## Visualisations
-| Item | Status | Expected visible effect, and on what footage | Effort | Notes |
-|---|---|---|---|---|
-| Particle traces (wind-map display) | **done**, session 4 | Streams that show direction and speed at a glance: two opposed streams on `traffic` | | `docs/particles.md`, verdict V6 |
-| Traces keep flowing while the video is paused | **done**, session 5 (Session A) | A paused frame shows the streamlines of that instant, like a wind map of one moment | | Verdict VA1; `docs/particles.md` on what the paused picture means |
-| Direction legend | **done**, session 5 (Session A) | A hue wheel in the corner makes heading colours readable without the help text (flow, history, schlieren direction) | | Verdict IA2 |
-| Traces drawn at display resolution | **done**, session 5 (Session A) | Crisp hair-lines on a large screen instead of soft ones | | Verdict VA3, design `docs/display-layer.md`; arrows ride the same layer; phone frame rate unmeasured here |
-| Asynchronous readback of the particle field | planned only if a phone needs it | No visible effect; a frame-rate measure | Small | The one per-frame readback; fine on desktop, unmeasured on phones |
-| Second-gap marker on the time ruler | **done**, session 5 (Session A) | The ruler shows the mask's second gap and the history length | | Verdict IA3 |
-| The time ruler in the Viewfinder layout | **done**, session 5 (Session A) | Gap and trail read as a ruler in fullscreen and on phones, as on the Plate | | Verdict IA3 |
-| A sample clip for Magnify that is not a face | **done**, Session B | A locked-off shot of something nearly still with a small rhythm (a sleeping animal breathing, a slight sway) opens in Magnify and shows it | | *Sleeping Kitten* sample and `kitten` reference clip, V-B3 |
-| Arrow grid for flow | **done**, session 5 (Session A) | Signed direction readable from one still, which particles were judged not to give | | Off the deferred list at the owner's decision. Verdict VA2 |
+- **A moving-camera view for footage shot while driving.** Driving forward
+  makes the whole scene stream outwards from a point ahead. Estimate that
+  pattern and remove it, so that only things with their own movement show
+  (other vehicles, people crossing). From the same estimate, show how fast
+  things ahead are growing in the picture, which is how quickly they are
+  being approached. *Steady camera* already fits a shift, zoom and rotation
+  of the whole picture; this needs a fit that allows for depth.
+- **Counting that survives crowding**: split a merged box by the direction
+  its parts are moving, and count a mover once per pass of the line.
+- **A count line and readings on a phone**: an on-screen control to draw
+  the line, and the counts shown in the phone layout.
+- **A frozen reference** ("difference from this moment"): everything that
+  has changed since a chosen frame stays lit, however slowly it changed.
+- **Several gaps at once**, so slow and fast movers both show at one
+  setting.
+- **Magnify, cleaner**: amplify each level of detail separately, so that a
+  pulse shows without amplified edges and noise.
+- **Plume speed for Reveal heat & air**, from a slice of the picture over
+  time.
+- **A real-time stabiliser** built on the camera compensation.
+- **Model options**: the next steps are listed in
+  [records/model-options.md](records/model-options.md).
+- **Housekeeping**: `npm audit` reports advisories in the development
+  tools (Vite, Vitest and their dependencies; none in the shipped app).
+  Update them before new work.
 
-## Motion extraction
-Ranked by visible effect for the effort.
+## Records
 
-| # | Item | Status | Expected visible effect, and on what footage | Effort | Notes |
-|---|---|---|---|---|---|
-| | Dense optical flow | **done**, session 4 | Speed and heading per patch from one frame pair | | `docs/optical-flow.md`, verdict V5 |
-| 1 | Frozen reference frame ("difference from this moment") | planned | Everything that changed since the pin stays lit, however slowly it changed: the whole cloud bank on `sunset` | Small | One pinned ring layer and a key to pin. Schlieren's held reference is the same idea for shifts |
-| 2 | Per-pixel noise threshold | **done**, Session B | On `night` and `truth-noisy` the mask is clean without touching the threshold | | `maskAuto` on the mask mode, V-B7; the bar scales with the pre-blur |
-| 3 | Combining several frame gaps | planned | On `traffic`, the slow far carriageway and the fast near one both show fully at one setting; in flow, slow and fast motion in one picture | Medium | Maximum over two or three gaps |
-| 4 | Magnify: per-level amplification | planned | On `face`, the pulse shows as a colour change of the skin without the amplified edges and noise | Medium-large | Biggest quality gain found in research |
-| 5 | Lighting normalisation (gradient-image differencing) | **done**, Session B (mask mode) | On `sunset`, and on a camera with auto-exposure, a brightness change no longer lights the whole frame | | `maskGradient` on the mask mode, V-B8 (21% → 1% on `sunset`). Bringing it to schlieren stays open |
-| 6 | Morphological open and close | **done**, Session B (close; the vote already removes salt) | On `traffic`, mask and background-model cut-outs lose their holes and ragged rims | | `maskFill` on the mask and background modes, V-B5 |
-| 7 | Magnify: pulse and motion presets, deeper pooling | planned | On `face`, one click gives a visible pulse | Small | |
-| 8 | Flow at moving edges | planned | The ragged outlines of movers in the flow colour view become clean | Medium | A median or an edge-aware window |
-
-### Session B (measurement; branch `session-b-measure`)
-| Item | Commit | Notes |
-|---|---|---|
-| Live readouts from the flow field (dominant heading, peak speed, share moving, camera motion) on the status line and as data (`pipeline.readings`); warning when motion is beyond the gap's reach | `289d17a` | V-B1 |
-| Type checking through JSDoc: `npm run typecheck` holds the mode contract, worker messages and params to their typedefs | `a24f191` | V-B2 |
-| Schlieren publishes its setup judgement as data (`pipeline.readings.setup`), for Session A's in-picture setup guide | `2f6520c` | |
-| Magnify sample that is not a face: *Sleeping Kitten*, plus the `kitten` reference clip | with this update | V-B3 |
-| History ribbons in measured flow colours (`historyShow: 'measured'`) | `5ab27a9` | V-B4 |
-| Fill holes in mask and background cut-outs (morphological close, `maskFill`) | with this update | V-B5 |
-| Flow gated by the mask or the background model (`flowOnly` on Optical flow) | with this update | V-B6; the gates' limits are in the help sheet |
-| Per-pixel noise threshold (`maskAuto` on the mask mode) | with this update | V-B7 |
-| Lighting normalisation (`maskGradient`: edge differencing on the mask mode) | with this update | V-B8 |
-| Magnify muted where nothing ever happens (`magQuiet`: the model's variance gates the band) | with this update | V-B9 |
-
-### Session 6
-| Item | Verdict | Notes |
-|---|---|---|
-| Shared measurement stages: every measurement once per frame, any view can use it | proof in PR #20 | docs/pipeline-stages.md; 122/122 strips byte-identical, 9/9 probes, frame times within noise |
-| The app around six effects; instrument margin; question strip | X-1 | Owner's pick from three session-6 mockups (the `experience-mockups` branch); all four fresh-agent goals reached, both built combinations found |
-| Camera compensation | V-6C | See Applications above |
-| Grouping and tracking: boxes, IDs, numbers, arrow ahead | V-6T | Truth numerics pass; traffic per-vehicle except merged clumps (limit named); `maskTrack` / the Movers pill |
-| Calibration to real units | V-6K | Exact scale, m/s everywhere speeds show; discoverability miss recorded; effort capped by the owner |
-| Motion-guided magnification | V-6M | The direction-proof on `pulse`; flank named blind on `kitten`; fur-churn limit named |
-| Fixes batch: magnify composite corner bug, the way back to the effects page, scrollable sheets, one preset per sample | — | PR #27; owner's reports |
-| Version footer (standing request) | — | PR #24; build stamp on the landing and under Keys |
-
-## Deferred
-| Item | Why |
-|---|---|
-| Magnify: band-gain normalisation | Owner's decision (session 3). Changes what existing amplification values look like |
-| Budgeted ring for an exact colour-by-age match | The blind judge calls the feedback version the same look, with a hue caveat (`docs/verdicts.md`, V1). Build it only if that caveat matters in use |
-| Luma-only branch | No visible effect of its own; a speed measure. Revisit if a phone needs it |
-| Centred three-frame variant | Costs a gap of latency; the causal form passes its checks |
-| Worker fallback for the mask, history and background modes | No effect where WebGL2 exists; those modes report that they cannot run |
-| Automatic per-frame threshold from a noise model on the GPU | Superseded by item 2 (the per-pixel noise threshold, `maskAuto`) |
-| Sparse optical flow | Dense low-resolution flow is the better fit for WebGL2, and is built |
-| Plain traces that show which way they run in a still picture | Tried with a tinted tail; a blind judge could not tell (`docs/verdicts.md`, session 4). Heading colours do it |
-| Temperature or density values from schlieren | Needs calibration and tomography; the picture is the product |
-| Worker fallback for optical flow and schlieren | As for the other WebGL-only modes |
-| Per-vehicle separation inside a merged mask clump | Needs a measurement the mask does not make (a flow-direction split); tracking boxes congestion per clump today (V-6T) |
-| Compression motion vectors | |
-| Phase-based / Riesz magnification | Large shader cost and a separate patent |
-
-## Done
-### Session 5 — Session A (Display)
-Branch `session-a-display`; verdicts under "Session A (Display)" in `docs/verdicts.md`.
-
-| Item | Verdict | Notes |
-|---|---|---|
-| On-screen button for split compare | IA1 | Transport on desktop; top action plate on phones |
-| Readings panel beside the Plate (owner's commission) | IA8 | Absorbs the motion-over-time strip (VA4); one small commit in reportReadings for rose and speed bins |
-| Direction legend (hue wheel) | IA2 | `ui/legend.js`; matches the shaders' hue() |
-| Time ruler: second gap, history length, ruler in the Viewfinder | IA3 | Markers rebuilt as 44 px phone hit boxes |
-| Traces keep flowing while paused | VA1 | Streamlines of the paused instant; `Session.pausedFlow` keeps tooling deterministic |
-| Arrow grid for flow | VA2 | Owner's decision, off the deferred list |
-| Mirror mode; camera zoom by pinch | IA4 | Needs the owner's phone |
-| Schlieren setup guide in the picture | IA5 | Live from `pipeline.readings.setup` since Session B's readings reached master |
-| This machine's tooling | — | Headless Chrome on WSL2 needs `--enable-unsafe-swiftshader` (a wrapper outside the repo); software GL, so timings here are not comparable |
-
-### Session 4
-| Item | Commit | Notes |
-|---|---|---|
-| Optical flow: Lucas–Kanade core, shader mirror, probe, mode with colour and particle views; particle traces | `578ec21` | V5, V6 |
-| Schlieren mode; synthetic plume scenes with a known field; two real candle clips in the reference set; printable background pattern | `7687582` | V7 |
-| Fixes from the blind judges and the interface audit; schlieren probe | `2fc96fd` | I2 |
-| Research notes §6 and §7, design notes for particles and schlieren, optical-flow note brought up to date | `c0095c2` | |
-| Schlieren's knife-edge view always shown on its own (laid over the video it looked like a plain camera) | `e481f4b` | From the first try on a phone |
-| Samples that open in a mode: eight new, among them a real candle plume for Schlieren | branch `demo-clips` | Each checked in its mode from a filmstrip; six added to the reference clips. Magnify has none yet |
-
-### Session 3
-| Item | Commit | Notes |
-|---|---|---|
-| Acceptance rules and decisions recorded | `f5ed9a0` | Now in `docs/development.md` |
-| Mode registry with data outputs; session module; new interface (Plate and Viewfinder, light and dark, phone layout); Tweakpane panel from mode schemas with the ARIA and focus patch; keyboard map; old UI, Pickr and accent themes removed; phone defaults; no-float fallback exercised | `2414314` | |
-| Visual tooling: reference clips, filmstrips, numeric guard, interface audit, checks against known truth | `cd98ae7`, `a0ff53c` | `scripts/README.md` |
-| Colour-by-age: both looks from the feedback buffer | `cd98ae7` | V1. Same look as the old ring, with a hue caveat |
-| Interface fixes from the blind critique | `d524b4c` | 23 states audited; fresh critic passes all seven rules |
-| Motion mask mode (three-frame differencing, pre-blur, 3×3 vote) | `a0ff53c` | V2 |
-| Motion history mode (age and direction) | `e27ae6e` | V3 |
-| Background model mode (running mean and variance, gated by motion) | `9015be5` | V4 |
-| Optical flow design note | with this roadmap update | `docs/optical-flow.md` |
-
-### Sessions 1 and 2
-| Item | Commit |
-|---|---|
-| GPU capture and texture-array frame ring (192 MiB budget, 120 frames max) | `f2b46cc` |
-| Media-time base for gap and spread | `e4fe723` |
-| Shared unsigned motion magnitude | `b9080f8` |
-| Worker-owned frame store on the fallback | `10289a1` |
-| Auto-configure from frame bursts | `6e2166c` |
-| Magnify: box pooling into float | `2667239` |
-| One threshold unit; shader/core parity probes | `0c5f36c` |
-| Time-based trails, single feedback buffer | `a0d84f9` |
-| Performance baseline against master (1080p: about 53 ms to 12.5 ms a frame) | session 2 report |
-| Research write-up, design mockups | `3922a07` |
-
-## Known gaps
-- **Naming on a CPU rung is thin**: at a look every second or two, names
-  arrive for track ids the tracker has already dropped (about 2% of drawn
-  boxes named) and model-only finds are not drawn at all. On a GPU rung
-  about a quarter of boxes are named; more than half of all motion boxes
-  touch nothing the model detects.
-- Naming on an integrated GPU costs frame rate: 24 fps against 30 here.
-- A look that hangs after a model is ready (no answer, no error) is not
-  detected for either model; with naming and depth both on, two versions
-  of the runtime are downloaded and run.
-- Mirror mode and pinch zoom are still unconfirmed on a real phone (the app
-  itself runs there; these two controls specifically have not been tried).
-- Motion magnification turns fine repeated texture (fur) painterly: the field
-  measures its real micro-shimmer; coherent large-scale motion suffers least
-  (V-6M). A coherence gate is the next idea if it matters in use.
-- Tracking IDs churn on the far field of a busy road; congestion is boxed per
-  merged clump (V-6T).
-- Calibration is true at the marked line's depth only, and its entry points
-  (C, the margin link) failed a first-time discoverability test before the
-  link existed; untested since (owner capped effort).
-- The filmstrip tool: a synthetic scene rendered after a real-clip scene in
-  one run can differ slightly from the same scene rendered alone (reproduced
-  on old master; compare strips from runs with the same scene order).
-- **Schlieren live on a phone does not work well yet** (owner's first try, session 4): the preset clips work there, the live camera gives a flat grey picture, which means nothing could be measured (a plain background or a moving phone are the likely causes; not diagnosed). The setup guide built for this (IA5) has not been tried on a phone since.
-- **Frame rates on a real phone have not been measured.** The app runs on the
-  owner's phones (deployed site), but frame-rate figures are from one desktop
-  GPU. Schlieren has been checked on synthetic scenes and
-  two recordings from the web, not on phone footage, weak sources or natural backgrounds.
-- A fine regular pattern on a screen is a poor schlieren background, and unusable below
-  a 1280 px processing width.
-- Plain (uncoloured) traces do not show which way they run in a still picture.
-- Optical flow: ragged outlines on movers; nothing measured along the middle of a
-  straight edge or on flat surfaces; a moving camera makes everything flow.
-- Blind-judged in headless Chrome, with phone and tablet layouts under device
-  emulation and Chrome's fake camera. Real phones and a real camera work (the
-  owner's testing; the deployed site). Not tested: Firefox, Safari.
-- Motion history: a hatched patch at the tail of a flat, round object's trail, and
-  hue that drifts across a trail wider than 56 px.
-- Background model: ragged edges while something is being absorbed; soft, blobby
-  cut-outs on real footage.
-- Motion mask on a moving camera: scenery turns into blobs unless *Steady
-  camera* (`cameraComp`, session 6) is on.
-- Colour-by-age "mixed": motion that pauses briefly and restarts reads pink where the
-  old ring showed orange.
-- On a phone held upright, a landscape clip is shown whole and small (a double tap
-  fills the screen and crops it); rotating the phone is the better answer.
-- Stepping backwards past the frame ring, or scrubbing far while paused, shows a
-  blank frame until playback or a forward step rebuilds history.
+Design notes, the log of what each change was expected to do and what was
+measured, and the features that were removed are in
+[records/](records/README.md).
