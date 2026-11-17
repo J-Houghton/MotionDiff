@@ -45,7 +45,7 @@ export const flowReach = (levels) => (FLOW_MAX_STEP * (2 ** levels - 1)) / 2;
 
 // Flow (working pixels per gap) → velocity (picture pixels per second),
 // less the camera's own motion while compensation is on: the fitted
-// similarity evaluated at each cell (docs/camera-compensation.md).
+// similarity evaluated at each cell (records/design/camera-compensation.md).
 const VELOCITY_FRAG = `${FLOW_PRELUDE}
 uniform sampler2D uFlow;
 uniform float uScale;
@@ -325,7 +325,6 @@ export default /** @type {import('./index.js').Mode} */ ({
     'A moving camera makes everything flow.',
     'Measure on limits where flow exists: the mask gate keeps vectors only where the three-frame mask says something moves now; the foreground gate keeps what the background model has not absorbed, so a stopper\'s flow fades out over the absorb time. A mover\'s rim keeps its vectors either way.',
     'A gate is only as good as its mask: what the mask misses (small, far or slow movers, and most of a surface that moves everywhere, like water) loses its flow with it. On motion-everywhere footage leave Measure on at Everything; for slow drift prefer the foreground gate.',
-    'Traces are drawn at the processing size, so they are soft when shown large.',
   ],
   data: { kind: 'vector', what: 'R: speed as a share of the speed range; G, B: velocity in picture pixels per second, x to the right and y down' },
   composite: true,

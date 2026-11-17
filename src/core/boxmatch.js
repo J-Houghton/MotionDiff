@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Matching a model's boxes to the tracker's boxes (docs/naming-poc.md).
+ * Matching a model's boxes to the tracker's boxes (records/design/naming.md).
  * The two do not box the same things the same way: the detector hugs an
  * object, the motion mask boxes whatever moved together — a thin leading
  * strip of a car, two clumps of one car, or one clump over a queue of

@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Shared measurement stages (docs/pipeline-stages.md).
+ * Shared measurement stages (records/design/pipeline-stages.md).
  *
  * One Stages object belongs to the Pipeline. Each frame, `begin(frame)`
  * clears the memo and the object rides along as `frame.stages`; a mode's
@@ -78,11 +78,11 @@ export class Stages {
     this._memo = new Map();
     // The camera's trajectory: cumulative position per processed frame,
     // stamped like the ring, so a warp between any two stamps is a
-    // difference of entries (docs/camera-compensation.md).
+    // difference of entries (records/design/camera-compensation.md).
     this._track = { epoch: -1, entries: [], buffers: null };
     // The warp target pool: fixed keys, assigned in order each frame.
     this._warps = 0;
-    // Grouping and tracking state (docs/tracking.md), reset with the epoch.
+    // Grouping and tracking state (records/design/tracking.md), reset with the epoch.
     this._objectsState = null;
   }
 
@@ -119,7 +119,7 @@ export class Stages {
   }
 
   /**
-   * The camera's own motion (docs/camera-compensation.md): this frame's
+   * The camera's own motion (records/design/camera-compensation.md): this frame's
    * similarity fit — dx, dy in picture px/s, zoom 1/s, rotation rad/s,
    * share — from an ungated, unsmoothed solve of its own, and the running
    * trajectory those velocities integrate into. Null while `cameraComp`
@@ -415,7 +415,7 @@ export class Stages {
   }
 
   /**
-   * The depth model's latest answer as a stage (docs/depth-stage.md): the
+   * The depth model's latest answer as a stage (records/design/depth-stage.md): the
    * coarse inverse-depth grid with min/max/median, the stamp of the frame
    * it saw, and `age` — media seconds this frame is ahead of it. Null
    * while depth is off or before the first answer. The model runs beside
@@ -430,7 +430,7 @@ export class Stages {
   }
 
   /**
-   * Grouping and tracking (docs/tracking.md): the voted decision read back
+   * Grouping and tracking (records/design/tracking.md): the voted decision read back
    * on a coarse grid, shapes labelled, and the track step run once per
    * frame. Publishes onto frame.readings and returns the born tracks in
    * picture pixels, or null while there is nothing to track.
@@ -487,7 +487,7 @@ export class Stages {
         age: t.age,
         coasting: t.miss > 0,
       }));
-      // Depth, where the stage has it (docs/depth-stage.md): each box
+      // Depth, where the stage has it (records/design/depth-stage.md): each box
       // samples its median inverse depth and carries the factor that makes
       // its speed comparable at the scene's median depth — or no factor
       // where the map declines, and the raw speed stands unmarked. The

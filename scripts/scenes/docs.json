@@ -1,0 +1,13 @@
+{ "scenes": [
+  {"name":"highlight-posy","clip":"trees","at":4,"frames":3,"every":12,"display":"diff","params":{"algorithm":"posy","frameOffset":2,"threshold":16,"trailLength":8,"channelSpread":0}},
+  {"name":"highlight-raw","clip":"trees","at":4,"frames":3,"every":12,"display":"diff","params":{"algorithm":"raw","frameOffset":2,"threshold":16,"trailLength":0}},
+  {"name":"cutout-mask","clip":"crossing","at":8,"frames":3,"every":60,"display":"diff","params":{"algorithm":"mask","frameOffset":5,"secondGap":30,"threshold":20,"maskShow":"cutout","maskFill":2}},
+  {"name":"cutout-background","clip":"crossing","at":8,"frames":3,"every":60,"display":"diff","params":{"algorithm":"background","absorbSeconds":4,"threshold":20,"maskShow":"cutout","maskFill":2}},
+  {"name":"trails-age","clip":"gulls","at":4,"frames":3,"every":12,"display":"diff","params":{"algorithm":"history","historyShow":"age","historyLength":60,"frameOffset":5,"secondGap":30,"threshold":15,"ageColorNew":"#ff4400","ageColorOld":"#0044ff"}},
+  {"name":"trails-direction","clip":"traffic","at":3,"frames":3,"every":12,"display":"diff","params":{"algorithm":"history","historyShow":"direction","historyLength":30,"frameOffset":5,"secondGap":30,"threshold":20}},
+  {"name":"trails-measured","clip":"traffic","at":3,"frames":3,"every":12,"display":"diff","params":{"algorithm":"history","historyShow":"measured","historyLength":30,"frameOffset":5,"secondGap":30,"threshold":20}},
+  {"name":"speed-traces","clip":"traffic","at":3,"frames":3,"every":12,"display":"diff","params":{"algorithm":"flow","flowShow":"particles","flowGap":2,"flowRange":40,"flowSmoothing":6,"traceDensity":25,"traceLength":15,"traceGain":1,"traceColour":"heading"}},
+  {"name":"speed-colour","clip":"traffic","at":3,"frames":3,"every":12,"display":"diff","params":{"algorithm":"flow","flowShow":"colour","flowGap":2,"flowRange":40,"flowSmoothing":6}},
+  {"name":"magnify-kitten","clip":"kitten","at":4.5,"frames":3,"every":22,"params":{"algorithm":"magnify","magAmp":20,"magFreqLow":0.15,"magFreqHigh":1.0,"magChroma":1,"magDownsample":2},"warmup":4.4,"display":"diff"},
+  {"name":"heat-knife","clip":"candle-dots","at":9,"frames":3,"every":15,"params":{"algorithm":"schlieren","schlierenShow":"knife","schlierenRange":25,"schlierenWindow":4,"schlierenSmooth":1,"schlierenReference":60,"schlierenSteady":true}}
+] }

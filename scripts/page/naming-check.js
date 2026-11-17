@@ -1,5 +1,5 @@
 // Runs inside the app page: `node scripts/filmstrip.mjs eval --run scripts/page/naming-check.js --args '{"clip":"traffic.mp4","seconds":12}'`.
-// The naming check behind verdict "M-1 again" (docs/verdicts.md, docs/ml-status.md):
+// The naming check (records/verdicts.md, "M-1 again"; records/model-options.md):
 // plays a reference clip with boxes and names on and reports where the backend
 // ladder landed, how many boxes carry a name, what the settled tracks are called
 // and whether the model agrees, the model-only finds and their ages, and the

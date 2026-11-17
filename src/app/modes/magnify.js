@@ -25,7 +25,7 @@ void main() {
   fragColor = vec4(smoothstep(uLow, uHigh, sigma), 0.0, 0.0, 1.0);
 }`;
 
-// ── Motion-guided magnification (docs/motion-magnify.md) ─────────────
+// ── Motion-guided magnification (records/design/motion-magnify.md) ─────
 // The measured displacement is band-passed and exaggerated: a warp along
 // the measured direction, not an amplified brightness.
 
@@ -262,7 +262,7 @@ export default /** @type {import('./index.js').Mode} */ ({
     }
     if (params.magMode === 'motion') {
       // The measured displacement, band-passed and exaggerated: a warp
-      // along the direction flow measured (docs/motion-magnify.md).
+      // along the direction flow measured (records/design/motion-magnify.md).
       const velocity = frame.stages.velocity();
       if (!velocity) {
         gl.renderBlank('raw', false);

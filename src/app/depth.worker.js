@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * The depth stage's worker (docs/depth-stage.md): loads Transformers.js
+ * The depth stage's worker (records/design/depth-stage.md): loads Transformers.js
  * and Depth Anything V2 Small from their homes at pinned versions —
  * nothing here is in the repository or the bundle — and answers one frame
  * at a time with a coarse inverse-depth grid. The main thread never waits
@@ -16,7 +16,7 @@
 
 const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
 // Only the Small checkpoint is Apache-2.0; Base and Large are CC-BY-NC
-// and must never be fetched (docs/depth-stage.md).
+// and must never be fetched (records/design/depth-stage.md).
 const MODEL_ID = 'onnx-community/depth-anything-v2-small';
 /** The published grid's width in cells. */
 const GRID_COLS = 80;
@@ -28,7 +28,7 @@ const PROOF_HEIGHT = 36;
 let depth = null;
 let canvas = null;
 let busy = false;
-/** `?modelfault=…:look` (docs/model-ladder.md): every real look fails. */
+/** `?modelfault=…:look` (records/design/model-ladder.md): every real look fails. */
 let failLooks = false;
 
 /** A failure out of the runtime can be a bare number (a wasm pointer),
@@ -49,7 +49,7 @@ async function load(device, dtype, fault) {
   const T = await import(/* @vite-ignore */ TRANSFORMERS_URL);
   T.env.allowLocalModels = false;
   depth = await T.pipeline('depth-estimation', MODEL_ID, { device, dtype });
-  // Prove a look before saying ready (docs/model-ladder.md): a backend can
+  // Prove a look before saying ready (records/design/model-ladder.md): a backend can
   // build its session and still be unable to run the model, and only a
   // run finds that out. One throwaway inference on a small grey picture.
   try {

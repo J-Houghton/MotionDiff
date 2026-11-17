@@ -23,7 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# Design review screenshots (regenerate from docs/design/mockups)
+# Design-review screenshots: kept on this machine, never committed
 docs/design/shots/
 
 # Reference clips and rendered filmstrips (see scripts/README.md)

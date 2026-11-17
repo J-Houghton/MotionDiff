@@ -2,7 +2,7 @@
 // Dev-only: replays recorded looks (scripts/page/naming-looks.js) through the
 // box matcher and reports how many motion boxes found a partner and how many
 // detections were left as model-only finds — so a change to core/boxmatch.js can
-// be judged on the same real looks before and after (verdict C-1).
+// be judged on the same real looks before and after (records/verdicts.md, C-1).
 //
 //   node scripts/naming-replay.mjs looks.json [more.json ...] [--matcher path/to/boxmatch.js]
 //
@@ -36,8 +36,8 @@ for (const file of files) {
     paired += out.pairs.length;
     dets += look.detections.length;
     stranded += out.detectionOnly.length;
-    // A stranded detection that still overlaps a motion box is the case the
-    // owner sees: a dashed box beside a mover that went unnamed.
+    // A stranded detection that still overlaps a motion box is the case that
+    // shows in the picture: a dashed box beside a mover that went unnamed.
     strandedTouching += out.detectionOnly.filter((d) => look.tracks.some((t) => inter(t, d) > 0)).length;
     const perDet = new Map();
     for (const p of out.pairs) perDet.set(p.detection, (perDet.get(p.detection) || 0) + 1);

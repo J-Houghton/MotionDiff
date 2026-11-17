@@ -1,7 +1,9 @@
 name: Build & Deploy
 
-# Builds the site and publishes it to GitHub Pages straight from the build
-# output, with no gh-pages branch. A merged pull request is a push to master.
+# Builds the demo and the documentation site and publishes both to GitHub
+# Pages straight from the build output, with no gh-pages branch: the demo at
+# /MotionDiff/, the documentation at /MotionDiff/docs/. A merged pull request
+# is a push to master.
 #
 # Needs, once, in the repository settings: Pages → Build and deployment →
 # Source: "GitHub Actions".
@@ -36,6 +38,8 @@ jobs:
 
       - run: npm ci
       - run: npm test
+      # The app (vite build), then the docs (scripts/build-docs.mjs) into
+      # dist/docs/. The docs build fails on a broken link.
       - run: npm run build
 
       - uses: actions/configure-pages@v5

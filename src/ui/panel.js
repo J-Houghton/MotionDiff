@@ -38,7 +38,7 @@ function saveUserPresets(presets) {
 
 /**
  * Tweakpane 4 has good keyboard support but ships no ARIA: controls have no
- * accessible name and slider tracks are bare divs (docs/research.md §5). The
+ * accessible name and slider tracks are bare divs (records/research.md §5). The
  * labels are known here, so set them after building.
  */
 function patchAccessibility(root) {
@@ -194,7 +194,7 @@ export function initPanel({ container, session }) {
     const record = exportFolder.addButton({ title: session.recording ? 'Stop recording (R)' : 'Record WebM (R)' });
     record.disabled = !session.canRecord;
     record.on('click', () => session.toggleRecord());
-    // Data out (docs/data-out.md): collect per-frame rows, export them.
+    // Data out (records/design/data-out.md): collect per-frame rows, export them.
     const collect = exportFolder.addButton({ title: session.collecting ? 'Stop collecting data' : 'Collect data' });
     collect.on('click', () => { collect.title = session.toggleCollect() ? 'Stop collecting data' : 'Collect data'; });
     const tracksButton = exportFolder.addButton({ title: 'Export tracks (CSV)' });

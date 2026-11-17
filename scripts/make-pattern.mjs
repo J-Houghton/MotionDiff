@@ -1,6 +1,6 @@
 // Writes public/schlieren-pattern.svg: an A4 landscape sheet of random black
 // and white 2 mm squares, the background the schlieren mode works best
-// against (docs/schlieren.md). Seeded, so the file is the same every time.
+// against (records/design/schlieren.md). Seeded, so the file is the same every time.
 //   node scripts/make-pattern.mjs
 import { writeFileSync } from 'node:fs';
 

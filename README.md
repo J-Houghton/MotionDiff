@@ -1,42 +1,44 @@
 # MotionDiff
 
-See what moves. MotionDiff is a browser tool that takes a video (a file, a URL, or your camera) and shows only the motion in it, six different ways, in real time on the GPU.
+See what moves. MotionDiff is a web page that takes a video (a file, a web
+address, or your camera) and shows only the motion in it, six different
+ways, as it plays. The video never leaves your browser.
 
-**[Open the live demo](https://j-houghton.github.io/MotionDiff/)** · no install, and the video never leaves your browser.
+**[Open the demo](https://j-houghton.github.io/MotionDiff/)** ·
+**[Read the documentation](https://j-houghton.github.io/MotionDiff/docs/)**
 
-![MotionDiff showing the heading of traffic on a dual carriageway as colour](docs/screenshots/plate-motion-history.png)
+![MotionDiff showing the heading of traffic on a dual carriageway as colour](docs/images/plate-trails.png)
 
-## Modes
+## The six effects
 
-| Key | Mode | What you see |
+| Key | Effect | What you see |
 |---|---|---|
-| 1 | **Posy** | Each frame laid over its own negative from a moment ago. Stillness cancels to grey; motion glows, with colour fringes that show direction when the RGB channels look back by different amounts |
-| 2 | **Raw diff** | The plain difference between now and a moment ago. Stillness is black; every mover appears twice, where it is and where it was |
-| 3 | **Magnify** | Slow, small changes amplified until they are visible: a pulse in a face, breathing, a building swaying |
-| 4 | **Motion mask** | Whatever is moving, cut out once, where it is now, in its own colours |
-| 5 | **Motion history** | A band along each mover's path, coloured by how long ago it passed, or by which way it was heading |
-| 6 | **Background model** | Whatever is not part of the usual scene, whole, whether it is moving or has stopped |
-| 7 | **Optical flow** | How fast and which way each patch of the picture is moving: as flowing particle traces in the manner of a wind map, or as colour |
-| 8 | **Schlieren** | Hot air and gas made visible. Film a candle or a heater against a detailed background with a still camera: the plume appears where the video shows nothing |
+| 1 | [Highlight motion](docs/concepts/highlight.md) | Whatever moves, painted over the scene |
+| 2 | [Cut out the movers](docs/concepts/cutout.md) | Only the moving things, in their own colours, on black. Optionally boxed, numbered and counted |
+| 3 | [Leave trails](docs/concepts/trails.md) | A band along each mover's path, coloured by time or by heading |
+| 4 | [Map speed & direction](docs/concepts/speed.md) | How fast and which way each part of the picture moves, as flowing traces, arrows or colour |
+| 5 | [Magnify the invisible](docs/concepts/magnify.md) | Breathing, a pulse, a sway: small slow changes made visible |
+| 6 | [Reveal heat & air](docs/concepts/heat.md) | Hot air and gas, filmed against a detailed background |
 
-| ![Posy mode on trees in wind](docs/screenshots/plate-posy.png) | ![Background model on traffic](docs/screenshots/plate-background-model.png) | ![The viewfinder layout on a phone](docs/screenshots/phone-viewfinder.png) |
-|---|---|---|
-| Posy, dark theme | Background model | Viewfinder layout on a phone |
+## Documentation
 
-How each mode works, and what its controls mean, is in **[docs/modes.md](docs/modes.md)**.
+The documentation is the markdown in [docs/](docs/index.md), published with
+the demo:
 
-## Using it
+- **Concepts**: [what motion extraction is](docs/concepts/motion-extraction.md),
+  and a page for each effect with what its picture does and does not mean.
+- **Using the demo**: [getting started](docs/guide/getting-started.md),
+  [controls and keys](docs/guide/controls.md),
+  [recipes](docs/guide/recipes.md),
+  [counting and export](docs/guide/counting-and-export.md),
+  [experimental model options](docs/guide/experimental-models.md),
+  [troubleshooting](docs/guide/troubleshooting.md).
+- **Technical**: [how it is built](docs/technical/architecture.md),
+  [how the modes work](docs/technical/how-the-modes-work.md),
+  [developing](docs/technical/developing.md).
 
-1. The opening page is an atlas of six effects — highlight motion, cut out the movers, leave trails, map speed & direction, magnify the invisible, reveal heat & air — each with a filmstrip and a "watch it on …" button that opens it playing on footage that shows it off. Or open your own video file, paste a video URL, or choose the camera.
-2. Pick an effect (keys **1** to **6**) and its look from the choices under the picture; press **A** to let MotionDiff measure the clip and set the gap and threshold for you.
-3. Adjust from there in the parameter panel (**P**), or drag the markers on the time ruler under the picture. The measured numbers sit beside the picture as instruments (**I**).
-4. The numbers can leave the screen: the panel's Export folder collects them as files (tracks as CSV, readings as JSON), and **X** draws a count line that tallies the boxed movers crossing it, each way.
-
-A few more keys: **Space** play and pause, **← →** step a frame, **S** split the picture against the original, **D** cycle the display (diff, overlay, glow, data), **F** fullscreen viewfinder, **T** light and dark, **R** record the output as WebM, **?** the full list.
-
-On a phone or tablet the picture fills the screen and the controls are small plates that fade while you watch; tap the picture to bring them back.
-
-Recipes for particular kinds of footage are in [docs/examples/examples.md](docs/examples/examples.md), and advice on choosing the gap, threshold and trail in [docs/examples/parameter-guide.md](docs/examples/parameter-guide.md).
+The project is paused at version 1.0; see the [roadmap](ROADMAP.md). Design
+notes and the record of what was measured are in [records/](records/README.md).
 
 ## Run it locally
 
@@ -47,33 +49,22 @@ npm install
 npm run dev     # http://localhost:5173/MotionDiff/
 ```
 
-`npm test` runs the unit tests and `npm run build` makes the production build.
+`npm test` runs the unit tests. `npm run build` builds the demo and the
+documentation site into `dist/`.
 
-## Browser support
-
-MotionDiff uses WebGL2 where it is available and falls back to a Canvas 2D worker where it is not. Posy, Raw diff and Magnify run on both; the motion mask needs WebGL2, and motion history and the background model also need float render targets. A mode that cannot run on your device says so instead of showing a blank picture.
-
-It has been developed in Chrome on desktop, and the deployed site runs on real phones (the owner's testing). Firefox and Safari are not yet tested.
-
-## Documentation
-
-| | |
-|---|---|
-| [docs/modes.md](docs/modes.md) | How each mode works and what every control does |
-| [docs/examples/](docs/examples/) | Settings for common footage, and how to choose them |
-| [docs/development.md](docs/development.md) | Project layout, conventions, tests, how changes are checked |
-| [ROADMAP.md](ROADMAP.md) | What is done, what is next, what is deferred and why |
-| [docs/verdicts.md](docs/verdicts.md) | What each visual change was expected to do, and what was measured |
-| [docs/research.md](docs/research.md) | What other implementations do, and which ideas were adopted |
-| [docs/optical-flow.md](docs/optical-flow.md) | Optical flow: the method and how it was built |
-| [docs/particles.md](docs/particles.md) | Particle traces: what the picture means, and what it does not |
-| [docs/schlieren.md](docs/schlieren.md) | Schlieren: how to film it, what it shows, what was and was not checked |
-| [scripts/README.md](scripts/README.md) | Dev tooling: reference clips, filmstrips, checks against known motion |
+Tested in Chrome on a desktop GPU and on a phone. Firefox and Safari are
+untested.
 
 ## Licence
 
 [MIT](LICENSE) for the code.
 
-- The bundled fonts (Fraunces, IBM Plex Mono, Barlow Condensed) are not MIT: each is under the SIL Open Font License 1.1.
-- Sample and reference clips are loaded from their original hosts and are not part of this repository: Pexels (Pexels licence), and for the candle plume JPaonaskar/Background-Oriented-Schlieren on GitHub (MIT licence).
-- Magnify implements a published method that is covered by patents held by the Massachusetts Institute of Technology. This is a personal, non-commercial project; see [the note in docs/modes.md](docs/modes.md#magnify) before using that mode commercially.
+- The bundled fonts (Fraunces, IBM Plex Mono, Barlow Condensed) are under
+  the SIL Open Font License 1.1.
+- Sample and reference clips are loaded from their original hosts and are
+  not part of this repository: Pexels (Pexels licence), and for the candle
+  plume JPaonaskar/Background-Oriented-Schlieren (MIT licence).
+- Magnify implements a published method covered by patents held by the
+  Massachusetts Institute of Technology. See
+  [the note](docs/technical/how-the-modes-work.md#magnify) before using
+  that mode commercially.

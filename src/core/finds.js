@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * How long a model-only find may be shown (docs/naming-poc.md). A find is
+ * How long a model-only find may be shown (records/design/naming.md). A find is
  * where the model saw something in ONE frame: it does not move, and the
  * answer arrives a look late. Drawn past its usefulness it is a box in
  * empty space, so its life is bounded and it fades to nothing.

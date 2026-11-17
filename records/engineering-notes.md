@@ -1,0 +1,162 @@
+# Engineering notes
+
+Status: reference. The file-by-file layout, the code conventions, the parity
+probes and a list of traps met while building MotionDiff. The public
+[architecture page](../docs/technical/architecture.md) and
+[developing page](../docs/technical/developing.md) give the overview; this
+is the detail they leave out.
+
+## Layout
+```text
+.
+├── .github/workflows/deploy.yml    Tests, build and GitHub Pages deploy on push to master
+├── public/                         Favicon, icon sheet, fonts
+├── scripts/                        Dev-only visual tooling and the docs site builder
+├── docs/                           Public documentation, built into the docs site
+├── records/                        Project records (this folder)
+├── src/
+│   ├── core/                       Pure functions, unit-tested
+│   │   ├── diff.js                 Posy and Raw pixel maths
+│   │   ├── blur.js                 3×3 box blur
+│   │   ├── trails.js               Trails: one decaying feedback state per pixel
+│   │   ├── mask.js                 Motion mask: three-frame differencing, clean-up vote
+│   │   ├── history.js              Motion history: age per pixel, heading from its slope
+│   │   ├── background.js           Background model: running mean and variance
+│   │   ├── flow.js                 Optical flow: Lucas–Kanade, coarse to fine, with a confidence
+│   │   ├── particles.js            Particle traces through a velocity field (no shader copy)
+│   │   ├── schlieren.js            Schlieren: the reference, the knife-edge picture, judging the setup
+│   │   ├── magnify.js              Eulerian magnification maths
+│   │   ├── magnitude.js            Shared unsigned motion magnitude, grid pooling
+│   │   ├── timebase.js             Media-time base: stamps, seek and loop detection, lookback
+│   │   ├── buffer.js               Frame ring bookkeeping, memory budget
+│   │   ├── analyze.js              Auto-configure: noise floor, threshold and gap
+│   │   ├── track.js                Grouping the mask into boxes, tracking them, calibration
+│   │   ├── dataout.js              Exported rows and the count line
+│   │   ├── boxmatch.js             Matching a model's boxes to the tracker's
+│   │   ├── finds.js                How long a model-only find may be shown
+│   │   ├── depth.js                Sampling a depth map; speeds comparable across depth
+│   │   └── ladder.js               The model workers' backend ladder: order, step-down, words
+│   ├── app/
+│   │   ├── effects.js              The six effects: modes folded by what they do, variants as visible choices
+│   │   ├── modes/                  The mode registry: one module per mode, index.js, shared params
+│   │   ├── session.js              Everything the interface drives: sources, transport, recording
+│   │   ├── pipeline.js             Per-frame orchestration, renderer selection
+│   │   ├── renderer.webgl.js       WebGL2 renderer and the built-in shaders
+│   │   ├── pipeline.worker.js      Canvas 2D fallback: diff, blur, trails, magnify in a worker
+│   │   ├── renderer.js             Canvas 2D compositing for the fallback
+│   │   ├── stages.js               Shared measurement stages: each measurement once per frame
+│   │   ├── flow.js                 Optical flow on the GPU, shared by the flow and schlieren modes
+│   │   ├── particles.js            Draws the particle traces
+│   │   ├── arrows.js               Draws the arrow grid for flow
+│   │   ├── detect.js               Naming: owns the detector's worker, matches its boxes to tracks
+│   │   ├── detect.worker.js        RT-DETR v2 through Transformers.js, fetched at runtime
+│   │   ├── depthstage.js           Depth: owns the depth worker, keeps the latest map
+│   │   ├── depth.worker.js         Depth Anything V2 Small through Transformers.js, fetched at runtime
+│   │   ├── modelladder.js          Drives both model workers down the backend ladder
+│   │   ├── probes.js               Dev-only shader-versus-core parity probes
+│   │   ├── loader.js               URL source detection
+│   │   ├── source-profile.js       Per-source capture settings
+│   │   ├── clips.js                Sample clips and parameter presets
+│   │   └── exporter.js             WebM export (MediaRecorder)
+│   ├── ui/
+│   │   ├── shell.js                The DOM: stage, split compare, caption, transport, sheets
+│   │   ├── panel.js                Parameter panel (Tweakpane), built from each mode's schema
+│   │   ├── ruler.js                The time ruler
+│   │   ├── readings.js             The readings panel beside the Plate
+│   │   ├── legend.js               The direction legend (hue wheel)
+│   │   ├── guide.js                Schlieren's setup guide in the picture
+│   │   ├── boxes.js                Tracking boxes, id plates, model-only finds
+│   │   ├── calibrate.js            Marking a known length; speeds in real units
+│   │   ├── countline.js            Drawing the count line
+│   │   ├── depthview.js            The depth estimate laid over the picture
+│   │   └── keys.js                 The keyboard map
+│   ├── styles/main.css             Both layouts, both themes
+│   └── main.js                     Wiring
+├── ROADMAP.md
+└── index.html                      A minimal shell; the DOM is built in ui/shell.js
+```
+
+## Layer rules
+Strict, and worth keeping:
+
+```text
+core/   imports nothing
+app/    imports core/ only
+ui/     imports app/ only
+main.js imports app/ and ui/, and core/ for pure helpers
+```
+
+- The rules are about imports between `src/` layers. Third-party packages may be imported at any layer (`ui/panel.js` uses Tweakpane). Test files are exempt.
+- Core modules do not import each other either. Each is self-contained; a constant two of them need (the reference frame rate, the luma weights) is repeated with a comment.
+- `core/` and `app/` stay free of any UI framework.
+
+## Conventions
+
+**Core is the source of truth.** Every visual algorithm exists twice: plain JavaScript in `core/`, with tests, and a GLSL mirror. Posy, Raw, trails and Magnify have their shaders in `app/renderer.webgl.js`; a mode added through the registry keeps its shaders in its own module. The shader must match the core, exactly where the data is 8-bit: the diff, blur and mask shaders work on whole 0..255 values for that reason.
+
+**Baselines.** In Posy space 128 means "no motion" (`128.0 / 255.0` in shaders, never `0.5`) and motion is the deviation from it. In Raw space the baseline is 0. New maths must respect the baseline of the space it writes to.
+
+**Threshold** is the mean absolute channel difference between two frames, 0..255, in every mode. (Posy stores half-differences, so `posyBlend` doubles before comparing.)
+
+**Time base** (`core/timebase.js`). Frames are stamped with media time (`requestVideoFrameCallback`'s `mediaTime`, else `video.currentTime`) and old frames are found by time, never by counting processed frames. Gap, spread, trail and history lengths are all in 1/30 s of media time. Each frame is classified against the previous stamp (`classifyStep`): a `jump` clears history, a `rewind` drops only frames at or after the new position, a `repeat` (the same frame rendered again while paused) stores nothing new. Do not add a path that pushes a frame without a stamp, and do not count processed frames for anything a user sets. A live source (the camera) is the exception to "media time": browsers disagree on what a camera frame's `mediaTime` is, so `Session` stamps live frames with its own real-time clock.
+
+**Frame history** (`core/buffer.js`). `FrameRing` tracks slots and stamps, not pixels. On WebGL the video element is uploaded straight to a texture and past frames live in a `TEXTURE_2D_ARRAY` (slot = layer); nothing is read back or kept on the JS heap. On the fallback the worker owns the ring and the pixel buffers. The ring is sized from a 192 MiB budget and capped at 120 frames: 120 at 640×360, 54 at 1280×720, 24 at 1920×1080. When it is too short for the lookback, `storeInterval` thins what is kept. Phones get a 64 MiB budget and a 480 px processing width.
+
+**Trails** (`core/trails.js`). One feedback state per pixel and channel: the strongest recent value and its age in trail windows, shown under a hold-then-fade envelope. There is no ring of past diffs. Two states are ping-ponged so a frame rendered again while paused is recomputed from the state before it, not stacked on its own result.
+
+**Feedback state in a mode.** A mode with state of its own (history, background) follows the trail's pattern: two targets from `renderer.target()`, a per-renderer record of which is current, recompute rather than advance when `frame.step === 'repeat'` (use `frame.stepMs`, which keeps its value on a repeat), and start over when `renderer.epoch` changes (it counts every seek, source change, mode change and resize).
+
+**Optical flow** (`core/flow.js`, `app/flow.js`). One solver serves the Optical flow mode (two frames a gap apart) and Schlieren (a reference picture against now). Brightness is luma in levels, 0..255; a vector is a shift in pixels from the older picture to the newer, x right and y down; every vector carries a confidence, and nothing downstream may use a vector without it. The shaders work in image coordinates through the prelude in `app/flow.js` (`here()`, `px()`, `between()`), which does the flip from the bottom-up textures in one place.
+
+**Particles** (`core/particles.js`) are stepped in JavaScript from a small field read back each frame: there is deliberately no shader copy. What a trace means is fixed in [particles.md](design/particles.md); anything that is not a measurement (where traces start, how many there are) is said to be so in the help text.
+
+**A mode's note to the person.** `frame.note(message, type)` puts a sentence on the status line (schlieren reports its setup that way). It is rate-limited; keep the sentence short.
+
+**Shared motion magnitude** (`core/magnitude.js`). Every mode reduces its result to one unsigned value per pixel, 0..1. Anything that wants "how much motion, where" (the readings panel's pooled grid today) pools from that, never from a mode's own signed output: pooling a signed difference cancels a moving edge to zero. A registry mode draws its data into `renderer.dataFramebuffer()` with the magnitude in R.
+
+**Two render paths.** WebGL2 is preferred; Canvas 2D with `pipeline.worker.js` is the fallback. Posy, Raw and Magnify must keep working on both. A new mode may be WebGL-only, but must then report that through the status line on the fallback.
+
+**Types.** The code stays plain JavaScript; the contracts that cross module
+boundaries are written as JSDoc typedefs and held by `npm run typecheck`
+(TypeScript as a checker only, nothing is emitted). The mode contract lives in
+`app/modes/index.js` (`Mode`, `ModeFrame`, `FrameStep`), the param schema in
+`app/modes/params.js` (`ParamDef`), and the worker protocol in
+`app/pipeline.worker.js` (request and result messages, used by both sides). A
+new mode or message field starts with its typedef.
+
+**Params.** Every runtime setting lives on `pipeline.params`, defined by the modes' schemas. The interface changes them through `Session.setParams`. Saved presets carry a version (`PRESET_VERSION` in `app/clips.js`); changing what a param means needs a `migratePresetParams` step.
+
+**Uniforms.** `createProgram` caches uniform locations and binds samplers to texture units once. Use `program.u.name`; never look a location up per frame.
+
+**Interface.** One DOM, two layouts chosen by `#app[data-layout]` in CSS: *Plate* (desktop) and *Viewfinder* (fullscreen, and any touch or narrow device). Light and dark themes only. All interface state lives in `app/session.js`; the shell calls its methods and redraws on its events. `index.html` stays a minimal shell.
+
+## Tests and parity probes
+Unit tests cover the pure functions under `src/core/`. Run them with `npm test`.
+
+The shaders are checked against those functions in a real browser. In a dev build, call these in the console on an idle page:
+
+```text
+__motionDiffDiffParity()        __motionDiffMaskParity()
+__motionDiffTrailParity()       __motionDiffHistoryParity()
+__motionDiffEnergyParity()      __motionDiffBackgroundParity()
+__magnifyParityHarness()        __motionDiffFlowParity()
+__motionDiffSchlierenParity()   __motionDiffWarpParity()
+__motionDiffMotionMagnifyParity()
+```
+
+Each runs the same synthetic frames through core and GPU and reports the difference. 8-bit and Float32 results are expected to agree within about 2/255. State kept in half floats cannot match a Float32 core bit for bit, so the background probe counts mismatched decisions (under 0.1%) instead of demanding none; the flow and schlieren probes likewise report the largest difference between vectors (0.03 and 0.02 px) and count trusted vectors that are further apart than a set distance. Run the probes after touching a shader or its core function.
+
+## Gotchas
+- Rendering to float textures in WebGL2 needs `EXT_color_buffer_float` (or the half-float variant). Feature-detect, never assume.
+- `UNPACK_FLIP_Y_WEBGL` is on for the whole context: textures are stored bottom-up. A shader that indexes texels with `texelFetch` and cares about image rows must flip explicitly. `texSubImage3D` rejects that flag for array buffers, so pixels reach a ring layer through `uploadPixels` and `storeCurrent`.
+- The WebGL canvas has `preserveDrawingBuffer: false`: read it back in the same task that rendered it, or you get a cleared buffer.
+- Creating a texture binds it. A mode asks for all its `renderer.target()`s and the `dataFramebuffer()` before binding textures for a draw, or the first frame draws from the wrong texture.
+- Do not hold a GLSL `bool` computed from a variable that is reassigned later in the shader: one GPU compiler evaluated it after the reassignment. Compute a float instead.
+- `gl.finish()` does not wait for the GPU in Chrome. To time a frame, read one pixel back after it.
+- A camera reports a placeholder picture size (0×0, or 2×2 on phones) until its first real frame. `Session` waits for a real size before sizing the pipeline, and follows the video element's `resize` event afterwards (a rotated phone).
+- Not every browser keeps delivering frame callbacks for a video nobody can see, or advances the decoded-frame counter on a camera stream. The frame loop falls back to the display clock when both stand still; do not make processing depend on either alone.
+- Half floats cannot hold the squares of 0..1 brightness slopes (they fall into the range where precision goes, or are flushed to zero on some GPUs): the flow solver works in levels, 0..255.
+- A grid with one implicit column sizes it to its widest item: a long unbroken status line once stretched the whole page. `#app` declares `minmax(0, 1fr)`.
+- A fine regular pattern (a checkerboard on a monitor) reduced to the processing size blurs to flat grey with moiré: a measuring mode then has nothing to measure. Schlieren says so and suggests a larger width.
+- Video decoders start slowly: give playback two or three seconds before counting frames. Browser-recorded WebM cannot be seeked frame-accurately, which is why the filmstrip tool draws its synthetic scenes itself.
+

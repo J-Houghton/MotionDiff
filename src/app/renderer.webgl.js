@@ -780,7 +780,7 @@ export class WebGLRenderer {
 
     const gl = this.gl;
 
-    // The canvas backing follows the display (docs/display-layer.md): at
+    // The canvas backing follows the display (records/design/display-layer.md): at
     // least the processing size, up to the element's size in device pixels.
     this._applyCanvasSize();
     gl.viewport(0, 0, width, height);
@@ -1308,7 +1308,7 @@ export class WebGLRenderer {
     gl.uniform1i(u.uGated, opts.gate ? 1 : 0);
     gl.uniform2f(u.uBandScale, this.width / (w * ds), this.height / (h * ds));
 
-    // The canvas backing may be display-sized (docs/display-layer.md): the
+    // The canvas backing may be display-sized (records/design/display-layer.md): the
     // composite must fill it, or the picture sits in the GL origin's corner.
     this._drawQuadTo(null, this.canvasWidth || this.width, this.canvasHeight || this.height);
 

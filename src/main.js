@@ -18,7 +18,7 @@ const session = new Session({
   noFloat: query.has('nofloat'),
   processWidth: phone ? PHONE_DEFAULTS.processWidth : undefined,
   ringBudgetBytes: phone ? PHONE_DEFAULTS.ringBudgetBytes : undefined,
-  // Widest canvas backing for the crisp display layer (docs/display-layer.md).
+  // Widest canvas backing for the crisp display layer (records/design/display-layer.md).
   displayCap: phone ? 1280 : 2048,
 });
 
@@ -42,7 +42,7 @@ if (import.meta.env.DEV) {
     setParams: (params) => session.setParams(params),
     stepTo: (time) => session.stepTo(time),
   };
-  // Shader-vs-core parity probes (see docs/development.md).
+  // Shader-vs-core parity probes (see docs/technical/developing.md).
   import('./app/probes.js').then((probes) => {
     window.__motionDiffDiffParity = () => probes.debugDiffParity(session.pipeline);
     window.__motionDiffTrailParity = () => probes.debugTrailParity(session.pipeline);

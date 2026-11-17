@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Depth as a stage (docs/depth-stage.md): the main-thread side. Owns the
+ * Depth as a stage (records/design/depth-stage.md): the main-thread side. Owns the
  * worker, throttles to one request in flight, stamps each frame it sends
  * with its media time, and keeps the latest answer for the pipeline to
  * serve as `frame.stages.depth()` — always late, and saying by how much.
@@ -47,7 +47,7 @@ export function createDepthStage(options = {}) {
     };
   }
 
-  // The backend ladder (docs/model-ladder.md): a rung is ready only once
+  // The backend ladder (records/design/model-ladder.md): a rung is ready only once
   // it has proved a look, and a look that fails later steps down once.
   const ladder = createModelLadder({
     spawn: () => new Worker(new URL('./depth.worker.js', import.meta.url), { type: 'module' }),

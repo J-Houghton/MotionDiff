@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * The backend ladder for the model workers (docs/model-ladder.md): which
+ * The backend ladder for the model workers (records/design/model-ladder.md): which
  * backends are tried and in what order, what happens when one fails, and
  * the words that say where it landed and why.
  *
@@ -155,7 +155,7 @@ export function gaveUpWords(ladder) {
 }
 
 /**
- * The triage switch `?modelfault=` (docs/model-ladder.md): a comma list of
+ * The triage switch `?modelfault=` (records/design/model-ladder.md): a comma list of
  * `<rung>:<stage>`, where `<rung>` is `all`, a device or one rung
  * (`webgpu/fp16`). Returns the stage this rung is asked to fail at, or
  * null. The first matching entry wins.

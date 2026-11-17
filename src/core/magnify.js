@@ -344,7 +344,7 @@ export function addBand(base, width, height, fast, slow, factor, amp, chroma, ou
   }
 }
 
-// ── Motion-guided magnification (docs/motion-magnify.md) ──────────────
+// ── Motion-guided magnification (records/design/motion-magnify.md) ─────
 // The measured displacement itself is band-passed and exaggerated: the
 // velocity field is band-passed with the same two cut-offs as the
 // brightness EMAs, then leak-integrated into a bounded displacement.

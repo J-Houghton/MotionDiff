@@ -81,7 +81,7 @@ const TEMPLATE = `
       </div>
       <div class="atlas" id="atlas"></div>
       <p class="empty-hint">or drop a video file anywhere · your video never leaves the browser</p>
-      <p class="version" id="versionEmpty"></p>
+      <p class="version"><span id="versionEmpty"></span> · <a href="docs/" style="color:inherit">Docs</a></p>
     </div>
   </div>
   <aside class="panel chrome" id="panel" aria-label="Parameters">
@@ -130,7 +130,7 @@ const TEMPLATE = `
     <p id="helpBlurb"></p>
     <ul class="help" id="helpList"></ul>
     <p class="help-data" id="helpData"></p>
-    <p class="version" id="versionKeys"></p>
+    <p class="version"><span id="versionKeys"></span> · <a href="docs/" target="_blank" rel="noopener" style="color:inherit">Docs</a></p>
     <button type="button" class="sheet-close" data-close>Close <kbd>Esc</kbd></button>
   </div>
 </div>
@@ -534,7 +534,7 @@ export function initShell({ root, session }) {
 
     const url = document.createElement('form');
     url.className = 'sources-url';
-    const field = Object.assign(document.createElement('input'), { type: 'url', placeholder: 'Paste a video or HLS URL', autocomplete: 'off' });
+    const field = Object.assign(document.createElement('input'), { type: 'url', placeholder: 'Paste a video URL', autocomplete: 'off' });
     field.setAttribute('aria-label', 'Video URL');
     url.append(field, Object.assign(document.createElement('button'), { type: 'submit', textContent: 'Load' }));
     url.addEventListener('submit', (event) => {
@@ -787,7 +787,8 @@ export function initShell({ root, session }) {
     applyLayout();
   });
 
-  // The version footer: which build this is, on the landing and under Keys.
+  // The version footer: which build this is, on the landing and under Keys,
+  // beside the link to the documentation site (built into dist/docs/).
   const stamp = typeof __BUILD_STAMP__ === 'string' ? `MotionDiff ${__BUILD_STAMP__}` : 'MotionDiff dev';
   $('versionEmpty').textContent = stamp;
   $('versionKeys').textContent = stamp;

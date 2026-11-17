@@ -375,7 +375,7 @@ export default /** @type {import('./index.js').Mode} */ ({
       fill: params.maskFill,
     });
 
-    // Grouping and tracking: shapes become boxes with an ID (docs/tracking.md).
+    // Grouping and tracking: shapes become boxes with an ID (records/design/tracking.md).
     if (params.maskTrack) frame.stages.objects(raw);
 
     renderer.renderTrail({
