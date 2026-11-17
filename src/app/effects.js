@@ -1,12 +1,12 @@
 // @ts-check
 /**
  * The effects: the app organised around what a newcomer wants to see, not
- * around how it is measured (session 6; the owner's pick from three mockups,
- * recorded as X-1 in docs/verdicts.md).
+ * around how it is measured (the layout chosen from three candidates:
+ * records/verdicts.md, X-1).
  *
  * Eight modes fold into six effects. Each carries a verb title, a one-line
  * promise, the sample that shows it off, and its variants as visible
- * choices — which is where the combined modes (docs/combined-modes.md)
+ * choices — which is where the combined modes (records/design/combined-modes.md)
  * surface as what they do: "coloured by true direction" is flow + history,
  * "only the movers" is the flow gate, "mute still areas" is the background
  * model gating magnify. The full parameter panel stays behind one entry.

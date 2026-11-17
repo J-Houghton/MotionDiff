@@ -1,5 +1,5 @@
 /**
- * The depth estimate shown (docs/depth-stage.md): the stage's coarse
+ * The depth estimate shown (records/design/depth-stage.md): the stage's coarse
  * inverse-depth grid over the picture, near warm and far cool, pixelated
  * on purpose — an 80-cell estimate, not a measurement — with a chip
  * naming how old the map is. Hidden unless a tracking mode has depth on

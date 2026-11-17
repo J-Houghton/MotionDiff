@@ -2,8 +2,9 @@
 /**
  * The mode registry. A mode is one module in this folder plus one entry in
  * MODES; nothing else needs to know it exists. The pipeline calls its
- * `render`, the panel builds its controls from `params`, and the keys 1–9
- * select modes in the order listed here.
+ * `render`, and the panel builds its controls from `params` and lists the
+ * modes in the order given here. The keys 1–6 pick the six effects the
+ * modes fold into (app/effects.js), not the modes themselves.
  *
  * The typedefs below are the mode contract; `npm run typecheck` holds every
  * mode module to it (each annotates its default export as a Mode).
@@ -38,10 +39,10 @@
  * @property {(message: string, type?: 'info'|'error') => void} note - Puts a
  *   sentence on the status line (a setup problem, a reading); rate-limited
  * @property {import('../stages.js').Stages} stages - The shared measurement
- *   stages for this frame (docs/pipeline-stages.md): each computed once per
+ *   stages for this frame (records/design/pipeline-stages.md): each computed once per
  *   frame on first request, however many views pull it. WebGL path only
  * @property {*} [depth] - The depth model's latest answer, or null
- *   (docs/depth-stage.md); read it through frame.stages.depth()
+ *   (records/design/depth-stage.md); read it through frame.stages.depth()
  * @property {object|null} [readings] - A mode may set this: a small object of
  *   live measurements for this frame; the pipeline exposes the latest one as
  *   pipeline.readings for the interface and tools

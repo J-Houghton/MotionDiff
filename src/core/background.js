@@ -45,7 +45,7 @@ export const BG_MIN_STEP = 1 / 2048;
  * object takes to stop being foreground. One that is several times the
  * threshold in contrast needs about two time constants of the exponential
  * approach, after the hold; a time constant of a third of the setting puts
- * the total near it (measured on the truth clip: docs/verdicts.md, V4).
+ * the total near it (measured on the truth clip: records/verdicts.md, V4).
  *
  * @param {number} dtMs - Media time since the previous frame
  * @param {number} absorbSeconds

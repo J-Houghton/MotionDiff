@@ -94,14 +94,14 @@ export class Session {
     /** @type {ReturnType<import('./detect.js').createDetector>|null} Loaded only when "Name the movers" is first asked for */
     this._naming = null;
     this._namingLoading = false;
-    /** @type {ReturnType<import('./depthstage.js').createDepthStage>|null} Loaded only when "Depth the scene" is first asked for (docs/depth-stage.md) */
+    /** @type {ReturnType<import('./depthstage.js').createDepthStage>|null} Loaded only when "Depth the scene" is first asked for (records/design/depth-stage.md) */
     this._depth = null;
     this._depthLoading = false;
     /** @type {import('../core/dataout.js').CountLine|null} Count line in picture px (ui/countline.js); belongs to one camera setup */
     this.countLine = null;
     /** @type {ReturnType<typeof createCounter>|null} */
     this._counter = null;
-    /** Data collection (docs/data-out.md): rows appended per processed frame while on. */
+    /** Data collection (records/design/data-out.md): rows appended per processed frame while on. */
     this.collecting = false;
     this._dataLog = { frames: [], tracks: [], lastT: -1, full: false };
     this.display = 'overlay';
@@ -134,7 +134,7 @@ export class Session {
     this.pausedFlow = true;
     /**
      * The canvas backing follows the element's size so line work is crisp
-     * (docs/display-layer.md). Tooling that compares strips pins it off;
+     * (records/design/display-layer.md). Tooling that compares strips pins it off;
      * call syncDisplayScale after changing.
      */
     this.displayScale = true;
@@ -213,10 +213,10 @@ export class Session {
       const problem = this.modeProblem();
       if (problem) this.setStatus(problem, 'error');
     }
-    // Naming (docs/naming-poc.md) loads only when first asked for.
+    // Naming (records/design/naming.md) loads only when first asked for.
     if (params.maskNames === true && !this._naming && !this._namingLoading) void this._loadNaming();
     if (params.maskNames === false) this._naming?.clear();
-    // Depth (docs/depth-stage.md) likewise.
+    // Depth (records/design/depth-stage.md) likewise.
     if (params.maskDepth === true && !this._depth && !this._depthLoading) void this._loadDepth();
     if (params.maskDepth === false) { this._depth?.clear(); this.pipeline.depth = null; }
     this._emit('params');
@@ -248,7 +248,7 @@ export class Session {
     this.setStatus('Loading the naming model (21–41 MB, once; the browser caches it)…', 'info');
     const detector = (await import('./detect.js')).createDetector({
       onStatus: (message, type) => this.setStatus(message, type),
-      // The ladder ran out after it had been running (docs/model-ladder.md).
+      // The ladder ran out after it had been running (records/design/model-ladder.md).
       onLost: (message) => {
         detector.dispose();
         this._naming = null;
@@ -277,7 +277,7 @@ export class Session {
     return this.params.maskDepth && this._depth ? this._depth.status() : null;
   }
 
-  /** The latest depth map for the overlay, or null (docs/depth-stage.md). */
+  /** The latest depth map for the overlay, or null (records/design/depth-stage.md). */
   depthLatest() {
     return this.params.maskDepth && this._depth ? this._depth.latest() : null;
   }
@@ -288,7 +288,7 @@ export class Session {
     const { createDepthStage } = await import('./depthstage.js');
     const stage = createDepthStage({
       onStatus: (message, type) => this.setStatus(message, type),
-      // The ladder ran out after it had been running (docs/model-ladder.md).
+      // The ladder ran out after it had been running (records/design/model-ladder.md).
       onLost: (message) => {
         stage.dispose();
         this._depth = null;
@@ -750,12 +750,12 @@ export class Session {
     // Naming rides beside the pipeline too: a look at the whole frame a few
     // times a second, fire-and-forget; the picture never waits for it. An
     // empty track list still gets looks — what the model alone finds is
-    // half the point (docs/naming-poc.md).
+    // half the point (records/design/naming.md).
     const named = this.pipeline.readings;
     if (this._naming && this.params.maskNames && named?.objects) {
       this._naming.tick(this.video, named.objects, named.width, named.height);
     }
-    // Depth rides beside the pipeline the same way (docs/depth-stage.md):
+    // Depth rides beside the pipeline the same way (records/design/depth-stage.md):
     // the stamp mirrors the pipeline's own rule — media time for a file,
     // this session's clock for a live source.
     if (this._depth && this.params.maskDepth) {
@@ -765,7 +765,7 @@ export class Session {
     }
   }
 
-  // ── Data out (docs/data-out.md): the counter and the collected log ──
+  // ── Data out (records/design/data-out.md): the counter and the collected log ──
 
   /** @param {import('../core/dataout.js').CountLine|null} line */
   setCountLine(line) {
@@ -816,7 +816,7 @@ export class Session {
     }
     if (log.frames.length >= 100000 || log.tracks.length >= 100000) {
       log.full = true;
-      this.setStatus('Data collection is full: export it, or clear and collect again', 'info');
+      this.setStatus('Data collection is full: export it, then load a video to start again', 'info');
       this._emit('collect');
     }
   }

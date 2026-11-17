@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Data out (docs/data-out.md): the count-line crossing test and counter,
+ * Data out (records/design/data-out.md): the count-line crossing test and counter,
  * and the serialisers for collected rows. Pure functions and plain state —
  * this module imports nothing (core layer rule).
  *

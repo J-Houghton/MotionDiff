@@ -138,7 +138,7 @@ export function renderArrows(renderer, key, field, opts) {
   }
 
   // The picture target holds black; the arrows land on the canvas after the
-  // composite, crisp at the backing size (docs/display-layer.md).
+  // composite, crisp at the backing size (records/design/display-layer.md).
   gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.pictureFramebuffer);
   gl.viewport(0, 0, width, height);
   gl.clearColor(0, 0, 0, 1);

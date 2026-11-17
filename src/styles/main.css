@@ -286,7 +286,7 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .scrub:disabled { opacity: 0.35; cursor: default; }
 
 /* readings: measured values as plate marginalia beside the picture
-   (docs/readings-panel.md). Desktop Plate only. */
+   (records/design/readings-panel.md). Desktop Plate only. */
 .readings { width: 252px; align-self: start; max-height: calc(100dvh - var(--chrome-h, 196px) + 10px); overflow-y: auto; overflow-x: hidden; padding: 0 10px 12px 16px;
   /* an instrument margin on ruled chart paper, with its red margin line */
   border-left: 1px solid var(--rule);
@@ -532,7 +532,7 @@ kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--rule); border-radius
 .boxes marker path { fill: var(--accent); }
 .boxes .boxes-plate { fill: var(--card); stroke: var(--ink); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .boxes text { fill: var(--ink); font-family: var(--mono); }
-/* Naming by a detector (docs/naming-poc.md): found by motion only = dashed
+/* Naming by a detector (records/design/naming.md): found by motion only = dashed
    accent; the model's own finds = dashed blue estimates with their label. */
 .boxes g[data-agree='motion'] rect { stroke-dasharray: 7 5; }
 .boxes .boxes-model rect { stroke: var(--ch-b); stroke-dasharray: 4 4; }

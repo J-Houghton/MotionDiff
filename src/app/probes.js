@@ -270,8 +270,7 @@ function buildParityPatterns(width, height) {
 }
 
 /**
- * Dev-only parity probe for the shared motion magnitude (originally
- * SPEC-sonification A6).
+ * Dev-only parity probe for the shared motion magnitude.
  *
  * Feeds synthetic frame pairs through the CPU core math
  * (posyBlend → diffMagnitude → poolMagnitude) and through the WebGL diff,

@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * The backend ladder's driver (docs/model-ladder.md), shared by the two
+ * The backend ladder's driver (records/design/model-ladder.md), shared by the two
  * model workers. It gives every rung a fresh worker, counts a rung only
  * once it has proved a look, steps down when a look fails later, and tells
  * its owner in words where it landed and why. The decisions themselves

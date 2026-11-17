@@ -1,5 +1,5 @@
 /**
- * Tracked movers drawn over the picture (docs/tracking.md): one thin box
+ * Tracked movers drawn over the picture (records/design/tracking.md): one thin box
  * per track, its ID and measured speed on a small plate, and an arrow one
  * lead-second ahead along its velocity. Reads pipeline.readings.objects —
  * the interface draws what the measurement published, nothing more.
@@ -28,7 +28,7 @@ export function initBoxes({ root, stage, session }) {
 
   /** @type {Map<number, {g: SVGGElement, rect: SVGRectElement, label: SVGTextElement, arrow: SVGLineElement}>} */
   const nodes = new Map();
-  // The model's own finds (docs/naming-poc.md): what the detector saw that
+  // The model's own finds (records/design/naming.md): what the detector saw that
   // no track covers, drawn as dashed estimates. Rebuilt each draw — a look
   // returns a handful at most.
   const finds = document.createElementNS(SVG, 'g');
@@ -122,7 +122,7 @@ export function initBoxes({ root, stage, session }) {
       n.plate.style.display = labelled ? '' : 'none';
       const name = session.nameFor(o.id);
       // With depth on, the shown speed is scaled to the scene's median
-      // depth and marked as the estimate it is (docs/depth-stage.md);
+      // depth and marked as the estimate it is (records/design/depth-stage.md);
       // where the map declined, the plain measured speed stands.
       const shownSpeed = o.depthFactor ? `≈${formatSpeed(speed * o.depthFactor, session.calibration)}` : formatSpeed(speed, session.calibration);
       const text = `${o.id} · ${shownSpeed}${name ? ` · ≈${name.label}` : ''}`;

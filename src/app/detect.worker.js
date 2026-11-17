@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * The detector's worker (docs/naming-poc.md): loads Transformers.js and
+ * The detector's worker (records/design/naming.md): loads Transformers.js and
  * RT-DETR v2 from their homes at pinned versions — nothing here is in the
  * repository or the bundle — and answers one frame at a time. The main
  * thread never waits on it; a result carries the stamp of the frame it
@@ -15,8 +15,9 @@
  */
 
 // 4.x, where the depth worker stays on 3.8.1: the 3.x WebGPU backend cannot
-// run this model's ceil-mode AveragePool, the 4.x one can (verdicts L-1,
-// M-1 again). 4.x fetches its onnxruntime-web build from jsDelivr itself.
+// run this model's ceil-mode AveragePool, the 4.x one can (measured:
+// records/verdicts.md, L-1 and "M-1 again"). 4.x fetches its
+// onnxruntime-web build from jsDelivr itself.
 const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2';
 const MODEL_ID = 'onnx-community/rtdetr_v2_r18vd-ONNX';
 /** Detections under this score are not worth a disagreement. */
@@ -29,7 +30,7 @@ const PROOF_HEIGHT = 36;
 let detector = null;
 let canvas = null;
 let busy = false;
-/** `?modelfault=…:look` (docs/model-ladder.md): every real look fails. */
+/** `?modelfault=…:look` (records/design/model-ladder.md): every real look fails. */
 let failLooks = false;
 
 /** A failure out of the runtime can be a bare number (a wasm pointer),
@@ -52,7 +53,7 @@ async function load(device, dtype, fault) {
   const T = await import(/* @vite-ignore */ TRANSFORMERS_URL);
   T.env.allowLocalModels = false;
   detector = await T.pipeline('object-detection', MODEL_ID, { device, dtype });
-  // Prove a look before saying ready (docs/model-ladder.md): a backend can
+  // Prove a look before saying ready (records/design/model-ladder.md): a backend can
   // build its session and still be unable to run the model, and only a
   // run finds that out. One throwaway inference on a small grey picture.
   try {

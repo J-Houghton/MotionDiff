@@ -24,7 +24,7 @@ function makePixels(...channels) {
   return arr;
 }
 
-// Spec defaults for the band-pass simulation
+// The mode's defaults, for the band-pass simulation
 const DT_MS = 1000 / 30;
 const FREQ_LOW = 0.7;
 const FREQ_HIGH = 2.0;
@@ -56,7 +56,7 @@ function bandAmplitude(freqHz, steps = 900, measure = 300, inputAmp = 0.1) {
 }
 
 // ─────────────────────────────────────
-//  magnify.js — emaAlpha (A1)
+//  magnify.js — emaAlpha
 // ─────────────────────────────────────
 
 describe('emaAlpha', () => {
@@ -119,7 +119,7 @@ describe('emaUpdate', () => {
 });
 
 // ─────────────────────────────────────
-//  Band-pass response (A2) — scalar simulation with defaults
+//  Band-pass response — scalar simulation with defaults
 // ─────────────────────────────────────
 
 describe('band-pass response (defaults 0.7 Hz / 2.0 Hz, dt = 1000/30 ms)', () => {
@@ -174,7 +174,7 @@ describe('magnifySample', () => {
 });
 
 // ─────────────────────────────────────
-//  magnify.js — magnifyPixel (A3)
+//  magnify.js — magnifyPixel
 // ─────────────────────────────────────
 
 describe('magnifyPixel', () => {
@@ -225,7 +225,7 @@ describe('magnifyPixel', () => {
 });
 
 // ─────────────────────────────────────
-//  Numerical stability (A4)
+//  Numerical stability
 // ─────────────────────────────────────
 
 describe('numerical stability', () => {
@@ -250,7 +250,7 @@ describe('numerical stability', () => {
 });
 
 // ─────────────────────────────────────
-//  seedStates + magnifyFrame (A5)
+//  seedStates + magnifyFrame
 // ─────────────────────────────────────
 
 describe('seedStates', () => {

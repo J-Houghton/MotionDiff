@@ -41,7 +41,7 @@ export const TRAIL_REFRESH = 0.75;
  * frames, each tinted by its age, takes the maximum per channel, which lands
  * between the burst's typical strength and its strongest frame. This share
  * of the strongest (the rest typical) gave the same mean colour as the ring
- * on the trees and river reference clips, within 2% (docs/verdicts.md, V1).
+ * on the trees and river reference clips, within 2% (records/verdicts.md, V1).
  */
 export const TRAIL_OLD_PEAK_SHARE = 0.25;
 

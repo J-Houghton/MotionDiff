@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Naming by a detector (docs/naming-poc.md): the main-thread side. Owns the
+ * Naming by a detector (records/design/naming.md): the main-thread side. Owns the
  * worker, throttles to one request in flight, snapshots the tracker's boxes
  * with each frame it sends, and matches the late answer against that
  * snapshot — never against "the current frame". Tracking then carries each
@@ -103,7 +103,7 @@ export function createDetector(options = {}) {
     }));
   }
 
-  // The backend ladder (docs/model-ladder.md): a rung is ready only once
+  // The backend ladder (records/design/model-ladder.md): a rung is ready only once
   // it has proved a look, and a look that fails later steps down once.
   // `?detdtype=fp32` pins the WebGPU rung for triage.
   const ladder = createModelLadder({

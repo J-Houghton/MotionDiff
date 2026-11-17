@@ -51,7 +51,7 @@ void main() {
 
 // The trail over the finished composite: sharp, or with a soft halo for the
 // glow display (the composite's own glow no longer sees the traces, which
-// draw after it; docs/display-layer.md).
+// draw after it; records/design/display-layer.md).
 const SHOW_FRAG = `#version 300 es
 precision highp float;
 
@@ -168,7 +168,7 @@ export function renderParticles(renderer, key, field, opts) {
   const gl = renderer.gl;
   const { width, height } = renderer;
   // The trail lives at the canvas size: the lines rasterise crisp there and
-  // the fade keeps them so (docs/display-layer.md). Particle maths stays in
+  // the fade keeps them so (records/design/display-layer.md). Particle maths stays in
   // picture coordinates; only viewports change.
   const cw = renderer.canvasWidth || width;
   const ch = renderer.canvasHeight || height;

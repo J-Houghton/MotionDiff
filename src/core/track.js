@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Grouping and tracking (docs/tracking.md): connected components over a
+ * Grouping and tracking (records/design/tracking.md): connected components over a
  * coarse decision grid, and the track step that gives shapes an identity —
  * an ID that stays with a mover, a velocity from its own displacement, and
  * a short coast across frames the mask loses.

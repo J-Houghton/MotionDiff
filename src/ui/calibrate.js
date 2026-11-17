@@ -1,5 +1,5 @@
 /**
- * Calibration to real units (docs/tracking.md): the user marks a known
+ * Calibration to real units (records/design/tracking.md): the user marks a known
  * length in the picture — two clicks and a distance in metres — and
  * everything that shows a speed switches from picture pixels to metres.
  *

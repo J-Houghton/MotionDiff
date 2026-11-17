@@ -78,7 +78,7 @@ export class Pipeline {
     // Every mode's params with their defaults (see modes/index.js), plus two
     // that belong to no mode: the processing fps cap, and camera
     // compensation, which the stage layer applies for every consumer
-    // (docs/camera-compensation.md).
+    // (records/design/camera-compensation.md).
     this.params = { ...defaultParams(), fpsCap: null, cameraComp: false };
 
     /** Display mode for modes that composite: 'diff' | 'overlay' | 'glow' | 'data' */
@@ -88,10 +88,10 @@ export class Pipeline {
       gl: null, ring: null, time: 0, step: 'first', dtMs: 0, stepMs: 0, trailAgeStep: 0,
       pausedDt: 0, params: this.params, display: 'diff', layers: [0, 0, 0],
     };
-    // The shared measurement stages (docs/pipeline-stages.md): begun afresh
+    // The shared measurement stages (records/design/pipeline-stages.md): begun afresh
     // for every WebGL frame and handed to the mode as frame.stages.
     this._stages = new Stages();
-    /** The depth model's latest answer (docs/depth-stage.md), published by
+    /** The depth model's latest answer (records/design/depth-stage.md), published by
      * the session's side-runner; frame.stages.depth() serves it with its
      * age. Null while depth is off or before the first answer. */
     this.depth = null;
@@ -648,7 +648,7 @@ export class Pipeline {
       if (this._hasMagnitude && this._currentMode === 'data') gl.renderDataView(mode.data.kind);
     }
     // Crisp line work registered during render lands after the composite,
-    // at the canvas size (docs/display-layer.md).
+    // at the canvas size (records/design/display-layer.md).
     gl.flushOverlays(this._currentMode);
 
     // Keep the ring warm in every mode so switching modes has history.
@@ -658,7 +658,7 @@ export class Pipeline {
   /**
    * The canvas element's CSS box in device pixels: the backing store may
    * grow toward it so line work drawn after the composite is crisp
-   * (docs/display-layer.md). Pass 0 to pin the backing to the processing
+   * (records/design/display-layer.md). Pass 0 to pin the backing to the processing
    * size (the filmstrip tool does, for comparable strips).
    * @returns {boolean} Whether the backing size changed
    */

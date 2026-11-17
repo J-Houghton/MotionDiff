@@ -1,9 +1,9 @@
 /**
- * The count line (docs/data-out.md): the user draws a line across the
+ * The count line (records/design/data-out.md): the user draws a line across the
  * picture with two clicks — calibrate.js's interaction and picture-space
  * SVG mapping — and every tracked box whose centre steps across it is
  * counted, by direction (the counting itself lives in the session, from
- * core/dataout.js). The drawn line stays visible while it counts; L again
+ * core/dataout.js). The drawn line stays visible while it counts; X again
  * clears it, Escape cancels drawing.
  */
 

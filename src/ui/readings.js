@@ -1,6 +1,6 @@
 /**
  * Readings panel: the numbers the pipeline already measures, shown beside
- * the picture as plate marginalia (docs/readings-panel.md). Desktop Plate
+ * the picture as plate marginalia (records/design/readings-panel.md). Desktop Plate
  * only; the I key and a mast button show and hide it.
  *
  * Sources, in order of preference:
@@ -70,8 +70,8 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
   countLink.type = 'button';
   countLink.append(Object.assign(document.createElement('kbd'), { textContent: 'X' }));
   if (onCountLine) countLink.addEventListener('click', onCountLine);
-  // The naming model's numbers as pasteable text (docs/naming-poc.md): the
-  // owner tests on another machine and reports what it read.
+  // The naming model's numbers as pasteable text (records/design/naming.md), so
+  // what a machine read can be carried off it and compared with another's.
   const copyModel = el('button', 'rd-calibrate', 'Copy model readings');
   copyModel.type = 'button';
   copyModel.hidden = true;
@@ -82,17 +82,17 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
       `model rtdetr_v2_r18vd · backend ${s.backend}/${s.dtype}`,
       `load ${s.loadMs} ms · infer last ${s.lastInferMs} ms, median ${s.medianInferMs} ms · ${s.looksPerSecond} looks/s`,
       `frame rate ${session.fps.toFixed(1)} fps · processing ${session.pipeline.width}×${session.pipeline.height} · names on`,
-      // Why the backend ladder stepped down, when it did (docs/model-ladder.md).
+      // Why the backend ladder stepped down, when it did (records/design/model-ladder.md).
       ...(s.steps.length ? [`stepped down — ${s.steps.join(' | ')}`] : []),
     ].join('\n');
     try {
       await navigator.clipboard.writeText(text);
-      session.setStatus('Model readings copied — paste them into your report', 'success');
+      session.setStatus('Model readings copied to the clipboard', 'success');
     } catch {
       session.setStatus(text, 'info');
     }
   });
-  // And the depth model's (docs/depth-stage.md), the same way.
+  // And the depth model's (records/design/depth-stage.md), the same way.
   const copyDepth = el('button', 'rd-calibrate', 'Copy depth readings');
   copyDepth.type = 'button';
   copyDepth.hidden = true;
@@ -108,7 +108,7 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
     ].join('\n');
     try {
       await navigator.clipboard.writeText(text);
-      session.setStatus('Depth readings copied — paste them into your report', 'success');
+      session.setStatus('Depth readings copied to the clipboard', 'success');
     } catch {
       session.setStatus(text, 'info');
     }
@@ -248,7 +248,7 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
     drawInstruments(ctx);
   }
 
-  // ── Instruments (promoted readings; docs/readings-panel.md) ─
+  // ── Instruments (promoted readings; records/design/readings-panel.md) ─
   const peak = el('div', 'rd-peak');
   const peakValue = el('b', '', '—');
   const peakUnit = el('span', '', 'peak px/s · fastest moving cells');
@@ -268,7 +268,7 @@ export function initReadings({ root, plate, session, onCalibrate, onCountLine })
   const cameraLamp = el('i', 'rd-lamp');
   const cameraText = el('b', '', '—');
   cameraBox.append(cameraLamp, cameraText, el('span', '', 'camera · median of measured'));
-  // Crossing counts over the drawn line (docs/data-out.md); the arrows are
+  // Crossing counts over the drawn line (records/design/data-out.md); the arrows are
   // the line's own normal, so they point the ways movers actually crossed.
   const countsBox = el('div', 'rd-camera');
   const countsText = el('b', '', '—');

@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Depth-stage helpers (docs/depth-stage.md): pure maths over the coarse
+ * Depth-stage helpers (records/design/depth-stage.md): pure maths over the coarse
  * inverse-depth grid a depth model publishes. Larger values are nearer;
  * the scale (and strictly the shift) are unknown, which is why everything
  * built on these is an estimate and the factor declines where the map is
