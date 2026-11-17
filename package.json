@@ -1,12 +1,13 @@
 {
   "name": "motiondiff",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/build-docs.mjs",
+    "docs": "node scripts/build-docs.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -14,9 +15,11 @@
     "typecheck": "tsc -p jsconfig.json"
   },
   "_dependencyNotes": {
-    "tweakpane": "parameter panel, generated from each mode's schema (ui/panel.js)"
+    "tweakpane": "parameter panel, generated from each mode's schema (ui/panel.js)",
+    "markdown-it": "renders docs/ into the documentation site (scripts/build-docs.mjs); build time only"
   },
   "devDependencies": {
+    "markdown-it": "^15.0.3",
     "typescript": "^7.0.2",
     "vite": "^8.0.0",
     "vitest": "^4.1.0"

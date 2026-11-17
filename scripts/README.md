@@ -1,8 +1,9 @@
 # Dev scripts
 
-Visual tooling for the acceptance rules in `docs/development.md`. Dev-only: nothing here
-ships. No dependencies beyond Node 22 and an installed Chrome or Edge
-(`CHROME_PATH` overrides where to find it).
+Visual tooling: it renders the pictures the acceptance rules in
+`records/acceptance.md` are judged on, and the pictures in the documentation.
+Dev-only: nothing here ships. No dependencies beyond Node 22 and an installed
+Chrome or Edge (`CHROME_PATH` overrides where to find it).
 
 All commands drive the **running dev server** through headless Chrome, so start
 `npm run dev` first.
@@ -27,6 +28,8 @@ Fills `ref-clips/` (git-ignored) from `scripts/reference-clips.json`: clips with
 | `handheld` | Handheld camera: a marching crowd, the whole frame wobbles (24 fps). |
 | `face` | A face held nearly still on a locked camera, for magnify (25 fps). |
 | `highway` | A real 60 fps source: fast vehicles, near-static camera. |
+| `kitten` | A sleeping kitten on a locked camera, for magnify (breathing, about 40 a minute; it stirs once around 6.5 s). |
+| `traffic` | Two directions of movers: motorway traffic, static camera. |
 
 | `flow` | Known flow, synthetic: a textured band sliding right at 90 px/s, a block heading down-left at 60 px/s, a disc turning at 1 rad/s. |
 | `plume`, `plume-weak`, `plume-wall`, `plume-drift` | Schlieren with a known answer, synthetic: a background warped by a simulated plume (lit at 1 s; typical shift 0.28 px, or 0.08 px for `-weak`), against print, against a rough surface with a plain strip, and from a camera that creeps and trembles. |
@@ -83,8 +86,9 @@ static areas (mean change between consecutive frames where the source did not
 change), the share of clipped pixels, and each strip's mean colour (to tell a hue
 or brightness shift from a change of shape).
 
-The scenes used for this session's verdicts are in `scripts/scenes/` (`age-colour`,
-`mask`, `history`, `background`, `flow`, `schlieren`): re-render them after touching those modes.
+The scenes behind the results in `records/verdicts.md` are in `scripts/scenes/`
+(`age-colour`, `mask`, `history`, `background`, `flow`, `schlieren` and others):
+re-render them after touching those modes.
 
 ## Checks against known truth
 ```bash
@@ -115,6 +119,13 @@ npm run filmstrip eval -- --run check.js
 `--run` evaluates a file as an async function body in the page (`args` comes from
 `--args '{"k":1}'`), `--keys p,f` presses keys afterwards.
 
+The pictures in `docs/images/` are made this way. `scripts/scenes/docs.json` holds
+the filmstrip scenes (`npm run filmstrip render -- --scenes scripts/scenes/docs.json`).
+`scripts/page/docs-shot.js` is the `--run` script for screenshots of the app: it
+loads a reference clip, applies settings, optionally draws a count line or starts
+collecting data, and returns the counts, the number of boxes and the status line, so a
+caption can quote real figures.
+
 Note for timing measurements: give playback two or three seconds to warm up before
 counting frames. Decoders start slowly, and a short window right after load looks
 like a stall.
@@ -133,4 +144,4 @@ detector returned) and `naming-replay.mjs` runs them through `core/boxmatch.js`,
 so a change to the matcher is judged on the same looks before and after. Call
 `filmstrip.mjs` with `node` here, not through `npm run`, so the output is only the
 JSON. `--url "…/?modelfault=webgpu:load"` puts naming on the CPU rung. What these
-were used for, and what is still open, is in `docs/ml-status.md`.
+were used for, and what is still open, is in `records/model-options.md`.

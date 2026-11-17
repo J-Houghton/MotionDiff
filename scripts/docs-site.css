@@ -1,0 +1,107 @@
+/*
+ * The documentation site's one stylesheet (copied to dist/docs/site.css by
+ * scripts/build-docs.mjs). It uses the app's type and palette, from
+ * src/styles/main.css: Fraunces for reading, IBM Plex Mono for code and keys,
+ * Barlow Condensed for labels; the light "paper" theme and the dark
+ * "cyanotype" theme, chosen by <html data-theme>. The fonts are the app's own
+ * files, one folder up from the docs.
+ */
+
+@font-face { font-family: 'Fraunces'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('../fonts/fraunces-normal-400-700.woff2') format('woff2'); }
+@font-face { font-family: 'Fraunces'; font-style: italic; font-weight: 400 700; font-display: swap; src: url('../fonts/fraunces-italic-400-700.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('../fonts/plex-mono-normal-400.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('../fonts/plex-mono-normal-500.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 600; font-display: swap; src: url('../fonts/barlow-condensed-normal-600.woff2') format('woff2'); }
+
+:root {
+  --serif: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+  --cond: 'Barlow Condensed', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+  --paper: #f1ece2;
+  --card: #faf6ee;
+  --ink: #17140f;
+  --soft: #5f584c;
+  --rule: #c9c1b1;
+  --accent: #c2301a;
+  --shade: rgba(23, 20, 15, 0.07);
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  --paper: #0d1a2c;
+  --card: #132640;
+  --ink: #e8eef6;
+  --soft: #9fb1c9;
+  --rule: #2e4463;
+  --accent: #ff7d61;
+  --shade: rgba(232, 238, 246, 0.08);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 17px/1.6 var(--serif); }
+a { color: inherit; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+a:hover { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The bar across the top: the name, and the way back to the demo. */
+.top { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 16px; padding: 10px 24px; background: var(--paper); border-bottom: 1px solid var(--rule); font: 500 13px/1 var(--mono); }
+.brand { margin-right: auto; font: 600 20px/1 var(--serif); letter-spacing: -0.02em; text-decoration: none; }
+.brand span { font: 600 13px/1 var(--cond); letter-spacing: 0.12em; text-transform: uppercase; color: var(--soft); margin-left: 6px; }
+.demo { padding: 8px 12px; background: var(--accent); color: var(--paper); text-decoration: none; }
+.demo:hover { color: var(--paper); filter: brightness(1.1); }
+.top a, .top button { white-space: nowrap; }
+.top button { padding: 8px 12px; background: none; border: 1px solid var(--rule); color: var(--ink); font: inherit; cursor: pointer; }
+.to-nav { display: none; }
+
+/* Two columns: the list of pages, then the page. In the markup the page comes
+   first, so on a narrow screen the list simply follows it. */
+.frame { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 48px; max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+.pages { grid-column: 1; grid-row: 1; align-self: start; position: sticky; top: 56px; max-height: calc(100vh - 56px); overflow-y: auto; padding: 28px 0; font: 400 13px/1.35 var(--mono); }
+.pages h2 { margin: 22px 0 8px; font: 600 13px/1 var(--cond); letter-spacing: 0.12em; text-transform: uppercase; color: var(--soft); }
+.pages ul { margin: 0; padding: 0; list-style: none; }
+.pages a { display: block; padding: 5px 10px; border-left: 2px solid transparent; text-decoration: none; color: var(--soft); }
+.pages a:hover { color: var(--ink); }
+.pages a[aria-current] { border-left-color: var(--accent); color: var(--ink); background: var(--shade); }
+main { grid-column: 2; grid-row: 1; min-width: 0; padding: 36px 0 64px; }
+
+/* The page itself. */
+article { max-width: 70ch; }
+h1 { margin: 0 0 20px; font: 600 clamp(34px, 5vw, 48px)/1 var(--serif); letter-spacing: -0.03em; }
+h2 { margin: 44px 0 12px; padding-top: 14px; border-top: 1px solid var(--rule); font: 600 26px/1.15 var(--serif); letter-spacing: -0.02em; }
+h3 { margin: 28px 0 8px; font: 600 14px/1.2 var(--cond); letter-spacing: 0.12em; text-transform: uppercase; color: var(--soft); }
+p, ul, ol { margin: 0 0 16px; }
+li { margin-bottom: 4px; }
+li > p { margin-bottom: 6px; }
+strong { font-weight: 650; }
+/* A picture and its caption. In a filmstrip (.strip) a line in the page colour
+   is ruled at the right edge of each frame, so the frames read as separate. */
+figure { margin: 20px 0; }
+figure span { position: relative; display: block; border: 1px solid var(--rule); }
+figure img { display: block; width: 100%; height: auto; }
+figure.strip span::after { content: ''; position: absolute; inset: 0; pointer-events: none; clip-path: inset(0 3px 0 0); background: repeating-linear-gradient(to right, transparent 0, transparent calc(100% / var(--frames) - 3px), var(--paper) calc(100% / var(--frames) - 3px), var(--paper) calc(100% / var(--frames))); }
+figcaption { margin-top: 6px; font: 400 12px/1.45 var(--mono); color: var(--soft); }
+code { font: 400 0.82em/1.4 var(--mono); padding: 1px 5px; background: var(--shade); }
+pre { margin: 0 0 16px; padding: 12px 14px; overflow-x: auto; background: var(--card); border: 1px solid var(--rule); }
+pre code { padding: 0; background: none; font-size: 13px; }
+.table { margin: 0 0 16px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.45; }
+th { text-align: left; font: 600 12px/1.2 var(--cond); letter-spacing: 0.12em; text-transform: uppercase; color: var(--soft); }
+th, td { padding: 8px 14px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+blockquote { margin: 0 0 16px; padding: 2px 16px; border-left: 2px solid var(--accent); color: var(--soft); }
+
+/* Previous and next, under the page. */
+.steps { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 70ch; margin-top: 56px; }
+.steps a { padding: 12px 14px; border: 1px solid var(--rule); background: var(--card); text-decoration: none; font-weight: 600; }
+.steps .next { text-align: right; }
+.steps small { display: block; font: 600 12px/1.4 var(--cond); letter-spacing: 0.12em; text-transform: uppercase; color: var(--soft); }
+.source { margin-top: 20px; font: 400 12px/1 var(--mono); color: var(--soft); }
+
+@media (max-width: 820px) {
+  .top { padding: 10px 16px; gap: 10px; }
+  .brand span { display: none; }
+  .to-nav { display: inline; }
+  .frame { display: block; padding: 0 16px; }
+  .pages { position: static; max-height: none; border-top: 1px solid var(--rule); }
+  main { padding: 24px 0 32px; }
+}
